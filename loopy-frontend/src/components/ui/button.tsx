@@ -7,10 +7,10 @@ import { Slot } from "@radix-ui/react-slot";
 const buttonVariants = createVariants(
   {
     variant: {
-      primary: "bg-brand text-white hover:bg-brand/90",
-      secondary: "bg-gray-200 text-black hover:bg-gray-300",
-      outline: "border border-gray-300 hover:bg-gray-100",
-      ghost: "hover:bg-gray-100 text-gray-700",
+      primary: "bg-brand text-background hover:bg-brand/90",
+      secondary: "bg-neutral-200 text-foreground hover:bg-neutral-300",
+      outline: "border border-neutral-300 hover:bg-neutral-100",
+      ghost: "hover:bg-neutral-100 text-neutral-700",
     },
     size: {
       sm: "h-8 px-3 text-sm",

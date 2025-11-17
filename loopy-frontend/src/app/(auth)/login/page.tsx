@@ -5,7 +5,7 @@ export default function Login() {
     <div className="space-y-8">
       <div>
         <h1 className="font-medium text-2xl">Automate your meeting</h1>
-        <p className="text-text-600">
+        <p className="text-neutral-600">
           Transcribe, summarize, search and analyze all meetings.
         </p>
       </div>

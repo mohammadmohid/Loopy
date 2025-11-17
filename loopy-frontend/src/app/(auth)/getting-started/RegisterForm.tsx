@@ -71,14 +71,16 @@ export default function RegisterForm({
           <button
             type="button"
             onClick={() => setIsShowPass(!isShowPass)}
-            className="absolute inset-y-0 right-4 flex items-center text-text-500 hover:text-text-700"
+            className="absolute inset-y-0 right-4 flex items-center text-neutral-500 hover:text-neutral-700"
           >
             {isShowPass ? <EyeOff size={20} /> : <Eye size={20} />}
           </button>
         </div>
         {showPasswordChecker && (
           <div className="mt-2 p-3 bg-text-100 rounded-md border border-text-200 text-sm space-y-2 animate-in fade-in slide-in-from-top-2">
-            <p className="font-medium text-text-600">Password must contain:</p>
+            <p className="font-medium text-neutral-600">
+              Password must contain:
+            </p>
             <ul className="space-y-1">
               <li
                 className={`flex items-center gap-2 ${
@@ -101,7 +103,7 @@ export default function RegisterForm({
 
       {error && (
         <p className="text-red-500 font-medium text-sm">
-          Error: <span className="text-text-600 font-normal">{error}</span>
+          Error: <span className="text-neutral-600 font-normal">{error}</span>
         </p>
       )}
 

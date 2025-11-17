@@ -50,7 +50,7 @@ export default function LoginForm() {
           <button
             type="button"
             onClick={() => setIsShowPass(!isShowPass)}
-            className="absolute inset-y-0 right-4 flex items-center text-text-500 hover:text-text-700"
+            className="absolute inset-y-0 right-4 flex items-center text-neutral-500 hover:text-neutral-700"
           >
             {isShowPass ? <EyeOff size={20} /> : <Eye size={20} />}
           </button>
@@ -59,7 +59,7 @@ export default function LoginForm() {
 
       {error && (
         <p className="text-red-500 font-medium text-sm">
-          Error: <span className="text-text-600 font-normal">{error}</span>
+          Error: <span className="text-neutral-600 font-normal">{error}</span>
         </p>
       )}
 

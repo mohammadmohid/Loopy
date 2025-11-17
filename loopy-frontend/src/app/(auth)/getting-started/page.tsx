@@ -28,7 +28,7 @@ export default function GettingStarted() {
     <div className="space-y-8">
       <header>
         <h1 className="font-medium text-2xl">Automate your meeting</h1>
-        <p className="text-text-600">
+        <p className="text-neutral-600">
           Transcribe, summarize, search and analyze all meetings.
         </p>
       </header>
@@ -52,7 +52,7 @@ export default function GettingStarted() {
               />
               <div className="flex flex-col  w-full font-medium">
                 Organization
-                <span className="text-sm text-text-600 font-normal max-w-[50ch]">
+                <span className="text-sm text-neutral-600 font-normal max-w-[50ch]">
                   Manage teams, members and projects of your organization.
                 </span>
               </div>
@@ -76,7 +76,7 @@ export default function GettingStarted() {
               />
               <div className="flex flex-col w-full font-medium">
                 Personal / Team Member
-                <span className="text-sm text-text-600 font-normal max-w-[50ch]">
+                <span className="text-sm text-neutral-600 font-normal max-w-[50ch]">
                   Create an individual account or link to an organization.
                 </span>
               </div>
@@ -91,7 +91,7 @@ export default function GettingStarted() {
       {step !== "select" && (
         <div className="border border-text-200 rounded-md p-4 flex gap-8 justify-between items-center">
           <div className="flex flex-col gap-2">
-            <span className="text-sm text-text-600">
+            <span className="text-sm text-neutral-600">
               Selected:{" "}
               <span className="font-semibold">
                 {accountType === "organization"
@@ -100,7 +100,7 @@ export default function GettingStarted() {
               </span>
             </span>
             {step !== "team-form" && orgEmailFromURL !== "" && (
-              <span className="text-sm text-text-600 truncate w-[40ch]">
+              <span className="text-sm text-neutral-600 truncate w-[40ch]">
                 Organization: <span className="font-semibold">{orgEmail}</span>
               </span>
             )}
@@ -117,7 +117,7 @@ export default function GettingStarted() {
 
       {step === "org-choice" && (
         <div className="space-y-4">
-          <p className="text-text-600">Are you part of an organization?</p>
+          <p className="text-neutral-600">Are you part of an organization?</p>
           <div className="flex gap-2">
             <Button
               className="flex-1"

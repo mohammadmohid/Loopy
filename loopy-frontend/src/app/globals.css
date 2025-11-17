@@ -42,6 +42,20 @@
   --color-ring: oklch(0.61 0.19 12);
 
   --radius-default: 0.75rem;
+
+  /* Text scale colors */
+  --color-text-700: #18181b;
+  --color-text-600: #27272a;
+  --color-text-500: #71717a;
+  --color-text-400: #a1a1aa;
+  --color-text-300: #d4d4d8;
+  --color-text-200: #e4e4e7;
+  --color-text-100: #f4f4f5;
+}
+
+/* Inline theme aliases for easier access */
+@theme inline {
+  --color-brand: var(--color-primary);
 }
 
 /* -------------------------------
@@ -93,6 +107,8 @@
 /* -------------------------------
    3. Dark Mode
    -------------------------------- */
+
+/*
 @media (prefers-color-scheme: dark) {
   @theme {
     --color-background: oklch(0.18 0.01 240);
@@ -131,6 +147,14 @@
     --color-border: oklch(0.32 0.01 240);
     --color-input: oklch(0.3 0.01 240);
     --color-ring: oklch(0.63 0.19 12);
+
+    --color-text-700: #fafafa;
+    --color-text-600: #f4f4f5;
+    --color-text-500: #a1a1aa;
+    --color-text-400: #71717a;
+    --color-text-300: #52525b;
+    --color-text-200: #3f3f46;
+    --color-text-100: #27272a;
   }
 
   :root {
@@ -163,6 +187,7 @@
       );
   }
 }
+*/
 
 /* -------------------------------
    4. Base Styles
@@ -183,7 +208,61 @@ html {
 }
 
 /* -------------------------------
-   5. Utility Classes
+   5. Accessible Focus & Form Styles
+   -------------------------------- */
+/* Accessible focus states for interactive elements */
+:is(a, button, input, textarea, summary) {
+  --outline-size: max(2px, 0.08em);
+  --outline-style: solid;
+  --outline-color: var(--color-ring);
+}
+
+:is(a, button, input, textarea, summary):focus-visible {
+  outline: var(--outline-size) var(--outline-style) var(--outline-color);
+  outline-offset: var(--outline-offset, var(--outline-size));
+}
+
+/* Link styling */
+a {
+  color: var(--color-primary);
+}
+
+/* Input styling */
+input {
+  font-size: 14px;
+  font-weight: 500;
+  padding-inline: 12px;
+  padding-block: 8px;
+  border: 1px solid var(--color-input);
+  border-radius: 6px;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--color-primary);
+}
+
+input::placeholder {
+  color: var(--color-muted-foreground);
+}
+
+/* Underline utilities */
+.underline {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.hover\:underline:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* -------------------------------
+   6. Utility Classes
    -------------------------------- */
 .gradient-text {
   background: linear-gradient(
@@ -212,7 +291,7 @@ html {
 }
 
 /* -------------------------------
-   6. Animations
+   7. Animations
    -------------------------------- */
 .animate-fade-in-up {
   animation: fadeInUp 0.6s ease-out forwards;

@@ -178,7 +178,7 @@ export default function GettingStarted() {
 
       {step === "org-form" && (
         <>
-          <RegisterForm userType="organization_admin" />
+          <RegisterForm userType="org_admin" />
         </>
       )}
 
@@ -202,10 +202,7 @@ export default function GettingStarted() {
             <ChevronLeft />
             Back
           </a>
-          <RegisterForm
-            userType={orgEmail ? "team_member" : "personal"}
-            organizationEmail={orgEmail || null}
-          />
+          <RegisterForm userType={orgEmail ? "team_member" : "personal"} />
         </>
       )}
     </div>

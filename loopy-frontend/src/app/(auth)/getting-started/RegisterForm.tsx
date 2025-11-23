@@ -8,20 +8,32 @@ import { Button } from "@/components/ui/button";
 import { Check, Eye, EyeOff, X } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-provider";
+import { useRouter } from "next/navigation";
 
-// Validation Schema
+// Validation
 const registerSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.email({ message: "Invalid email address" }),
   password: z
     .string()
-    .min(8, "Min 8 chars")
-    .regex(/\d/, "Must contain a number"),
+    .min(8, { message: "Min 8 chars" })
+    .regex(/\d/, { message: "Must contain a number" }),
+  name: z.string().min(2, { message: "Min 2 chars" }),
 });
 
 type FormData = z.infer<typeof registerSchema>;
 
-export default function RegisterForm({ userType, organizationEmail }: any) {
+export default function RegisterForm({
+  userType,
+}: {
+  userType:
+    | "org_admin"
+    | "project_manager"
+    | "team_lead"
+    | "team_member"
+    | "personal";
+}) {
   const { login } = useAuth();
+  const router = useRouter();
   const [showPass, setShowPass] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -41,21 +53,18 @@ export default function RegisterForm({ userType, organizationEmail }: any) {
   const onSubmit = async (data: FormData) => {
     setServerError(null);
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/register`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...data, userType, organizationEmail }),
-        }
-      );
+      const res = await fetch(`http://localhost:5000/api/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, userType }),
+      });
 
       const responseData = await res.json();
-      if (!res.ok) throw new Error(responseData.message);
+      if (!res.ok)
+        throw new Error(responseData.message || "Registration failed");
 
-      // Use AuthProvider to manage session state
       login(responseData.token, responseData.user);
-      window.location.href = "/dashboard";
+      router.push("/dashboard");
     } catch (err: any) {
       setServerError(err.message);
     }
@@ -64,6 +73,12 @@ export default function RegisterForm({ userType, organizationEmail }: any) {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
       <div className="space-y-2">
+        <input
+          {...register("name")}
+          type="text"
+          placeholder="Enter full name"
+          className="w-full p-2 border rounded"
+        />
         <input
           {...register("email")}
           type="email"

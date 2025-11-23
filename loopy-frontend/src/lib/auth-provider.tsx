@@ -1,63 +1,82 @@
 "use client";
-import React, { createContext, useContext, useEffect, useState } from "react";
+
+import { createContext, useContext, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 interface User {
   id: string;
   email: string;
-  name?: string;
-  // Add more fields as needed
+  name: string;
+  role: string;
 }
 
-interface AuthState {
+interface AuthContextType {
   user: User | null;
   token: string | null;
-  loading: boolean;
-}
-
-interface AuthContextType extends AuthState {
   login: (token: string, user: User) => void;
   logout: () => void;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [auth, setAuth] = useState<AuthState>(() => {
-    try {
-      const storedToken = localStorage.getItem("jwt");
-      const storedUser = localStorage.getItem("user");
-      return {
-        user: storedUser ? JSON.parse(storedUser) : null,
-        token: storedToken || null,
-        loading: false,
-      };
-    } catch {
-      // If localStorage is unavailable or parsing fails, fall back to defaults
-      return { user: null, token: null, loading: false };
-    }
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
-  const login = (jwt: string, userObj: User) => {
-    setAuth({ user: userObj, token: jwt, loading: false });
-    localStorage.setItem("jwt", jwt);
-    localStorage.setItem("user", JSON.stringify(userObj));
+  useEffect(() => {
+    // Load from local storage on mount
+    const storedUser = localStorage.getItem("user");
+    const storedToken = localStorage.getItem("token");
+
+    if (storedUser && storedToken) {
+      setUser(JSON.parse(storedUser));
+      setToken(storedToken);
+    }
+    setIsLoading(false);
+  }, []);
+
+  const login = (newToken: string, newUser: User) => {
+    localStorage.setItem("token", newToken);
+    localStorage.setItem("user", JSON.stringify(newUser));
+    setToken(newToken);
+    setUser(newUser);
   };
 
-  const logout = () => {
-    setAuth({ user: null, token: null, loading: false });
-    localStorage.removeItem("jwt");
-    localStorage.removeItem("user");
+  const logout = async () => {
+    try {
+      // Notify backend to blacklist token
+      if (token) {
+        await fetch(`${process.env.BACKEND_URL}/auth/logout`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+    } catch (error) {
+      console.error("Logout error", error);
+    } finally {
+      // Always clear client state
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      setToken(null);
+      setUser(null);
+      router.push("/login");
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ ...auth, login, logout }}>
+    <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-}
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+};

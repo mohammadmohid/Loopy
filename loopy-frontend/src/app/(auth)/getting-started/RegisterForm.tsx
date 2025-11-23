@@ -1,143 +1,133 @@
 "use client";
 
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Check, Eye, EyeOff, X } from "lucide-react";
 import Link from "next/link";
-import { ChangeEvent, useState } from "react";
+import { useAuth } from "@/lib/auth-provider";
 
-type RegisterFormProps = {
-  userType: "organization_admin" | "personal" | "team_member";
-  organizationEmail?: string | null;
-};
+// Validation Schema
+const registerSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z
+    .string()
+    .min(8, "Min 8 chars")
+    .regex(/\d/, "Must contain a number"),
+});
 
-export default function RegisterForm({
-  userType,
-  organizationEmail,
-}: RegisterFormProps) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+type FormData = z.infer<typeof registerSchema>;
 
-  const [isShowPass, setIsShowPass] = useState(false);
-  const [password, setPassword] = useState("");
+export default function RegisterForm({ userType, organizationEmail }: any) {
+  const { login } = useAuth();
+  const [showPass, setShowPass] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  const hasMinLength = password.length >= 8;
-  const hasDigit = /\d/.test(password);
-  const passCorrect = hasDigit && hasMinLength;
-  const showPasswordChecker = password.length > 0;
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<FormData>({
+    resolver: zodResolver(registerSchema),
+  });
 
-  const handlePasswordChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setPassword(e.target.value);
-  };
+  const passwordValue = watch("password", "");
+  const hasMinLength = passwordValue.length >= 8;
+  const hasDigit = /\d/.test(passwordValue);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
-    const pass = formData.get("password") as string;
-
+  const onSubmit = async (data: FormData) => {
+    setServerError(null);
     try {
-      // TODO: Replace with actual backend endpoint
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password: pass,
-          userType,
-          organizationEmail,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Registration failed");
-      }
-      const data = await res.json();
-      // Expect { token: string, user: object }
-      localStorage.setItem("jwt", data.token);
-      // TODO: update global auth state here
-      setLoading(false);
-      // Optionally redirect or show success
-      window.location.href = "/";
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/auth/register`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...data, userType, organizationEmail }),
+        }
+      );
+
+      const responseData = await res.json();
+      if (!res.ok) throw new Error(responseData.message);
+
+      // Use AuthProvider to manage session state
+      login(responseData.token, responseData.user);
+      window.location.href = "/dashboard";
     } catch (err: any) {
-      setError(err.message || "Unexpected error occured.");
-      setLoading(false);
+      setServerError(err.message);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <div className="space-y-2 flex flex-col">
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+      <div className="space-y-2">
         <input
-          name="email"
+          {...register("email")}
           type="email"
-          required
           placeholder="Enter email address"
+          className="w-full p-2 border rounded"
         />
+        {errors.email && (
+          <p className="text-red-500 text-sm">{errors.email.message}</p>
+        )}
 
         <div className="relative">
           <input
-            name="password"
-            type={isShowPass ? "text" : "password"}
-            required
-            value={password}
-            onChange={handlePasswordChange}
-            className="w-full"
+            {...register("password")}
+            type={showPass ? "text" : "password"}
             placeholder="Enter password"
+            className="w-full p-2 border rounded"
           />
           <button
             type="button"
-            onClick={() => setIsShowPass(!isShowPass)}
-            className="absolute inset-y-0 right-4 flex items-center cursor-pointer text-neutral-500 hover:text-neutral-700"
+            onClick={() => setShowPass(!showPass)}
+            className="absolute inset-y-0 right-4 flex items-center text-neutral-500"
           >
-            {isShowPass ? <EyeOff size={20} /> : <Eye size={20} />}
+            {showPass ? <EyeOff size={20} /> : <Eye size={20} />}
           </button>
         </div>
-        {showPasswordChecker && (
-          <div className="mt-2 p-3 bg-text-100 rounded-md bg-card border border-text-200 text-sm space-y-2 animate-in fade-in slide-in-from-top-2">
-            <p className="font-medium text-neutral-600">
-              Password must contain:
-            </p>
-            <ul className="space-y-1">
-              <li
-                className={`flex items-center gap-2 ${
-                  hasMinLength ? "text-green-600" : "text-red-500"
-                }`}
-              >
-                {hasMinLength ? <Check /> : <X />} At least 8 characters
-              </li>
-              <li
-                className={`flex items-center gap-2 ${
-                  hasDigit ? "text-green-600" : "text-red-500"
-                }`}
-              >
-                {hasMinLength ? <Check /> : <X />} At least 1 digit
-              </li>
-            </ul>
+
+        {/* Visual Password Strength Indicators */}
+        {passwordValue.length > 0 && (
+          <div className="p-3 bg-neutral-50 rounded text-sm space-y-1">
+            <div
+              className={`flex items-center gap-2 ${
+                hasMinLength ? "text-green-600" : "text-neutral-500"
+              }`}
+            >
+              {hasMinLength ? <Check size={14} /> : <X size={14} />} 8+
+              characters
+            </div>
+            <div
+              className={`flex items-center gap-2 ${
+                hasDigit ? "text-green-600" : "text-neutral-500"
+              }`}
+            >
+              {hasDigit ? <Check size={14} /> : <X size={14} />} Contains number
+            </div>
           </div>
+        )}
+
+        {errors.password && (
+          <p className="text-red-500 text-sm">{errors.password.message}</p>
         )}
       </div>
 
-      {error && (
-        <p className="text-red-500 font-medium text-sm">
-          Error: <span className="text-neutral-600 font-normal">{error}</span>
-        </p>
+      {serverError && (
+        <p className="text-red-500 text-sm font-medium">{serverError}</p>
       )}
 
-      <Button
-        disabled={loading || !passCorrect}
-        loading={loading}
-        type="submit"
-      >
+      <Button disabled={isSubmitting} loading={isSubmitting} type="submit">
         Create an account
       </Button>
 
       <span className="self-center text-sm">
-        Have an account?
-        <Link className="mx-1 hover:underline text-primary" href="/login">
-          Sign in instead.
+        Have an account?{" "}
+        <Link href="/login" className="text-primary hover:underline">
+          Sign in
         </Link>
       </span>
     </form>

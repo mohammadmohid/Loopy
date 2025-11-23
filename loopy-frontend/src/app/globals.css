@@ -5,7 +5,9 @@
    -------------------------------- */
 @theme {
   --color-background: oklch(0.97 0.01 240);
-  --color-foreground: oklch(0.25 0.02 240);
+
+  /* --color-foreground: oklch(0.25 0.02 240); */
+  --color-foreground: oklch(0.2454 0.0096 248.22);
 
   --color-card: oklch(0.99 0.01 240);
   --color-card-foreground: oklch(0.25 0.02 240);
@@ -13,71 +15,57 @@
   --color-popover: oklch(0.99 0.01 240);
   --color-popover-foreground: oklch(0.25 0.02 240);
 
-  --color-primary: oklch(0.61 0.19 12);
-  --color-primary-foreground: oklch(1 0 0);
+  --color-primary: oklch(60.349% 0.16831 23.595);
 
   --color-primary-glow: oklch(0.68 0.19 12);
-  --color-primary-dark: oklch(0.54 0.19 12);
+  --color-primary-dark: oklch(50.163% 0.16175 25.161);
 
   --color-primary-light: oklch(0.92 0.08 12);
-  --color-primary-subtle: oklch(0.97 0.04 12);
 
   --color-secondary: oklch(0.35 0.03 240);
   --color-secondary-foreground: oklch(0.97 0.01 240);
 
-  --color-tertiary: oklch(0.88 0.02 220);
-  --color-tertiary-foreground: oklch(0.35 0.02 240);
-
   --color-muted: oklch(0.94 0.01 240);
   --color-muted-foreground: oklch(0.58 0.02 240);
-
-  --color-accent: oklch(0.78 0.11 300);
-  --color-accent-foreground: oklch(0.25 0.02 240);
 
   --color-destructive: oklch(0.65 0.18 20);
   --color-destructive-foreground: oklch(0.98 0 0);
 
-  --color-border: oklch(0.9 0.01 240);
-  --color-input: oklch(0.92 0.01 240);
-  --color-ring: oklch(0.61 0.19 12);
+  --color-border: oklch(91.973% 0.00413 285.946);
+  --color-input: oklch(87.111% 0.00555 286.025);
+  --color-ring: oklch(60.349% 0.16831 23.595);
 
   --radius-default: 0.75rem;
 
   /* Text scale colors */
-  --color-text-700: #18181b;
-  --color-text-600: #27272a;
-  --color-text-500: #71717a;
-  --color-text-400: #a1a1aa;
-  --color-text-300: #d4d4d8;
-  --color-text-200: #e4e4e7;
-  --color-text-100: #f4f4f5;
-}
+  --color-neutral-700: oklch(21.033% 0.00588 285.832);
+  --color-neutral-600: oklch(27.394% 0.00551 285.955);
+  --color-neutral-500: oklch(55.167% 0.01387 285.878);
+  --color-neutral-400: oklch(71.182% 0.01302 285.981);
+  --color-neutral-300: oklch(87.111% 0.00555 286.025);
+  --color-neutral-200: oklch(91.973% 0.00413 285.946);
+  --color-neutral-100: oklch(96.744% 0.00143 285.225);
 
-/* Inline theme aliases for easier access */
-@theme inline {
-  --color-brand: var(--color-primary);
-}
-
-/* -------------------------------
-   2. Custom Properties for Effects
-   -------------------------------- */
-:root {
+  /* Gradients */
   --gradient-primary: linear-gradient(
     135deg,
     var(--color-primary),
-    var(--color-accent)
+    var(--color-primary-dark)
   );
+
   --gradient-secondary: linear-gradient(
     135deg,
     var(--color-background),
     oklch(0.96 0.04 280)
   );
+
   --gradient-blur: radial-gradient(
     circle at 50% 50%,
-    color-mix(in oklch, var(--color-primary) 15%, transparent),
-    color-mix(in oklch, var(--color-accent) 10%, transparent),
+    color-mix(in oklch, var(--color-primary) 50%, transparent),
+    color-mix(in oklch, var(--color-primary-dark) 10%, transparent),
     transparent 70%
   );
+
   --gradient-mesh: radial-gradient(
       at 40% 20%,
       color-mix(in oklch, oklch(0.88 0.08 12) 50%, transparent) 0px,
@@ -93,6 +81,70 @@
       color-mix(in oklch, oklch(0.92 0.06 220) 40%, transparent) 0px,
       transparent 50%
     );
+
+  --shadow-primary: 0 10px 40px -10px color-mix(in oklch, var(--color-primary)
+        25%, transparent);
+  --shadow-soft: 0 4px 24px -4px color-mix(in oklch, var(--color-foreground) 6%, transparent);
+  --shadow-glow: 0 0 60px
+    color-mix(in oklch, var(--color-primary) 20%, transparent);
+
+  --transition-smooth: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@utility shadow-primary {
+  box-shadow: var(--shadow-primary);
+}
+
+@utility shadow-soft {
+  box-shadow: var(--shadow-soft);
+}
+
+@utility shadow-glow {
+  box-shadow: var(--shadow-glow);
+}
+
+@utility bg-gradient-primary {
+  background-image: var(--gradient-primary);
+}
+
+@utility bg-gradient-secondary {
+  background-image: var(--gradient-secondary);
+}
+
+@utility bg-gradient-blur {
+  background-image: var(--gradient-blur);
+}
+
+@utility bg-gradient-mesh {
+  background-image: var(--gradient-mesh);
+}
+
+/* Inline theme aliases for easier access */
+@theme inline {
+  --color-brand: var(--color-primary);
+}
+
+/* -------------------------------
+   2. Custom Properties for Effects
+   -------------------------------- */
+:root {
+  --gradient-primary: linear-gradient(
+    135deg,
+    var(--color-primary),
+    var(--color-primary-dark)
+  );
+  --gradient-secondary: linear-gradient(
+    135deg,
+    var(--color-background),
+    oklch(0.96 0.04 280)
+  );
+  --gradient-blur: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in oklch, var(--color-primary) 50%, transparent),
+    color-mix(in oklch, var(--color-primary-dark) 10%, transparent),
+    transparent 70%
+  );
 
   --shadow-primary: 0 10px 40px -10px color-mix(in oklch, var(--color-primary)
         25%, transparent);
@@ -148,13 +200,13 @@
     --color-input: oklch(0.3 0.01 240);
     --color-ring: oklch(0.63 0.19 12);
 
-    --color-text-700: #fafafa;
-    --color-text-600: #f4f4f5;
-    --color-text-500: #a1a1aa;
-    --color-text-400: #71717a;
-    --color-text-300: #52525b;
-    --color-text-200: #3f3f46;
-    --color-text-100: #27272a;
+    --color-neutral-700: #fafafa;
+    --color-neutral-600: #f4f4f5;
+    --color-neutral-500: #a1a1aa;
+    --color-neutral-400: #71717a;
+    --color-neutral-300: #52525b;
+    --color-neutral-200: #3f3f46;
+    --color-neutral-100: #27272a;
   }
 
   :root {
@@ -199,8 +251,6 @@
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
 }
 
 html {
@@ -222,11 +272,6 @@ html {
   outline-offset: var(--outline-offset, var(--outline-size));
 }
 
-/* Link styling */
-a {
-  color: var(--color-primary);
-}
-
 /* Input styling */
 input {
   font-size: 14px;
@@ -235,7 +280,7 @@ input {
   padding-block: 8px;
   border: 1px solid var(--color-input);
   border-radius: 6px;
-  background-color: var(--color-background);
+  background-color: var(--color-card);
   color: var(--color-foreground);
 }
 
@@ -268,7 +313,7 @@ input::placeholder {
   background: linear-gradient(
     to right,
     var(--color-primary),
-    var(--color-primary-glow)
+    var(--color-primary-dark)
   );
   background-clip: text;
   -webkit-background-clip: text;

@@ -9,8 +9,9 @@ const buttonVariants = createVariants(
     variant: {
       primary: "bg-brand text-background hover:bg-brand/90",
       secondary: "bg-neutral-200 text-foreground hover:bg-neutral-300",
-      outline: "border border-neutral-300 hover:bg-neutral-100",
-      ghost: "hover:bg-neutral-100 text-neutral-700",
+      outline: "bg-transparent border border-neutral-300 hover:bg-neutral-100",
+      ghost:
+        "hover:bg-neutral-100/50 hover:border-neutral-300 text-neutral-700",
     },
     size: {
       sm: "h-8 px-3 text-sm",
@@ -47,7 +48,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const Comp = asChild ? Slot : "button";
 
     const base =
-      "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none";
+      "inline-flex items-center justify-center gap-2 rounded-2xl cursor-pointer border border-transparent font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none";
 
     const classes = cn(base, buttonVariants({ variant, size }), className);
 

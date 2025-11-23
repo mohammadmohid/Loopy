@@ -29,10 +29,6 @@ export default function RegisterForm({
     setPassword(e.target.value);
   };
 
-  function delay(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -42,10 +38,33 @@ export default function RegisterForm({
     const email = formData.get("email") as string;
     const pass = formData.get("password") as string;
 
-    // TODO: SEND TO SERVER
-    await delay(2000);
-    setLoading(false);
-    setError("Unexpected error occured.");
+    try {
+      // TODO: Replace with actual backend endpoint
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password: pass,
+          userType,
+          organizationEmail,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Registration failed");
+      }
+      const data = await res.json();
+      // Expect { token: string, user: object }
+      localStorage.setItem("jwt", data.token);
+      // TODO: update global auth state here
+      setLoading(false);
+      // Optionally redirect or show success
+      window.location.href = "/";
+    } catch (err: any) {
+      setError(err.message || "Unexpected error occured.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -71,13 +90,13 @@ export default function RegisterForm({
           <button
             type="button"
             onClick={() => setIsShowPass(!isShowPass)}
-            className="absolute inset-y-0 right-4 flex items-center text-neutral-500 hover:text-neutral-700"
+            className="absolute inset-y-0 right-4 flex items-center cursor-pointer text-neutral-500 hover:text-neutral-700"
           >
             {isShowPass ? <EyeOff size={20} /> : <Eye size={20} />}
           </button>
         </div>
         {showPasswordChecker && (
-          <div className="mt-2 p-3 bg-text-100 rounded-md border border-text-200 text-sm space-y-2 animate-in fade-in slide-in-from-top-2">
+          <div className="mt-2 p-3 bg-text-100 rounded-md bg-card border border-text-200 text-sm space-y-2 animate-in fade-in slide-in-from-top-2">
             <p className="font-medium text-neutral-600">
               Password must contain:
             </p>
@@ -115,9 +134,9 @@ export default function RegisterForm({
         Create an account
       </Button>
 
-      <span className="self-center">
+      <span className="self-center text-sm">
         Have an account?
-        <Link className="mx-1 hover:underline" href="/login">
+        <Link className="mx-1 hover:underline text-primary" href="/login">
           Sign in instead.
         </Link>
       </span>

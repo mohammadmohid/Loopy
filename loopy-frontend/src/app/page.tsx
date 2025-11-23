@@ -1,9 +1,11 @@
 import { Hero } from "@/components/Hero";
+import { Navbar } from "@/components/Navbar";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 sm:items-start">
+    <div className="flex min-h-screen overflow-clip items-center justify-center">
+      <Navbar />
+      <main className="mt-8">
         <Hero />
       </main>
     </div>

@@ -38,7 +38,7 @@ export default function GettingStarted() {
           <div className="flex flex-col gap-2">
             <label
               htmlFor="organization"
-              className="cursor-pointer flex items-center gap-4 hover:bg-foreground/5 border border-text-200 rounded-md px-4 py-3"
+              className="cursor-pointer flex items-center gap-4 bg-card hover:bg-neutral-100 border border-text-200 rounded-md px-4 py-3"
             >
               <input
                 type="radio"
@@ -62,7 +62,7 @@ export default function GettingStarted() {
             </label>
             <label
               htmlFor="personal-team"
-              className="cursor-pointer flex items-center gap-4 hover:bg-foreground/5 border border-text-200 rounded-md px-4 py-3"
+              className="cursor-pointer flex items-center gap-4 bg-card hover:bg-card/50 border border-text-200 rounded-md px-4 py-3"
             >
               <input
                 type="radio"
@@ -89,7 +89,7 @@ export default function GettingStarted() {
       )}
 
       {step !== "select" && (
-        <div className="border border-text-200 rounded-md p-4 flex gap-8 justify-between items-center">
+        <div className="bg-card border border-text-200 rounded-md p-4 flex gap-8 justify-between items-center">
           <div className="flex flex-col gap-2">
             <span className="text-sm text-neutral-600">
               Selected:{" "}

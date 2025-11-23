@@ -10,11 +10,7 @@ export default function LoginForm() {
   const [isShowPass, setIsShowPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fake delay for now
-  function delay(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
+  // JWT login integration
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -24,10 +20,28 @@ export default function LoginForm() {
     const email = formData.get("email") as string;
     const pass = formData.get("password") as string;
 
-    // TODO: SEND TO SERVER
-    await delay(2000);
-    setLoading(false);
-    setError("Unexpected error occured.");
+    try {
+      // TODO: Replace with actual backend endpoint
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: pass }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Login failed");
+      }
+      const data = await res.json();
+      // Expect { token: string, user: object }
+      localStorage.setItem("jwt", data.token);
+      // TODO: update global auth state here
+      setLoading(false);
+      // Optionally redirect or show success
+      window.location.href = "/";
+    } catch (err: any) {
+      setError(err.message || "Unexpected error occured.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -50,7 +64,7 @@ export default function LoginForm() {
           <button
             type="button"
             onClick={() => setIsShowPass(!isShowPass)}
-            className="absolute inset-y-0 right-4 flex items-center text-neutral-500 hover:text-neutral-700"
+            className="absolute inset-y-0 right-4 flex items-center cursor-pointer text-neutral-500 hover:text-neutral-700"
           >
             {isShowPass ? <EyeOff size={20} /> : <Eye size={20} />}
           </button>
@@ -68,14 +82,17 @@ export default function LoginForm() {
         Sign In
       </Button>
 
-      <div className="flex justify-between">
-        <span className="self-center text-sm">
+      <div className="flex text-sm justify-between">
+        <span className="self-center">
           Don&apos;t have an account?
-          <Link className="mx-1 hover:underline" href="/getting-started">
+          <Link
+            className="mx-1 hover:underline font-medium text-primary"
+            href="/getting-started"
+          >
             Sign Up.
           </Link>
         </span>
-        <Link className="hover:underline text-sm" href="/forgot-password">
+        <Link className="hover:underline text-primary" href="/forgot-password">
           Forgot Password?
         </Link>
       </div>

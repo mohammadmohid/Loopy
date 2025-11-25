@@ -1,0 +1,49 @@
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import mongoose from "mongoose";
+import { protect, authorize } from "./middleware/auth";
+import {
+  createProject,
+  getProjects,
+  assignTeamLead,
+} from "./controllers/projectController";
+
+dotenv.config();
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Database Connection
+mongoose
+  .connect(process.env.MONGO_URI as string)
+  .then(() => console.log("ProjectDB Connected"))
+  .catch((err) => console.error(err));
+
+const router = express.Router();
+
+// Routes
+// Only Admin and Project Manager can create projects
+router.post(
+  "/",
+  protect,
+  authorize("org_admin", "project_manager"),
+  createProject
+);
+
+// All authenticated users can view projects (filtered by controller logic)
+router.get("/", protect, getProjects);
+
+// Assign Team Lead
+router.put(
+  "/:id/assign-lead",
+  protect,
+  authorize("org_admin", "project_manager"),
+  assignTeamLead
+);
+
+app.use("/api/projects", router);
+
+const PORT = process.env.PORT || 5002;
+app.listen(PORT, () => console.log(`Project Service running on port ${PORT}`));

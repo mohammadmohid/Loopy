@@ -1,28 +1,60 @@
 version: "3.8"
 
 services:
+  # Gateway
+  gateway:
+    build: ./services/gateway
+    container_name: loopy-gateway
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      # URLs for the microservices
+      - AUTH_SERVICE_URL=http://auth-service:5001
+      - PROJECT_SERVICE_URL=http://project-service:5002
+    depends_on:
+      - auth-service
+      - project-service
+    networks:
+      - loopy-net
+
   # Auth Service
-  auth-:
+  auth:
     build: ./services/auth
-    container_name: auth-container
+    container_name: loopy-auth
     restart: always
     ports:
       - "5001:5001"
     environment:
       - PORT=5001
-      # Connect to the 'mongo' service defined below
-      - MONGO_URI=mongodb://mongo:27017/loopy_db
-      # Replace this with a secure secret or use a .env file
+      - MONGO_URI=mongodb://mongo:27017/loopy_auth_db
       - JWT_SECRET=your_jwt_secret_key
     depends_on:
       - mongo
     networks:
       - loopy-net
 
-  # Database Service
+  # 3. Project Service
+  project-service:
+    build: ./services/project
+    container_name: loopy-project
+    restart: always
+    ports:
+      - "5002:5002"
+    environment:
+      - PORT=5002
+      - MONGO_URI=mongodb://mongo:27017/loopy_project_db
+      - JWT_SECRET=super_secret_shared_key_123
+    depends_on:
+      - mongo
+    networks:
+      - loopy-net
+
+  # Database
   mongo:
     image: mongo:latest
-    container_name: loopy-mongo-container
+    container_name: loopy-mongo
     restart: always
     ports:
       - "27017:27017"
@@ -31,7 +63,6 @@ services:
     networks:
       - loopy-net
 
-# Persist database data so it isn't lost when containers stop
 volumes:
   mongo_data:
 

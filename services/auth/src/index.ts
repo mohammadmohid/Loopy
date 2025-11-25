@@ -15,7 +15,7 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: "https://loopy-mu.vercel.app/",
+    origin: true,
     credentials: true,
   })
 );

@@ -9,12 +9,14 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-app.use(cors());
 app.use(helmet());
 
-app.get("/", (req, res) => {
-  res.send("Loopy API Gateway is running");
-});
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "https://loopy-mu.vercel.app",
+    credentials: true,
+  })
+);
 
 // Route: Auth Service
 app.use(
@@ -22,9 +24,7 @@ app.use(
   createProxyMiddleware({
     target: process.env.AUTH_SERVICE_URL,
     changeOrigin: true,
-    pathRewrite: {
-      "^/api/auth": "/api/auth",
-    },
+    pathRewrite: { "^/api/auth": "/api/auth" },
   })
 );
 
@@ -34,9 +34,7 @@ app.use(
   createProxyMiddleware({
     target: process.env.PROJECT_SERVICE_URL,
     changeOrigin: true,
-    pathRewrite: {
-      "^/api/projects": "/api/projects",
-    },
+    pathRewrite: { "^/api/projects": "/api/projects" },
   })
 );
 

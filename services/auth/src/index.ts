@@ -15,7 +15,7 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: "http://localhost:3000", // locally for now
+    origin: "https://loopy-mu.vercel.app/",
     credentials: true,
   })
 );

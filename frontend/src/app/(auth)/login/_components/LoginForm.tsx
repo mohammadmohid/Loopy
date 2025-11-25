@@ -1,72 +1,84 @@
 "use client";
 
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-provider";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 
+const loginSchema = z.object({
+  email: z.email({ message: "Invalid email address" }),
+  password: z
+    .string()
+    .min(8, { message: "Min 8 chars" })
+    .regex(/\d/, { message: "Must contain a number" }),
+});
+
+type FormData = z.infer<typeof loginSchema>;
+
 export default function LoginForm() {
   const { login } = useAuth();
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [serverError, setServerError] = useState<string | null>(null);
   const [showPass, setShowPass] = useState(false);
 
-  // Form State
-  const [formData, setFormData] = useState({ email: "", password: "" });
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<FormData>({
+    resolver: zodResolver(loginSchema),
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
+  const onSubmit = async (data: FormData) => {
+    setServerError(null);
 
     try {
       const res = await fetch(`${process.env.BACKEND_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...data }),
       });
 
-      const data = await res.json();
+      const responseData = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || "Login failed");
+        throw new Error(responseData.message || "Login failed");
       }
 
-      login(data.token, data.user);
+      login(responseData.token, responseData.user);
       router.push("/dashboard");
     } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      setServerError(err.message);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-2 w-full max-w-sm">
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="space-y-2 w-full max-w-sm"
+    >
       <div className="space-y-2">
         <label className="text-sm font-medium">Email</label>
         <input
+          {...register("email")}
           type="email"
           required
           className="w-full p-2 border rounded-md"
-          value={formData.email}
-          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
         />
       </div>
 
       <div className="space-y-2 relative">
         <label className="text-sm font-medium">Password</label>
         <input
+          {...register("password")}
           type={showPass ? "text" : "password"}
           required
           className="w-full p-2 border rounded-md"
-          value={formData.password}
-          onChange={(e) =>
-            setFormData({ ...formData, password: e.target.value })
-          }
         />
         <button
           type="button"
@@ -77,10 +89,10 @@ export default function LoginForm() {
         </button>
       </div>
 
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {serverError && <p className="text-red-500 text-sm">{serverError}</p>}
 
-      <Button type="submit" className="w-full" disabled={loading}>
-        {loading ? "Signing in..." : "Sign In"}
+      <Button type="submit" className="w-full" loading={isSubmitting}>
+        Sign In
       </Button>
 
       <div className="text-center text-sm">

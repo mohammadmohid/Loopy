@@ -53,7 +53,7 @@ export default function RegisterForm({
   const onSubmit = async (data: FormData) => {
     setServerError(null);
     try {
-      const res = await fetch(`http://localhost:5000/api/auth/register`, {
+      const res = await fetch(`${process.env.BACKEND_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...data, userType }),

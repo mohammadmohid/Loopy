@@ -38,11 +38,14 @@ export default function LoginForm() {
     setServerError(null);
 
     try {
-      const res = await fetch(`${process.env.BACKEND_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data }),
-      });
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...data }),
+        }
+      );
 
       const responseData = await res.json();
 

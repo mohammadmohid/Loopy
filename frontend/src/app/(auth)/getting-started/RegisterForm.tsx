@@ -53,11 +53,14 @@ export default function RegisterForm({
   const onSubmit = async (data: FormData) => {
     setServerError(null);
     try {
-      const res = await fetch(`${process.env.BACKEND_URL}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, userType }),
-      });
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/register`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...data, userType }),
+        }
+      );
 
       const responseData = await res.json();
       if (!res.ok)

@@ -3,15 +3,15 @@ import { useAuth } from "../../lib/auth-provider";
 import { useEffect } from "react";
 
 export default function Dashboard() {
-  const { user, loading } = useAuth();
+  const { user, isLoading } = useAuth();
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!isLoading && !user) {
       window.location.href = "/login";
     }
-  }, [user, loading]);
+  }, [user, isLoading]);
 
-  if (loading) return <div>Loading...</div>;
+  if (isLoading) return <div>Loading...</div>;
   if (!user) return null;
 
   return (

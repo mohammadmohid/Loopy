@@ -4,26 +4,20 @@
    1. Theme Configuration
    -------------------------------- */
 @theme {
-  --color-background: oklch(0.97 0.01 240);
+  --color-background: oklch(1 0 0);
 
   /* --color-foreground: oklch(0.25 0.02 240); */
   --color-foreground: oklch(0.2454 0.0096 248.22);
 
-  --color-card: oklch(0.99 0.01 240);
-  --color-card-foreground: oklch(0.25 0.02 240);
+  --color-card: oklch(0.9674 0.0013 286.37);
+  --color-card-foreground: oklch(0.2454 0.0096 248.22);
 
-  --color-popover: oklch(0.99 0.01 240);
-  --color-popover-foreground: oklch(0.25 0.02 240);
-
-  --color-primary: oklch(60.349% 0.16831 23.595);
+  --color-primary: oklch(0.5519 0.1972 23.06);
 
   --color-primary-glow: oklch(0.68 0.19 12);
   --color-primary-dark: oklch(50.163% 0.16175 25.161);
 
   --color-primary-light: oklch(0.92 0.08 12);
-
-  --color-secondary: oklch(0.35 0.03 240);
-  --color-secondary-foreground: oklch(0.97 0.01 240);
 
   --color-muted: oklch(0.94 0.01 240);
   --color-muted-foreground: oklch(0.58 0.02 240);
@@ -31,20 +25,20 @@
   --color-destructive: oklch(0.65 0.18 20);
   --color-destructive-foreground: oklch(0.98 0 0);
 
-  --color-border: oklch(91.973% 0.00413 285.946);
-  --color-input: oklch(87.111% 0.00555 286.025);
+  --color-border: oklch(0.9197 0.004 286.32);
+  --color-input: oklch(1 0 0);
   --color-ring: oklch(60.349% 0.16831 23.595);
 
   --radius-default: 0.75rem;
 
   /* Text scale colors */
-  --color-neutral-700: oklch(21.033% 0.00588 285.832);
-  --color-neutral-600: oklch(27.394% 0.00551 285.955);
-  --color-neutral-500: oklch(55.167% 0.01387 285.878);
-  --color-neutral-400: oklch(71.182% 0.01302 285.981);
-  --color-neutral-300: oklch(87.111% 0.00555 286.025);
-  --color-neutral-200: oklch(91.973% 0.00413 285.946);
-  --color-neutral-100: oklch(96.744% 0.00143 285.225);
+  --color-neutral-700: oklch(0.2103 0.0059 285.89);
+  --color-neutral-600: oklch(0.2739 0.0055 286.03);
+  --color-neutral-500: oklch(0.5517 0.0138 285.94);
+  --color-neutral-400: oklch(0.7118 0.0129 286.07);
+  --color-neutral-300: oklch(0.8711 0.0055 286.29);
+  --color-neutral-200: oklch(0.9197 0.004 286.32);
+  --color-neutral-100: oklch(0.9674 0.0013 286.37);
 
   /* Gradients */
   --gradient-primary: linear-gradient(
@@ -278,9 +272,9 @@ input {
   font-weight: 500;
   padding-inline: 12px;
   padding-block: 8px;
-  border: 1px solid var(--color-input);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  background-color: var(--color-card);
+  background-color: var(--color-input);
   color: var(--color-foreground);
 }
 
@@ -290,7 +284,7 @@ input[type="radio"] {
 }
 
 input::placeholder {
-  color: var(--color-muted-foreground);
+  color: var(--color-neutral-500);
 }
 
 /* Underline utilities */
@@ -330,9 +324,9 @@ input::placeholder {
 }
 
 .glass-card {
-  background-color: color-mix(in oklch, var(--color-card) 40%, transparent);
+  background-color: color-mix(in oklch, var(--color-card) 25%, transparent);
   backdrop-filter: blur(40px);
-  border: 1px solid color-mix(in oklch, var(--color-border) 50%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-border) 75%, transparent);
 }
 
 /* -------------------------------

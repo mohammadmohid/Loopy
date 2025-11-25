@@ -48,7 +48,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const Comp = asChild ? Slot : "button";
 
     const base =
-      "inline-flex items-center justify-center gap-2 rounded-2xl cursor-pointer border border-transparent font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none";
+      "inline-flex items-center justify-center gap-2 rounded-2xl hover:cursor-pointer border border-transparent font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none";
 
     const classes = cn(base, buttonVariants({ variant, size }), className);
 

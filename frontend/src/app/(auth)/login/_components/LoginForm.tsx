@@ -45,7 +45,7 @@ export default function LoginForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 w-full max-w-sm">
+    <form onSubmit={handleSubmit} className="space-y-2 w-full max-w-sm">
       <div className="space-y-2">
         <label className="text-sm font-medium">Email</label>
         <input
@@ -71,7 +71,7 @@ export default function LoginForm() {
         <button
           type="button"
           onClick={() => setShowPass(!showPass)}
-          className="absolute right-3 top-8 text-gray-500"
+          className="absolute right-3 top-8 text-gray-500 hover:cursor-pointer"
         >
           {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
@@ -84,8 +84,9 @@ export default function LoginForm() {
       </Button>
 
       <div className="text-center text-sm">
-        <Link href="/getting-started" className="text-blue-600 hover:underline">
-          Don&apos;t have an account? Sign up
+        Don&apos;t have an account?{" "}
+        <Link href="/getting-started" className="text-primary hover:underline">
+          Sign up
         </Link>
       </div>
     </form>

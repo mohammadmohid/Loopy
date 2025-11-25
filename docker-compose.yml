@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  # Auth Service
+  auth-:
+    build: ./services/auth
+    container_name: auth-container
+    restart: always
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      # Connect to the 'mongo' service defined below
+      - MONGO_URI=mongodb://mongo:27017/loopy_db
+      # Replace this with a secure secret or use a .env file
+      - JWT_SECRET=your_jwt_secret_key
+    depends_on:
+      - mongo
+    networks:
+      - loopy-net
+
+  # Database Service
+  mongo:
+    image: mongo:latest
+    container_name: loopy-mongo-container
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - loopy-net
+
+# Persist database data so it isn't lost when containers stop
+volumes:
+  mongo_data:
+
+networks:
+  loopy-net:
+    driver: bridge

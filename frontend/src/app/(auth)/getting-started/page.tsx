@@ -3,10 +3,10 @@
 import RegisterForm from "./RegisterForm";
 import { Button } from "@/components/ui/button";
 import { Building, ChevronLeft, Users } from "lucide-react";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function GettingStarted() {
+function GettingStartedContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -206,5 +206,13 @@ export default function GettingStarted() {
         </>
       )}
     </div>
+  );
+}
+
+export default function GettingStarted() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <GettingStartedContent />
+    </Suspense>
   );
 }

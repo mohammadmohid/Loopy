@@ -1,6 +1,6 @@
 import { Mona_Sans } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from "@//lib/auth-provider";
+import { AuthProvider } from "@/lib/auth-provider";
 
 const mona = Mona_Sans({
   subsets: ["latin"],

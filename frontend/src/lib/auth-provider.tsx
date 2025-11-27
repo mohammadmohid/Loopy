@@ -47,9 +47,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      // Notify backend to blacklist token
+      // blacklist token
       if (token) {
-        await fetch(`${process.env.BACKEND_URL}/auth/logout`, {
+        await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/logout`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Logout error", error);
     } finally {
-      // Always clear client state
+      // clears client state
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       setToken(null);

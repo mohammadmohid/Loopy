@@ -1,5 +1,5 @@
 import express from "express";
-import { protect } from "../middleware/auth";
+import { authorize, protect } from "../middleware/auth";
 import {
   createProject,
   getProjects,
@@ -12,23 +12,40 @@ import {
   handleTranscriptionWebhook,
   getArtifacts,
 } from "../controllers/artifactController";
+import {
+  getProjectTasks,
+  createTask,
+  updateTask,
+  deleteTask,
+  getProjectMilestones,
+  createMilestone,
+  updateMilestone,
+  deleteMilestone,
+} from "../controllers/taskController";
 
 const router = express.Router();
 
 // Projects
-router.post("/", protect, createProject);
+router.post("/", protect, authorize("ADMIN"), createProject);
 router.get("/", protect, getProjects);
-router.delete("/:id", protect, deleteProject);
-router.put("/:id/assign-lead", protect, assignTeamLead);
+router.delete("/:id", protect, authorize("ADMIN"), deleteProject);
+router.put("/:id/assign-lead", protect, authorize("ADMIN"), assignTeamLead);
 
-// Global Artifacts (Meetings)
+// Tasks & Milestones
+router.get("/:projectId/tasks", protect, getProjectTasks);
+router.post("/:projectId/tasks", protect, createTask);
+router.patch("/tasks/:id", protect, updateTask);
+router.delete("/tasks/:id", protect, deleteTask);
+
+router.get("/:projectId/milestones", protect, getProjectMilestones);
+router.post("/:projectId/milestones", protect, createMilestone);
+router.patch("/milestones/:id", protect, updateMilestone);
+router.delete("/milestones/:id", protect, deleteMilestone);
+
+// Global Artifacts
 router.get("/artifacts", protect, getArtifacts);
 router.post("/artifacts/sign", protect, signUpload);
 router.post("/artifacts", protect, createArtifact);
-
-// Project-scoped Artifacts
-router.post("/:id/artifacts/sign", protect, signUpload);
-router.post("/:id/artifacts", protect, createArtifact);
 
 // Webhooks
 router.post("/webhooks/transcription", handleTranscriptionWebhook);

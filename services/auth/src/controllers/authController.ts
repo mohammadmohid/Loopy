@@ -65,7 +65,7 @@ export const getMe = async (req: Request & { user?: any }, res: Response) => {
 export const register = async (req: Request, res: Response) => {
   try {
     // 1. Destructure userType from the request body
-    const { email, password, name, userType } = req.body;
+    const { email, password, name, userType, avatarKey } = req.body;
 
     // Split name for profile
     const [firstName, ...lastNameParts] = name.split(" ");
@@ -87,7 +87,7 @@ export const register = async (req: Request, res: Response) => {
     const user = await User.create({
       email,
       password,
-      profile: { firstName, lastName },
+      profile: { firstName, lastName, avatarKey },
       globalRole: globalRole, // 3. Save the determined role
     });
 

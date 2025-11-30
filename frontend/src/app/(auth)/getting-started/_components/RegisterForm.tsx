@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
-import { Check, Eye, EyeOff, X } from "lucide-react";
+import { Check, Eye, EyeOff, X, Camera } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-provider";
 import { useRouter } from "next/navigation";
 import { apiRequest } from "@/lib/api";
+import Image from "next/image";
 
 const registerSchema = z.object({
   name: z.string().min(2, { message: "Full Name is required" }),
@@ -22,20 +23,13 @@ const registerSchema = z.object({
 
 type FormData = z.infer<typeof registerSchema>;
 
-export default function RegisterForm({
-  userType,
-}: {
-  userType:
-    | "org_admin"
-    | "project_manager"
-    | "team_lead"
-    | "team_member"
-    | "personal";
-}) {
+export default function RegisterForm({ userType }: { userType: any }) {
   const { login } = useAuth();
   const router = useRouter();
   const [showPass, setShowPass] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [avatar, setAvatar] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
     register,
@@ -50,25 +44,54 @@ export default function RegisterForm({
   const hasMinLength = passwordValue.length >= 8;
   const hasDigit = /\d/.test(passwordValue);
 
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (file.size > 2 * 1024 * 1024) {
+        // 2MB Limit
+        alert("Image must be smaller than 2MB");
+        return;
+      }
+      setAvatar(file);
+    }
+  };
+
   const onSubmit = async (data: FormData) => {
     setServerError(null);
     try {
-      // Backend expects: name, email, password
+      let avatarKey = "";
+
+      // 1. Upload Avatar if selected
+      if (avatar) {
+        const signRes = await apiRequest<{ uploadUrl: string; key: string }>(
+          "/auth/upload/avatar/sign",
+          {
+            method: "POST",
+            data: { fileType: avatar.type },
+          }
+        );
+
+        await fetch(signRes.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": avatar.type },
+          body: avatar,
+        });
+
+        avatarKey = signRes.key;
+      }
+
+      // 2. Register User
       const response = await apiRequest<{ success: boolean; user: any }>(
         "/auth/register",
         {
           method: "POST",
-          data: {
-            ...data,
-            // userType isn't handled by backend yet (defaults to USER), but we send it for future proofing
-            userType,
-          },
+          data: { ...data, userType, avatarKey }, // Send avatarKey to backend
         }
       );
 
       if (response.success && response.user) {
         login(response.user);
-        router.push("/dashboard/home");
+        router.push("/home");
       }
     } catch (err: any) {
       setServerError(err.message || "Registration failed");
@@ -80,14 +103,42 @@ export default function RegisterForm({
       onSubmit={handleSubmit(onSubmit)}
       className="flex flex-col gap-4 max-w-sm w-full"
     >
+      {/* Avatar Upload */}
+      <div className="flex justify-center mb-2">
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          className="w-20 h-20 rounded-full bg-neutral-100 flex items-center justify-center cursor-pointer border-2 border-dashed border-neutral-300 hover:border-primary overflow-hidden relative group"
+        >
+          {avatar ? (
+            <Image
+              src={URL.createObjectURL(avatar)}
+              alt="Avatar"
+              className="w-full h-full object-cover"
+              width={80}
+              height={80}
+            />
+          ) : (
+            <Camera className="w-8 h-8 text-neutral-400 group-hover:text-primary" />
+          )}
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            accept="image/*"
+            onChange={handleAvatarChange}
+          />
+        </div>
+      </div>
+
+      {/* Fields */}
       <div className="space-y-3">
         <div>
           <label className="text-sm font-medium mb-1 block">Full Name</label>
           <input
             {...register("name")}
             type="text"
+            className="w-full p-2 border rounded-md"
             placeholder="John Doe"
-            className="w-full p-2 border border-neutral-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           {errors.name && (
             <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>
@@ -99,8 +150,8 @@ export default function RegisterForm({
           <input
             {...register("email")}
             type="email"
+            className="w-full p-2 border rounded-md"
             placeholder="john@example.com"
-            className="w-full p-2 border border-neutral-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           {errors.email && (
             <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
@@ -109,33 +160,30 @@ export default function RegisterForm({
 
         <div className="relative">
           <label className="text-sm font-medium mb-1 block">Password</label>
-          <div className="relative">
-            <input
-              {...register("password")}
-              type={showPass ? "text" : "password"}
-              placeholder="••••••••"
-              className="w-full p-2 border border-neutral-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPass(!showPass)}
-              className="absolute inset-y-0 right-3 flex items-center text-neutral-500 hover:text-neutral-700"
-            >
-              {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
+          <input
+            {...register("password")}
+            type={showPass ? "text" : "password"}
+            className="w-full p-2 border rounded-md"
+            placeholder="••••••••"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPass(!showPass)}
+            className="absolute right-3 top-8 text-neutral-500"
+          >
+            {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
         </div>
 
-        {/* Visual Password Strength Indicators */}
+        {/* Password Strength */}
         {passwordValue.length > 0 && (
-          <div className="p-3 bg-neutral-50 rounded-md text-xs space-y-1 border border-neutral-100">
+          <div className="p-3 bg-neutral-50 rounded-md text-xs space-y-1">
             <div
               className={`flex items-center gap-2 ${
                 hasMinLength ? "text-emerald-600" : "text-neutral-500"
               }`}
             >
-              {hasMinLength ? <Check size={12} /> : <X size={12} />} 8+
-              characters
+              {hasMinLength ? <Check size={12} /> : <X size={12} />} 8+ chars
             </div>
             <div
               className={`flex items-center gap-2 ${
@@ -146,7 +194,6 @@ export default function RegisterForm({
             </div>
           </div>
         )}
-
         {errors.password && (
           <p className="text-red-500 text-xs">{errors.password.message}</p>
         )}

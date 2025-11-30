@@ -47,7 +47,7 @@ export default function LoginForm() {
 
       if (response.success && response.user) {
         login(response.user);
-        router.push("/dashboard/home");
+        router.push("/home");
       } else {
         throw new Error("Invalid response from server");
       }

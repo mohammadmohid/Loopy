@@ -46,7 +46,7 @@ export default function DashboardLayout({
       <div className="flex h-dvh bg-neutral-50">
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Header onOpenSearch={openSearch} />
+          <Header onMenuClick={toggleSidebar} onOpenSearch={openSearch} />
           <main className="flex-1 overflow-auto p-6">{children}</main>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { Response } from "express";
 import { AuthRequest } from "../middleware/auth";
 import Task from "../models/Task";
 import Milestone from "../models/Milestone";
+import "../models/User";
 
 // --- TASKS ---
 

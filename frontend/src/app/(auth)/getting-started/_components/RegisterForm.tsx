@@ -13,7 +13,8 @@ import { apiRequest } from "@/lib/api";
 import Image from "next/image";
 
 const registerSchema = z.object({
-  name: z.string().min(2, { message: "Full Name is required" }),
+  firstName: z.string().min(2, { message: "First Name is required" }),
+  lastName: z.string().min(2, { message: "Last Name is required" }),
   email: z.email({ message: "Invalid email address" }),
   password: z
     .string()
@@ -63,7 +64,7 @@ export default function RegisterForm({ userType }: { userType: any }) {
 
       // 1. Upload Avatar if selected
       if (avatar) {
-        const signRes = await apiRequest<{ uploadUrl: string; key: string }>(
+        const signRes = await apiRequest<{ signedUrl: string; key: string }>(
           "/auth/upload/avatar/sign",
           {
             method: "POST",
@@ -71,7 +72,7 @@ export default function RegisterForm({ userType }: { userType: any }) {
           }
         );
 
-        await fetch(signRes.uploadUrl, {
+        await fetch(signRes.signedUrl, {
           method: "PUT",
           headers: { "Content-Type": avatar.type },
           body: avatar,
@@ -81,11 +82,12 @@ export default function RegisterForm({ userType }: { userType: any }) {
       }
 
       // 2. Register User
+
       const response = await apiRequest<{ success: boolean; user: any }>(
         "/auth/register",
         {
           method: "POST",
-          data: { ...data, userType, avatarKey }, // Send avatarKey to backend
+          data: { ...data, userType, avatarKey },
         }
       );
 
@@ -132,17 +134,35 @@ export default function RegisterForm({ userType }: { userType: any }) {
 
       {/* Fields */}
       <div className="space-y-3">
-        <div>
-          <label className="text-sm font-medium mb-1 block">Full Name</label>
-          <input
-            {...register("name")}
-            type="text"
-            className="w-full p-2 border rounded-md"
-            placeholder="John Doe"
-          />
-          {errors.name && (
-            <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>
-          )}
+        <div className="flex gap-1">
+          <div>
+            <label className="text-sm font-medium mb-1 block">First Name</label>
+            <input
+              {...register("firstName")}
+              type="text"
+              className="w-full p-2 border rounded-md"
+              placeholder="John"
+            />
+            {errors.firstName && (
+              <p className="text-red-500 text-xs mt-1">
+                {errors.firstName.message}
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">Last Name</label>
+            <input
+              {...register("lastName")}
+              type="text"
+              className="w-full p-2 border rounded-md"
+              placeholder="Doe"
+            />
+            {errors.lastName && (
+              <p className="text-red-500 text-xs mt-1">
+                {errors.lastName.message}
+              </p>
+            )}
+          </div>
         </div>
 
         <div>

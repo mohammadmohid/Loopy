@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Plus, Calendar, X, Check, Trash2, Edit2, Lock } from "lucide-react";
+import { Plus, X, Check, Trash2, Edit2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Task } from "@/lib/types";
 
@@ -31,7 +31,6 @@ export function BoardTab({
 }: BoardTabProps) {
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
-  const [editingColumnColor, setEditingColumnColor] = useState("");
   const [newColumnName, setNewColumnName] = useState("");
   const [isAddingColumn, setIsAddingColumn] = useState(false);
 
@@ -48,7 +47,6 @@ export function BoardTab({
     onColumnsUpdate(columns.map((c) => (c.id === colId ? { ...c, color } : c)));
   };
 
-  // Drag & Drop Handlers
   const handleDragStart = (task: Task) => {
     if (!canEdit) return;
     setDraggedTask(task);
@@ -66,7 +64,6 @@ export function BoardTab({
     setDraggedTask(null);
   };
 
-  // Column CRUD Handlers
   const handleAddColumn = () => {
     if (!newColumnName.trim()) return;
     const newId = newColumnName.toLowerCase().replace(/\s+/g, "-");
@@ -110,9 +107,9 @@ export function BoardTab({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 h-full flex flex-col">
       {/* Header Actions */}
-      <div className="flex items-center justify-end gap-2 h-10">
+      <div className="flex items-center justify-end gap-2 h-10 shrink-0">
         {canEdit && (
           <>
             {isAddingColumn ? (
@@ -150,79 +147,15 @@ export function BoardTab({
           </>
         )}
       </div>
-      <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-        {columns.map((column) => (
-          <div
-            key={column.id}
-            className="bg-neutral-50 rounded-xl p-4 min-w-[300px] w-[300px] shrink-0 flex flex-col h-full"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                {/* Color Circle Trigger */}
-                <div className="relative group/color">
-                  <div
-                    className={cn(
-                      "w-3 h-3 rounded-full cursor-pointer",
-                      column.color
-                    )}
-                  />
 
-                  {/* Color Picker Popover (Simplified) */}
-                  {canEdit && !column.isLocked && (
-                    <div className="absolute top-full left-0 mt-2 bg-white p-2 rounded shadow-lg hidden group-hover/color:flex gap-1 z-50">
-                      {colorOptions.map((c) => (
-                        <div
-                          key={c}
-                          className={cn(
-                            "w-4 h-4 rounded-full cursor-pointer hover:scale-110 transition-transform",
-                            c
-                          )}
-                          onClick={() => handleUpdateColumnColor(column.id, c)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <span className="font-medium text-neutral-900">
-                  {column.label}
-                </span>
-                <span className="text-sm text-neutral-500">
-                  ({tasks.filter((t) => t.status === column.id).length})
-                </span>
-              </div>
-
-              {/* Lock Icon or Edit Actions */}
-              {column.isLocked ? (
-                <Lock className="w-3.5 h-3.5 text-neutral-400" />
-              ) : (
-                canEdit && (
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => handleDeleteColumn(column.id)}
-                      className="p-1 hover:bg-red-100 rounded text-red-500"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )
-              )}
-            </div>
-
-            {/* Task list rendering (same as before) */}
-            {/* ... */}
-          </div>
-        ))}
-      </div>
-
-      {/* Board Layout */}
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      {/* Main Board Layout (Single Loop) */}
+      <div className="flex gap-4 overflow-x-auto pb-4 flex-1">
         {columns.map((column) => (
           <div
             key={column.id}
             onDragOver={handleDragOver}
             onDrop={() => handleDrop(column.id)}
-            className="bg-neutral-50 rounded-xl p-4 min-w-[300px] w-[300px] shrink-0 flex flex-col max-h-[calc(100vh-250px)]"
+            className="bg-neutral-50 rounded-xl p-4 min-w-[300px] w-[300px] shrink-0 flex flex-col max-h-full"
           >
             {/* Column Header */}
             <div className="flex items-center justify-between mb-4 shrink-0">
@@ -242,7 +175,30 @@ export function BoardTab({
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <div className={cn("w-3 h-3 rounded-full", column.color)} />
+                  <div className="relative group/color">
+                    <div
+                      className={cn(
+                        "w-3 h-3 rounded-full cursor-pointer",
+                        column.color
+                      )}
+                    />
+                    {canEdit && !column.isLocked && (
+                      <div className="absolute top-full left-0 mt-2 bg-white p-2 rounded shadow-lg hidden group-active/color:flex gap-1 z-50">
+                        {colorOptions.map((c) => (
+                          <div
+                            key={c}
+                            className={cn(
+                              "w-4 h-4 rounded-full cursor-pointer hover:scale-110 transition-transform",
+                              c
+                            )}
+                            onClick={() =>
+                              handleUpdateColumnColor(column.id, c)
+                            }
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <span className="font-medium text-neutral-900">
                     {column.label}
                   </span>
@@ -252,26 +208,32 @@ export function BoardTab({
                 </div>
               )}
 
-              {canEdit && !editingColumnId && (
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => startEditing(column)}
-                    className="p-1 hover:bg-neutral-200 rounded text-neutral-500"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteColumn(column.id)}
-                    className="p-1 hover:bg-red-100 rounded text-red-500"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+              {/* Logic for Lock vs Actions */}
+              {column.isLocked ? (
+                <Lock className="w-3.5 h-3.5 text-neutral-400" />
+              ) : (
+                canEdit &&
+                !editingColumnId && (
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => startEditing(column)}
+                      className="p-1 hover:bg-neutral-200 rounded text-neutral-500"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteColumn(column.id)}
+                      className="p-1 hover:bg-red-100 rounded text-red-500"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )
               )}
             </div>
 
             {/* Tasks Area */}
-            <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+            <div className="space-y-3 overflow-y-auto flex-1 pr-1 min-h-0">
               {tasks
                 .filter((t) => t.status === column.id)
                 .map((task) => (
@@ -313,15 +275,6 @@ export function BoardTab({
                       </span>
 
                       <div className="flex items-center gap-2">
-                        {task.dueDate && (
-                          <span className="text-[10px] text-neutral-400 flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {new Date(task.dueDate).toLocaleDateString(
-                              undefined,
-                              { month: "short", day: "numeric" }
-                            )}
-                          </span>
-                        )}
                         <div className="flex items-center -space-x-1.5">
                           {task.assignees && task.assignees.length > 0 ? (
                             <>

@@ -212,9 +212,14 @@ export default function ProjectDetailPage() {
     );
 
     try {
+      const apiPayload = {
+        ...updatedTask,
+        assignees: updatedTask.assignees.map((user) => user.id),
+      };
+
       await apiRequest(`/projects/tasks/${updatedTask.id}`, {
         method: "PATCH",
-        data: updatedTask,
+        data: apiPayload,
       });
     } catch (e) {
       console.error(e);

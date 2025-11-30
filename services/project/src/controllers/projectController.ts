@@ -5,6 +5,7 @@ import Project from "../models/Project";
 import Task from "../models/Task";
 import Milestone from "../models/Milestone";
 import Team from "../models/Team";
+import "../models/User";
 
 interface Member {
   user: mongoose.Types.ObjectId;

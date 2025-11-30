@@ -65,11 +65,8 @@ export const getMe = async (req: Request & { user?: any }, res: Response) => {
 export const register = async (req: Request, res: Response) => {
   try {
     // 1. Destructure userType from the request body
-    const { email, password, name, userType, avatarKey } = req.body;
-
-    // Split name for profile
-    const [firstName, ...lastNameParts] = name.split(" ");
-    const lastName = lastNameParts.join(" ") || "";
+    const { email, password, firstName, lastName, userType, avatarKey } =
+      req.body;
 
     const userExists = await User.findOne({ email });
     if (userExists) {

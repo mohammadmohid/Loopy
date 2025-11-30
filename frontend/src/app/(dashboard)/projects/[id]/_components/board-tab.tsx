@@ -1,39 +1,47 @@
 "use client";
 
-import type React from "react";
-
-import { useState } from "react";
-import { Plus, MoreVertical, Calendar } from "lucide-react";
+import React, { useState } from "react";
+import {
+  Plus,
+  MoreVertical,
+  Calendar,
+  X,
+  Check,
+  Trash2,
+  Edit2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Task, TaskStatus } from "@/lib/types";
 
+interface BoardColumn {
+  id: string;
+  label: string;
+  color: string;
+}
+
 interface BoardTabProps {
   tasks: Task[];
+  columns: BoardColumn[];
   onTaskClick: (task: Task) => void;
   onTaskUpdate: (task: Task) => void;
+  onColumnsUpdate: (columns: BoardColumn[]) => void;
   canEdit: boolean;
 }
 
-const columns: { id: TaskStatus; label: string; color: string }[] = [
-  { id: "todo", label: "To Do", color: "bg-neutral-200" },
-  { id: "in-progress", label: "In Progress", color: "bg-blue-500" },
-  { id: "done", label: "Done", color: "bg-emerald-500" },
-];
-
-const priorityColors = {
-  high: "bg-red-100 text-red-700",
-  medium: "bg-amber-100 text-amber-700",
-  low: "bg-emerald-100 text-emerald-700",
-};
-
 export function BoardTab({
   tasks,
+  columns,
   onTaskClick,
   onTaskUpdate,
+  onColumnsUpdate,
   canEdit,
 }: BoardTabProps) {
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
+  const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
+  const [newColumnName, setNewColumnName] = useState("");
+  const [isAddingColumn, setIsAddingColumn] = useState(false);
 
+  // Drag & Drop Handlers
   const handleDragStart = (task: Task) => {
     if (!canEdit) return;
     setDraggedTask(task);
@@ -43,135 +51,213 @@ export function BoardTab({
     e.preventDefault();
   };
 
-  const handleDrop = (status: TaskStatus) => {
+  const handleDrop = (statusId: string) => {
     if (!draggedTask || !canEdit) return;
-    if (draggedTask.status !== status) {
-      onTaskUpdate({ ...draggedTask, status });
+    if (draggedTask.status !== statusId) {
+      onTaskUpdate({ ...draggedTask, status: statusId });
     }
     setDraggedTask(null);
   };
 
-  const getTasksByStatus = (status: TaskStatus) =>
-    tasks.filter((t) => t.status === status);
+  // Column CRUD Handlers
+  const handleAddColumn = () => {
+    if (!newColumnName.trim()) return;
+    const newId = newColumnName.toLowerCase().replace(/\s+/g, "-");
+    const newCol = { id: newId, label: newColumnName, color: "bg-neutral-200" };
+    onColumnsUpdate([...columns, newCol]);
+    setNewColumnName("");
+    setIsAddingColumn(false);
+  };
 
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return null;
-    return new Date(dateStr).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+  const handleDeleteColumn = (colId: string) => {
+    if (
+      confirm(
+        "Delete this column? Tasks in this column will need reassignment."
+      )
+    ) {
+      onColumnsUpdate(columns.filter((c) => c.id !== colId));
+    }
+  };
+
+  const startEditing = (col: BoardColumn) => {
+    setEditingColumnId(col.id);
+    setNewColumnName(col.label);
+  };
+
+  const saveEditing = () => {
+    if (editingColumnId) {
+      onColumnsUpdate(
+        columns.map((c) =>
+          c.id === editingColumnId ? { ...c, label: newColumnName } : c
+        )
+      );
+      setEditingColumnId(null);
+      setNewColumnName("");
+    }
+  };
+
+  const cancelEditing = () => {
+    setEditingColumnId(null);
+    setNewColumnName("");
+    setIsAddingColumn(false);
   };
 
   return (
     <div className="space-y-4">
       {/* Header Actions */}
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex items-center justify-end gap-2 h-10">
         {canEdit && (
           <>
-            <button className="px-3 py-1.5 border border-neutral-200 rounded-lg text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition-colors">
-              Edit Columns
-            </button>
-            <button className="px-3 py-1.5 border border-neutral-200 rounded-lg text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition-colors flex items-center gap-1">
-              <Plus className="w-4 h-4" />
-              Add Column
-            </button>
+            {isAddingColumn ? (
+              <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-5">
+                <input
+                  autoFocus
+                  className="h-8 px-2 border rounded-lg text-sm"
+                  placeholder="Column Name"
+                  value={newColumnName}
+                  onChange={(e) => setNewColumnName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddColumn()}
+                />
+                <button
+                  onClick={handleAddColumn}
+                  className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200"
+                >
+                  <Check className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={cancelEditing}
+                  className="p-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsAddingColumn(true)}
+                className="px-3 py-1.5 border border-neutral-200 rounded-lg text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition-colors flex items-center gap-1"
+              >
+                <Plus className="w-4 h-4" />
+                Add Column
+              </button>
+            )}
           </>
         )}
       </div>
 
-      {/* Board */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* Board Layout */}
+      <div className="flex gap-4 overflow-x-auto pb-4">
         {columns.map((column) => (
           <div
             key={column.id}
             onDragOver={handleDragOver}
             onDrop={() => handleDrop(column.id)}
-            className="bg-neutral-50 rounded-xl p-4 min-h-[500px]"
+            className="bg-neutral-50 rounded-xl p-4 min-w-[300px] w-[300px] flex-shrink-0 flex flex-col max-h-[calc(100vh-250px)]"
           >
             {/* Column Header */}
-            <div className="flex items-center gap-2 mb-4">
-              <div className={cn("w-3 h-3 rounded-full", column.color)} />
-              <span className="font-medium text-neutral-900">
-                {column.label}
-              </span>
-              <span className="text-sm text-neutral-500">
-                ({getTasksByStatus(column.id).length})
-              </span>
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
+              {editingColumnId === column.id ? (
+                <div className="flex items-center gap-1 w-full">
+                  <input
+                    className="flex-1 h-7 px-2 border rounded text-sm"
+                    value={newColumnName}
+                    onChange={(e) => setNewColumnName(e.target.value)}
+                  />
+                  <button onClick={saveEditing}>
+                    <Check className="w-4 h-4 text-emerald-600" />
+                  </button>
+                  <button onClick={cancelEditing}>
+                    <X className="w-4 h-4 text-neutral-400" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className={cn("w-3 h-3 rounded-full", column.color)} />
+                  <span className="font-medium text-neutral-900">
+                    {column.label}
+                  </span>
+                  <span className="text-sm text-neutral-500">
+                    ({tasks.filter((t) => t.status === column.id).length})
+                  </span>
+                </div>
+              )}
+
+              {canEdit && !editingColumnId && (
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => startEditing(column)}
+                    className="p-1 hover:bg-neutral-200 rounded text-neutral-500"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteColumn(column.id)}
+                    className="p-1 hover:bg-red-100 rounded text-red-500"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Tasks */}
-            <div className="space-y-3">
-              {getTasksByStatus(column.id).map((task) => (
-                <div
-                  key={task.id}
-                  draggable={canEdit}
-                  onDragStart={() => handleDragStart(task)}
-                  onClick={() => onTaskClick(task)}
-                  className={cn(
-                    "bg-white border border-neutral-200 rounded-xl p-4 cursor-pointer hover:shadow-md transition-all",
-                    canEdit && "cursor-grab active:cursor-grabbing",
-                    draggedTask?.id === task.id && "opacity-50"
-                  )}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <span className="font-medium text-neutral-900 text-sm">
-                      {task.title}
-                    </span>
-                    <button
-                      onClick={(e) => e.stopPropagation()}
-                      className="p-1 hover:bg-neutral-100 rounded transition-colors"
-                    >
-                      <MoreVertical className="w-4 h-4 text-neutral-400" />
-                    </button>
-                  </div>
+            {/* Tasks Area */}
+            <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+              {tasks
+                .filter((t) => t.status === column.id)
+                .map((task) => (
+                  <div
+                    key={task.id}
+                    draggable={canEdit}
+                    onDragStart={() => handleDragStart(task)}
+                    onClick={() => onTaskClick(task)}
+                    className={cn(
+                      "bg-white border border-neutral-200 rounded-xl p-4 cursor-pointer hover:shadow-sm transition-all",
+                      canEdit && "cursor-grab active:cursor-grabbing",
+                      draggedTask?.id === task.id && "opacity-50 border-primary"
+                    )}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <span className="font-medium text-neutral-900 text-sm leading-snug">
+                        {task.title}
+                      </span>
+                    </div>
 
-                  <p className="text-xs text-neutral-500 mb-2">
-                    {task.milestoneId
-                      ? "Milestone Name"
-                      : "No Milestone Assigned"}
-                  </p>
+                    {task.description && (
+                      <p className="text-xs text-neutral-500 mb-3 line-clamp-2">
+                        {task.description}
+                      </p>
+                    )}
 
-                  {task.description && (
-                    <p className="text-sm text-neutral-600 mb-3 line-clamp-2">
-                      {task.description}
-                    </p>
-                  )}
+                    <div className="flex items-center justify-between mt-auto">
+                      <span
+                        className={cn(
+                          "text-[10px] font-medium px-2 py-0.5 rounded uppercase tracking-wide",
+                          task.priority === "high"
+                            ? "bg-red-50 text-red-600"
+                            : task.priority === "medium"
+                            ? "bg-amber-50 text-amber-600"
+                            : "bg-green-50 text-green-600"
+                        )}
+                      >
+                        {task.priority}
+                      </span>
 
-                  {/* Priority */}
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={cn(
-                        "text-xs font-medium px-2 py-0.5 rounded",
-                        priorityColors[task.priority]
-                      )}
-                    >
-                      {task.priority.charAt(0).toUpperCase() +
-                        task.priority.slice(1)}
-                    </span>
-
-                    <div className="flex items-center gap-2">
-                      {task.dueDate && (
-                        <div className="flex items-center gap-1 text-xs text-neutral-500">
-                          <Calendar className="w-3 h-3" />
-                          Due: {formatDate(task.dueDate)}
+                      <div className="flex items-center gap-2">
+                        {task.dueDate && (
+                          <span className="text-[10px] text-neutral-400 flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(task.dueDate).toLocaleDateString(
+                              undefined,
+                              { month: "short", day: "numeric" }
+                            )}
+                          </span>
+                        )}
+                        <div className="w-6 h-6 bg-neutral-100 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600 border border-neutral-200">
+                          {task.assignee?.avatar || "U"}
                         </div>
-                      )}
-                      <div className="w-6 h-6 bg-neutral-200 rounded-full flex items-center justify-center text-[10px] font-medium">
-                        {task.assignee?.avatar || "MM"}
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
-
-              {/* Add Task Button */}
-              {canEdit && (
-                <button className="w-full p-3 border-2 border-dashed border-neutral-200 rounded-xl text-sm text-neutral-500 hover:border-neutral-300 hover:text-neutral-600 transition-colors flex items-center justify-center gap-1">
-                  <Plus className="w-4 h-4" />
-                  Add Task
-                </button>
-              )}
+                ))}
             </div>
           </div>
         ))}

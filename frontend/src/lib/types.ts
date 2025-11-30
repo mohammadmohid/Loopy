@@ -1,6 +1,6 @@
 // Shared types for the project management system
 
-export type TaskStatus = "todo" | "in-progress" | "done";
+export type TaskStatus = string;
 export type TaskType = "task" | "bug" | "feature" | "story";
 export type EventType = "task" | "milestone" | "meeting" | "deadline";
 export type Priority = "high" | "medium" | "low";
@@ -19,6 +19,7 @@ export interface User {
 }
 
 export interface Task {
+  _id: string;
   id: string;
   title: string;
   description?: string;
@@ -60,6 +61,7 @@ export interface CalendarEvent {
 }
 
 export interface Project {
+  _id: string;
   id: string;
   name: string;
   description?: string;
@@ -68,6 +70,7 @@ export interface Project {
   endDate: string;
   color: string;
   members: User[];
+  boardColumns: { id: string; label: string; color: string }[]; // Added
   stats: {
     completed: number;
     created: number;

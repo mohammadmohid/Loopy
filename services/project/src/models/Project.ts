@@ -9,6 +9,7 @@ export interface IProject extends Document {
   status: "active" | "completed" | "archived";
   startDate: Date;
   endDate?: Date;
+  boardColumns: { id: string; label: string; color: string }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -50,6 +51,14 @@ const ProjectSchema: Schema = new Schema(
     },
     startDate: { type: Date, default: Date.now },
     endDate: { type: Date },
+    boardColumns: {
+      type: [{ id: String, label: String, color: String }],
+      default: [
+        { id: "todo", label: "To Do", color: "bg-neutral-200" },
+        { id: "in-progress", label: "In Progress", color: "bg-blue-500" },
+        { id: "done", label: "Done", color: "bg-emerald-500" },
+      ],
+    },
   },
   { timestamps: true }
 );

@@ -144,6 +144,36 @@ export const deleteProject = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// @desc    Update Project (e.g. Board Columns)
+// @route   PATCH /api/projects/:id
+export const updateProject = async (req: AuthRequest, res: Response) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) return res.status(404).json({ message: "Project not found" });
+
+    // Check permissions (Owner/Admin/Manager)
+    // For simplicity allowing update if member exists for now, enhance per RBAC needs
+    const isMember = project.members.some(
+      (m) => m.user.toString() === req.user!.id
+    );
+    const isOwner = project.owner.toString() === req.user!.id;
+    const isAdmin = req.user!.role === "ADMIN";
+
+    if (!isMember && !isOwner && !isAdmin) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    // Update allowed fields
+    if (req.body.boardColumns) project.boardColumns = req.body.boardColumns;
+    if (req.body.name) project.name = req.body.name;
+
+    await project.save();
+    res.json(project);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Assign Team Lead (Updates Member Role to MANAGER)
 // @route   PUT /api/projects/:id/assign-lead
 export const assignTeamLead = async (req: AuthRequest, res: Response) => {

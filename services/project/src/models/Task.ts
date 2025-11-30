@@ -3,12 +3,12 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface ITask extends Document {
   title: string;
   description?: string;
-  status: "todo" | "in-progress" | "done";
+  status: string;
   type: "task" | "bug" | "feature" | "story";
   priority: "low" | "medium" | "high";
   projectId: mongoose.Types.ObjectId;
   milestoneId?: mongoose.Types.ObjectId;
-  assignee?: mongoose.Types.ObjectId; // User ID
+  assignee?: mongoose.Types.ObjectId;
   dueDate?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -20,7 +20,6 @@ const TaskSchema: Schema = new Schema(
     description: { type: String },
     status: {
       type: String,
-      enum: ["todo", "in-progress", "done"],
       default: "todo",
     },
     type: {

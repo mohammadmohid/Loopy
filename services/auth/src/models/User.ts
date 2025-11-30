@@ -4,14 +4,12 @@ import bcrypt from "bcryptjs";
 export interface IUser extends Document {
   email: string;
   password?: string;
-  name: string;
-  role:
-    | "org_admin"
-    | "project_manager"
-    | "team_lead"
-    | "team_member"
-    | "personal";
-  organizationId?: mongoose.Types.ObjectId;
+  globalRole: "ADMIN" | "USER";
+  profile: {
+    firstName: string;
+    lastName: string;
+    avatarKey?: string;
+  };
   createdAt: Date;
   updatedAt: Date;
   matchPassword(enteredPassword: string): Promise<boolean>;
@@ -19,32 +17,29 @@ export interface IUser extends Document {
 
 const userSchema = new Schema<IUser>(
   {
-    email: { type: String, required: true, unique: true },
-    password: { type: String, minLength: 8, required: true, select: false },
-    name: { type: String, required: true },
-    role: {
+    email: {
       type: String,
-      enum: [
-        "org_admin",
-        "project_manager",
-        "team_lead",
-        "team_member",
-        "personal",
-      ],
-      default: "personal",
       required: true,
+      unique: true,
+      lowercase: true,
+      index: true,
     },
-    organizationId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Organization",
-      default: null,
+    password: { type: String, minLength: 8, required: true, select: false },
+    globalRole: {
+      type: String,
+      enum: ["ADMIN", "USER"],
+      default: "USER",
+    },
+    profile: {
+      firstName: { type: String, required: true },
+      lastName: { type: String, required: true },
+      avatarKey: { type: String },
     },
   },
   { timestamps: true }
 );
 
 userSchema.pre("save", async function () {
-  // don't re-hash if password wasn't modified
   if (!this.isModified("password")) return;
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password as string, salt);

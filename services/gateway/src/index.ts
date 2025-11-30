@@ -11,9 +11,22 @@ const PORT = process.env.PORT || 8000;
 
 app.use(helmet());
 
+const allowedOrigins = ["http://localhost:3000", "https://loopy-mu.vercel.app"];
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "https://loopy-mu.vercel.app",
+    origin: (origin, callback) => {
+      // Allow requests with no origin
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        // Origin is allowed
+        return callback(null, true);
+      } else {
+        // Origin is blocked
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );

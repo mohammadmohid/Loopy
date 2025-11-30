@@ -13,26 +13,37 @@ export const protect = async (
 ) => {
   let token;
 
-  if (req.headers.authorization?.startsWith("Bearer")) {
-    try {
-      token = req.headers.authorization.split(" ")[1];
+  // 1. Check Cookies
+  if (req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  }
+  // 2. Fallback for non-browser APIs
+  else if (req.headers.authorization?.startsWith("Bearer")) {
+    token = req.headers.authorization.split(" ")[1];
+  }
 
-      const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
-
-      // CHECK MONGODB BLOCKLIST
-      // If the token ID exists in the blocklist, reject the request
-      const isBlocked = await TokenBlocklist.exists({ jti: decoded.jti });
-      if (isBlocked) {
-        res.status(401).json({ message: "Session expired (Logged out)." });
-        return;
-      }
-
-      req.user = decoded;
-      next();
-    } catch (error) {
-      res.status(401).json({ message: "Not authorized, invalid token" });
-    }
-  } else {
+  if (!token) {
     res.status(401).json({ message: "Not authorized, no token" });
+    return;
+  }
+
+  try {
+    const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+
+    // Even if the cookie exists and the JWT signature is valid,
+    // we must ensure the user didn't explicitly log out.
+    const isBlocked = await TokenBlocklist.exists({ jti: decoded.jti });
+
+    if (isBlocked) {
+      // Clear the invalid cookie if it exists
+      res.clearCookie("token");
+      res.status(401).json({ message: "Session expired (Logged out)." });
+      return;
+    }
+
+    req.user = decoded;
+    next();
+  } catch (error) {
+    res.status(401).json({ message: "Not authorized, invalid token" });
   }
 };

@@ -2,29 +2,35 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
+import cookieParser from "cookie-parser";
 import { connectDB } from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 
-// Setup
 dotenv.config();
 connectDB();
 
 const app = express();
 
-// Security Middleware
 app.use(helmet());
+app.use(cookieParser());
+
+const allowedOrigins = ["http://localhost:3000", "https://loopy-mu.vercel.app"];
+
 app.use(
   cors({
-    origin: true,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
 app.use(express.json());
 
-// Routes
 app.use("/api/auth", authRoutes);
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port: ${PORT}`);
-});
+const PORT = process.env.PORT || 5001;
+app.listen(PORT, () => console.log(`Auth Service running on port ${PORT}`));

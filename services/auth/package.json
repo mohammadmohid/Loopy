@@ -20,13 +20,15 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^9.0.0",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "cookie-parser": "^1.4.6"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.10.1",
+    "@types/cookie-parser": "^1.4.7",
     "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.6",

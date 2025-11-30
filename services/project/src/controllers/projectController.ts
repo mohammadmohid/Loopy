@@ -1,62 +1,126 @@
 import { Response } from "express";
+import mongoose from "mongoose";
 import { AuthRequest } from "../middleware/auth";
 import Project from "../models/Project";
+import Team from "../models/Team";
+
+interface Member {
+  user: mongoose.Types.ObjectId;
+  role: string;
+}
 
 // @desc    Create a new project
 // @access  Private (Admin, Project Manager)
 export const createProject = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, startDate, endDate, teamLead, members } =
-      req.body;
+    const {
+      name,
+      description,
+      startDate,
+      endDate,
+      teamLead,
+      members,
+      assignedTeams,
+    } = req.body;
+
+    const initialMembers: Member[] = [];
+
+    // 1. Add Owner as MANAGER
+    initialMembers.push({
+      user: new mongoose.Types.ObjectId(req.user!.id),
+      role: "MANAGER",
+    });
+
+    // 2. Add Team Lead as MANAGER (if provided and different from owner)
+    if (teamLead && teamLead !== req.user!.id) {
+      // FIX: Removed reference to undefined 'm', used 'teamLead' directly
+      initialMembers.push({
+        user: new mongoose.Types.ObjectId(teamLead),
+        role: "MANAGER",
+      });
+    }
+
+    // 3. Add other members (defaulting to VIEWER if no role specified)
+    if (members && Array.isArray(members)) {
+      members.forEach((m: any) => {
+        // Handle input where m is just an ID string OR an object { user, role }
+        const rawId = typeof m === "string" ? m : m.user;
+        const memberRole = typeof m === "object" && m.role ? m.role : "VIEWER";
+
+        // Validate if it's a valid ObjectId string to prevent crashes
+        if (mongoose.Types.ObjectId.isValid(rawId)) {
+          const memberId = new mongoose.Types.ObjectId(rawId);
+
+          // Prevent duplicates (check against existing ObjectIds in the array)
+          const exists = initialMembers.find((im) => im.user.equals(memberId));
+
+          if (!exists) {
+            initialMembers.push({ user: memberId, role: memberRole });
+          }
+        }
+      });
+    }
 
     const project = await Project.create({
       name,
       description,
       startDate,
       endDate,
-      owner: req.user!.id, // The creator is the owner
-      teamLead,
-      members,
+      owner: new mongoose.Types.ObjectId(req.user!.id),
+      members: initialMembers, // Now strictly typed to match schema
+      assignedTeams: assignedTeams || [],
     });
 
     res.status(201).json(project);
   } catch (error: any) {
+    console.error("Create Project Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Get projects (Filtered by Role)
+// @desc    Get projects (Filtered by Role & Team Association)
 // @access  Private
 export const getProjects = async (req: AuthRequest, res: Response) => {
   try {
     const { id, role } = req.user!;
-    let query = {};
 
-    if (role === "org_admin") {
-      // Admin sees all projects
-      query = {};
-    } else if (role === "project_manager") {
-      // PM sees projects they own (created)
-      query = { owner: id };
-    } else if (role === "team_lead") {
-      // Team Lead sees projects they lead OR are a member of
-      query = { $or: [{ teamLead: id }, { members: id }] };
-    } else {
-      // Team Members only see projects they are assigned to
-      query = { members: id };
+    // Admin sees all projects
+    if (role === "org_admin" || role === "ADMIN") {
+      const projects = await Project.find({}).sort({ updatedAt: -1 });
+      return res.status(200).json(projects);
     }
 
-    const projects = await Project.find(query);
+    // 1. Find all teams the user belongs to
+    const userTeams = await Team.find({ members: id }).select("_id");
+    const userTeamIds = userTeams.map((t) => t._id);
+
+    // 2. Complex RBAC Query:
+    // - Created by user OR
+    // - Directly assigned to user OR
+    // - Assigned to one of user's teams
+    const query = {
+      $or: [
+        { owner: id },
+        { "members.user": id },
+        { "assignedTeams.team": { $in: userTeamIds } },
+      ],
+    };
+
+    const projects = await Project.find(query)
+      .populate("owner", "profile.firstName profile.lastName")
+      .sort({ updatedAt: -1 });
+
     res.status(200).json(projects);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Assign Team Lead (Only Owner/Admin)
+// @desc    Assign Team Lead (Updates Member Role to MANAGER)
 // @route   PUT /api/projects/:id/assign-lead
 export const assignTeamLead = async (req: AuthRequest, res: Response) => {
   try {
+    const { teamLeadId } = req.body;
     const project = await Project.findById(req.params.id);
 
     if (!project) {
@@ -66,14 +130,30 @@ export const assignTeamLead = async (req: AuthRequest, res: Response) => {
     // Check if user is owner or admin
     if (
       project.owner.toString() !== req.user!.id &&
-      req.user!.role !== "org_admin"
+      req.user!.role !== "org_admin" &&
+      req.user!.role !== "ADMIN"
     ) {
       return res
         .status(403)
         .json({ message: "Not authorized to update this project" });
     }
 
-    project.teamLead = req.body.teamLeadId;
+    // Check if the user is already a member
+    const memberIndex = project.members.findIndex(
+      (m) => m.user.toString() === teamLeadId
+    );
+
+    if (memberIndex > -1) {
+      // User exists, upgrade role to MANAGER
+      project.members[memberIndex].role = "MANAGER";
+    } else {
+      // User does not exist, add as MANAGER
+      project.members.push({
+        user: new mongoose.Types.ObjectId(teamLeadId),
+        role: "MANAGER",
+      });
+    }
+
     await project.save();
 
     res.status(200).json(project);

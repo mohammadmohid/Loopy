@@ -1,75 +1,98 @@
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
-import { v4 as uuidv4 } from "uuid"; // Ensure you installed uuid: pnpm add uuid @types/uuid
+import { v4 as uuidv4 } from "uuid";
 import User from "../models/User.js";
 import TokenBlocklist from "../models/TokenBlocklist.js";
 
-// Generates Token
 const generateToken = (id: string, role: string) => {
-  // 'jti' is a unique token to identify this specific token session
   const jwtSecret = process.env.JWT_SECRET;
-  if (!jwtSecret) {
-    throw new Error("JWT_SECRET is not defined in the environment variables");
-  }
-  return jwt.sign({ id, role, jti: uuidv4() }, jwtSecret, {
-    expiresIn: "1d",
-  });
+  if (!jwtSecret) throw new Error("JWT_SECRET is not defined");
+
+  return jwt.sign({ id, role, jti: uuidv4() }, jwtSecret, { expiresIn: "1d" });
 };
 
-// @desc    Register a new user
-// @route   POST /api/auth/register
+// Helper to set cookie
+const sendTokenResponse = (user: any, statusCode: number, res: Response) => {
+  const token = generateToken(user._id.toString(), user.globalRole);
+
+  const options = {
+    expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 1 day
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production", // Only send over HTTPS in production
+    sameSite: "lax" as const,
+  };
+
+  res
+    .status(statusCode)
+    .cookie("token", token, options)
+    .json({
+      success: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        profile: user.profile,
+        globalRole: user.globalRole,
+      },
+    });
+};
+
+// @desc    Get current user profile
+// @route   GET /api/auth/me
+export const getMe = async (req: Request & { user?: any }, res: Response) => {
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        profile: user.profile,
+        globalRole: user.globalRole,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, password, userType, name } = req.body;
+    const { email, password, name } = req.body;
+
+    // Split name for profile
+    const [firstName, ...lastNameParts] = name.split(" ");
+    const lastName = lastNameParts.join(" ") || "";
 
     const userExists = await User.findOne({ email });
     if (userExists) {
-      res.status(400).json({ message: "User already exists" });
-      return;
+      return res.status(400).json({ message: "User already exists" });
     }
 
     const user = await User.create({
       email,
       password,
-      name,
-      role: userType || "personal",
+      profile: { firstName, lastName },
+      globalRole: "USER",
     });
 
-    const token = generateToken(user._id.toString(), user.role);
-
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-    });
+    sendTokenResponse(user, 201, res);
   } catch (error) {
     res.status(500).json({ message: "Server Error", error });
   }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
-
     const user = await User.findOne({ email }).select("+password");
 
     if (user && (await user.matchPassword(password))) {
-      const token = generateToken(user._id.toString(), user.role);
-      res.json({
-        token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-        },
-      });
+      sendTokenResponse(user, 200, res);
     } else {
       res.status(401).json({ message: "Invalid email or password" });
     }
@@ -78,15 +101,18 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-// @desc    Logout user (Invalidate Token)
-// @route   POST /api/auth/logout
 export const logout = async (req: Request & { user?: any }, res: Response) => {
   try {
     const jti = req.user?.jti;
     if (jti) {
-      // Add the token's unique ID to the blocklist
       await TokenBlocklist.create({ jti });
     }
+
+    res.cookie("token", "none", {
+      expires: new Date(Date.now() + 10 * 1000),
+      httpOnly: true,
+    });
+
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
     res.status(500).json({ message: "Logout failed" });

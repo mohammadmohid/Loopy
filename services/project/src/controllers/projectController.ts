@@ -6,6 +6,9 @@ import Task from "../models/Task";
 import Milestone from "../models/Milestone";
 import Team from "../models/Team";
 import "../models/User";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { getR2Client } from "../config/r2.js";
 
 interface Member {
   user: mongoose.Types.ObjectId;
@@ -87,11 +90,11 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
   try {
     const { id, role } = req.user!;
 
-    // Admin sees all projects
-    if (role === "ADMIN") {
-      const projects = await Project.find({}).sort({ updatedAt: -1 });
-      return res.status(200).json(projects);
-    }
+    // // Admin sees all projects
+    // if (role === "ADMIN") {
+    //   const projects = await Project.find({}).sort({ updatedAt: -1 });
+    //   return res.status(200).json(projects);
+    // }
 
     // 1. Find all teams the user belongs to
     const userTeams = await Team.find({ members: id }).select("_id");
@@ -111,9 +114,34 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
 
     const projects = await Project.find(query)
       .populate("owner", "profile.firstName profile.lastName")
-      .sort({ updatedAt: -1 });
+      .sort({ updatedAt: -1 })
+      .lean();
 
-    res.status(200).json(projects);
+    const projectsWithAvatars = await Promise.all(
+      projects.map(async (project: any) => {
+        if (project.owner?.profile?.avatarKey) {
+          try {
+            const r2 = getR2Client();
+            const command = new GetObjectCommand({
+              Bucket: process.env.R2_BUCKET_NAME,
+              Key: project.owner.profile.avatarKey,
+            });
+            // Generate a temporary URL valid for 24 hours
+            const avatarUrl = await getSignedUrl(r2, command, {
+              expiresIn: 86400,
+            });
+
+            // Inject the URL into the profile object
+            project.owner.profile.avatarUrl = avatarUrl;
+          } catch (error) {
+            console.error("Failed to sign avatar for project", project._id);
+          }
+        }
+        return project;
+      })
+    );
+
+    res.status(200).json(projectsWithAvatars);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

@@ -3,6 +3,9 @@ import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import User from "../models/User.js";
 import TokenBlocklist from "../models/TokenBlocklist.js";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { getR2Client } from "../config/r2.js";
 
 const generateToken = (id: string, role: string) => {
   const jwtSecret = process.env.JWT_SECRET;
@@ -11,9 +14,30 @@ const generateToken = (id: string, role: string) => {
   return jwt.sign({ id, role, jti: uuidv4() }, jwtSecret, { expiresIn: "1d" });
 };
 
+const getAvatarUrl = async (key?: string) => {
+  if (!key) return null;
+  try {
+    const r2 = getR2Client();
+    const command = new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+    });
+    // Link valid for 24 hours (matches token expiry)
+    return await getSignedUrl(r2, command, { expiresIn: 86400 });
+  } catch (error) {
+    console.error("Error signing avatar URL:", error);
+    return null;
+  }
+};
+
 // Helper to set cookie
-const sendTokenResponse = (user: any, statusCode: number, res: Response) => {
+const sendTokenResponse = async (
+  user: any,
+  statusCode: number,
+  res: Response
+) => {
   const token = generateToken(user._id.toString(), user.globalRole);
+  const avatarUrl = await getAvatarUrl(user.profile.avatarKey);
 
   const options = {
     expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 1 day
@@ -30,10 +54,39 @@ const sendTokenResponse = (user: any, statusCode: number, res: Response) => {
       user: {
         id: user._id,
         email: user.email,
-        profile: user.profile,
+        profile: { ...user.profile, avatarUrl },
         globalRole: user.globalRole,
       },
     });
+};
+
+// @desc    Get current user profile
+// @route   GET /api/auth/me
+export const findUserById = async (
+  req: Request & { id?: string },
+  res: Response
+) => {
+  try {
+    const user = await User.findById(req.id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const avatarUrl = await getAvatarUrl(user.profile.avatarKey);
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        profile: { ...user.profile, avatarUrl },
+        globalRole: user.globalRole,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server Error" });
+  }
 };
 
 // @desc    Get current user profile
@@ -46,12 +99,14 @@ export const getMe = async (req: Request & { user?: any }, res: Response) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    const avatarUrl = await getAvatarUrl(user.profile.avatarKey);
+
     res.json({
       success: true,
       user: {
         id: user._id,
         email: user.email,
-        profile: user.profile,
+        profile: { ...user.profile, avatarUrl },
         globalRole: user.globalRole,
       },
     });

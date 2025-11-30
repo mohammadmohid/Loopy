@@ -285,11 +285,11 @@ export function TaskDetailPanel({
               {mockComments.map((comment) => (
                 <div key={comment.id} className="flex items-start gap-3">
                   {comment.avatar ? (
-                    <div className="w-8 h-8 bg-neutral-200 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0">
+                    <div className="w-8 h-8 bg-neutral-200 rounded-full flex items-center justify-center text-xs font-medium shrink-0">
                       {comment.avatar}
                     </div>
                   ) : (
-                    <div className="w-8 h-8 bg-neutral-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <div className="w-8 h-8 bg-neutral-100 rounded-full flex items-center justify-center shrink-0">
                       <div className="w-2 h-2 rounded-full bg-neutral-400" />
                     </div>
                   )}

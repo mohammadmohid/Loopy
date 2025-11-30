@@ -110,7 +110,7 @@ export function ProjectOverviewTab({
                   onClick={() => onActivityClick(activity)}
                 >
                   <div
-                    className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                    className={`w-2 h-2 rounded-full mt-2 shrink-0 ${
                       activity.action === "completed"
                         ? "bg-emerald-500"
                         : "bg-blue-500"

@@ -153,7 +153,7 @@ function TaskItem({ task, onClick }: { task: Task; onClick: () => void }) {
       <button
         onClick={handleCheckboxClick}
         className={cn(
-          "mt-0.5 flex-shrink-0 transition-colors",
+          "mt-0.5 shrink-0 transition-colors",
           completed
             ? "text-emerald-500"
             : "text-neutral-300 hover:text-neutral-400"
@@ -183,7 +183,7 @@ function TaskItem({ task, onClick }: { task: Task; onClick: () => void }) {
       </div>
 
       {/* Assignees Stack */}
-      <div className="flex -space-x-2 overflow-hidden flex-shrink-0">
+      <div className="flex -space-x-2 overflow-hidden shrink-0">
         {task.assignees.slice(0, 3).map((u, i) => (
           <div
             key={u.id || i}

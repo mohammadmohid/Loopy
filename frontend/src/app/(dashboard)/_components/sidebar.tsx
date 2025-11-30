@@ -114,10 +114,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 )}
               >
                 <Icon
-                  className={cn(
-                    "w-5 h-5 flex-shrink-0",
-                    isActive && "text-primary"
-                  )}
+                  className={cn("w-5 h-5 shrink-0", isActive && "text-primary")}
                 />
                 {!collapsed && (
                   <>
@@ -151,7 +148,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
           )}
         >
-          <Settings className="w-5 h-5 flex-shrink-0" />
+          <Settings className="w-5 h-5 shrink-0" />
           {!collapsed && <span>Settings</span>}
         </Link>
       </div>

@@ -236,7 +236,7 @@ export function TimelineTab({
       <div className="border border-neutral-200 rounded-xl overflow-hidden">
         <div className="flex">
           {/* Task column header */}
-          <div className="w-80 flex-shrink-0 border-r border-neutral-200 bg-neutral-50 p-3">
+          <div className="w-80 shrink-0 border-r border-neutral-200 bg-neutral-50 p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-neutral-700">Task</span>
               <div className="relative">
@@ -338,7 +338,7 @@ export function TimelineTab({
               <div key={milestone.id}>
                 {/* Milestone Row */}
                 <div className="flex border-b border-neutral-200 hover:bg-neutral-50 transition-colors">
-                  <div className="w-80 flex-shrink-0 border-r border-neutral-200 p-3">
+                  <div className="w-80 shrink-0 border-r border-neutral-200 p-3">
                     <div className="flex items-center gap-2">
                       <button onClick={() => toggleMilestone(milestone.id)}>
                         {isExpanded ? (
@@ -392,7 +392,7 @@ export function TimelineTab({
                       key={task.id}
                       className="flex border-b border-neutral-100 hover:bg-neutral-50 transition-colors"
                     >
-                      <div className="w-80 flex-shrink-0 border-r border-neutral-200 p-3 pl-10">
+                      <div className="w-80 shrink-0 border-r border-neutral-200 p-3 pl-10">
                         <div className="flex items-center gap-2">
                           <CheckSquare className="w-4 h-4 text-neutral-400" />
                           <span

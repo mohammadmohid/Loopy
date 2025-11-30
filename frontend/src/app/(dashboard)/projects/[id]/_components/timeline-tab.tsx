@@ -310,7 +310,7 @@ export function TimelineTab({
       >
         {/* Header Row */}
         <div className="flex border-b border-neutral-200 bg-neutral-50">
-          <div className="w-80 flex-shrink-0 p-3 border-r border-neutral-200 font-medium text-sm text-neutral-700">
+          <div className="w-80 shrink-0 p-3 border-r border-neutral-200 font-medium text-sm text-neutral-700">
             Task
           </div>
           <div className="flex-1 flex relative">
@@ -368,7 +368,7 @@ export function TimelineTab({
               <div key={m.id} className="group">
                 {/* Milestone Header Row */}
                 <div className="flex border-b border-neutral-100 hover:bg-neutral-50">
-                  <div className="w-80 p-3 border-r border-neutral-200 flex items-center gap-2 flex-shrink-0">
+                  <div className="w-80 p-3 border-r border-neutral-200 flex items-center gap-2 shrink-0">
                     <button
                       onClick={() =>
                         setExpandedMilestones((prev) =>
@@ -434,7 +434,7 @@ export function TimelineTab({
                         key={t.id}
                         className="flex border-b border-neutral-100 hover:bg-neutral-50/50"
                       >
-                        <div className="w-80 p-2 pl-8 border-r border-neutral-200 flex items-center gap-2 flex-shrink-0">
+                        <div className="w-80 p-2 pl-8 border-r border-neutral-200 flex items-center gap-2 shrink-0">
                           <div
                             className={`p-1 rounded bg-white border border-neutral-200`}
                           >

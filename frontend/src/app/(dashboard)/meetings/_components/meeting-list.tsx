@@ -1,6 +1,13 @@
 "use client";
 
-import { FileAudio, FileText, Calendar, Clock, MoreVertical, Loader2 } from "lucide-react";
+import {
+  FileAudio,
+  FileText,
+  Calendar,
+  Clock,
+  MoreVertical,
+  Loader2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Artifact {
@@ -9,7 +16,7 @@ export interface Artifact {
   transcriptionStatus: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
   createdAt: string;
   projectId?: {
-      name: string;
+    name: string;
   };
 }
 
@@ -34,7 +41,9 @@ export function MeetingList({ artifacts, isLoading }: MeetingListProps) {
           <FileAudio className="w-6 h-6 text-neutral-400" />
         </div>
         <p className="font-medium text-neutral-900">No recordings yet</p>
-        <p className="text-sm text-neutral-500">Upload a meeting to get started</p>
+        <p className="text-sm text-neutral-500">
+          Upload a meeting to get started
+        </p>
       </div>
     );
   }
@@ -45,19 +54,32 @@ export function MeetingList({ artifacts, isLoading }: MeetingListProps) {
         <table className="w-full text-left">
           <thead className="bg-neutral-50 border-b border-neutral-200">
             <tr>
-              <th className="px-6 py-3 text-xs font-medium text-neutral-500 uppercase">Name</th>
-              <th className="px-6 py-3 text-xs font-medium text-neutral-500 uppercase">Project</th>
-              <th className="px-6 py-3 text-xs font-medium text-neutral-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-xs font-medium text-neutral-500 uppercase">Date</th>
-              <th className="px-6 py-3 text-xs font-medium text-neutral-500 uppercase text-right">Actions</th>
+              <th className="px-6 py-3 text-xs font-medium text-neutral-500 uppercase">
+                Name
+              </th>
+              <th className="px-6 py-3 text-xs font-medium text-neutral-500 uppercase">
+                Project
+              </th>
+              <th className="px-6 py-3 text-xs font-medium text-neutral-500 uppercase">
+                Status
+              </th>
+              <th className="px-6 py-3 text-xs font-medium text-neutral-500 uppercase">
+                Date
+              </th>
+              <th className="px-6 py-3 text-xs font-medium text-neutral-500 uppercase text-right">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-100">
             {artifacts.map((artifact) => (
-              <tr key={artifact._id} className="hover:bg-neutral-50/50 transition-colors group">
+              <tr
+                key={artifact._id}
+                className="hover:bg-neutral-50/50 transition-colors group"
+              >
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
                       <FileAudio className="w-4 h-4 text-primary" />
                     </div>
                     <div>
@@ -72,13 +94,13 @@ export function MeetingList({ artifacts, isLoading }: MeetingListProps) {
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                    {artifact.projectId ? (
-                        <span className="inline-flex items-center px-2 py-1 rounded bg-neutral-100 text-xs font-medium text-neutral-600">
-                            {artifact.projectId.name}
-                        </span>
-                    ) : (
-                        <span className="text-xs text-neutral-400">-</span>
-                    )}
+                  {artifact.projectId ? (
+                    <span className="inline-flex items-center px-2 py-1 rounded bg-neutral-100 text-xs font-medium text-neutral-600">
+                      {artifact.projectId.name}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-neutral-400">-</span>
+                  )}
                 </td>
                 <td className="px-6 py-4">
                   <StatusBadge status={artifact.transcriptionStatus} />
@@ -122,7 +144,12 @@ function StatusBadge({ status }: { status: string }) {
   const label = labels[status as keyof typeof labels] || status;
 
   return (
-    <span className={cn("inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium", style)}>
+    <span
+      className={cn(
+        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+        style
+      )}
+    >
       {label}
     </span>
   );

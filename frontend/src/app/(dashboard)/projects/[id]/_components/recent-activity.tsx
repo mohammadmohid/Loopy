@@ -1,7 +1,6 @@
 "use client";
 
 import { FileText, Calendar, CheckSquare } from "lucide-react";
-import { mockActivities } from "@/lib/mock-data";
 
 const iconMap = {
   file: FileText,
@@ -23,7 +22,7 @@ export function RecentActivity() {
           return (
             <div key={activity.id} className="flex items-start gap-3">
               <div
-                className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${activity.color}`}
+                className={`w-2 h-2 rounded-full mt-2 shrink-0 ${activity.color}`}
               />
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-neutral-700">

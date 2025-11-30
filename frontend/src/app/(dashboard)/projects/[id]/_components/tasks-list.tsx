@@ -183,19 +183,24 @@ function TaskItem({ task, onClick }: { task: Task; onClick: () => void }) {
       </div>
 
       {/* Assignees Stack */}
-      <div className="flex -space-x-2 overflow-hidden shrink-0">
-        {task.assignees.slice(0, 3).map((u, i) => (
-          <div
-            key={u.id || i}
-            className="w-7 h-7 bg-neutral-200 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600 border-2 border-white"
-            title={u.name}
-          >
-            {u.avatar || "U"}
-          </div>
-        ))}
-        {task.assignees.length > 3 && (
-          <div className="w-7 h-7 bg-neutral-100 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-500 border-2 border-white">
-            +{task.assignees.length - 3}
+      <div className="flex -space-x-1.5 overflow-hidden shrink-0">
+        {task.assignees && task.assignees.length > 0 ? (
+          <>
+            <div
+              className="w-7 h-7 bg-neutral-200 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600 border-2 border-white"
+              title={task.assignees[0].name}
+            >
+              {task.assignees[0].avatar || "U"}
+            </div>
+            {task.assignees.length > 1 && (
+              <div className="w-7 h-7 bg-neutral-900 text-white rounded-full flex items-center justify-center text-[9px] font-medium border-2 border-white">
+                +{task.assignees.length - 1}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="w-7 h-7 bg-neutral-100 rounded-full flex items-center justify-center text-[10px] border-2 border-white">
+            U
           </div>
         )}
       </div>

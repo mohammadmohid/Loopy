@@ -488,8 +488,26 @@ function TaskRow({
         </button>
 
         {/* Assignee Avatar */}
-        <div className="w-7 h-7 rounded-full bg-neutral-200 flex items-center justify-center text-[10px] font-bold border-2 border-white shadow-sm">
-          {task.assignee?.avatar || "UN"}
+        <div className="flex items-center -space-x-1.5 min-w-12 justify-end">
+          {task.assignees && task.assignees.length > 0 ? (
+            <>
+              <div
+                className="w-7 h-7 rounded-full bg-neutral-200 flex items-center justify-center text-[10px] font-bold border-2 border-white shadow-sm"
+                title={task.assignees[0].name}
+              >
+                {task.assignees[0].avatar || "U"}
+              </div>
+              {task.assignees.length > 1 && (
+                <div className="w-7 h-7 rounded-full bg-neutral-800 text-white flex items-center justify-center text-[9px] font-bold border-2 border-white shadow-sm">
+                  +{task.assignees.length - 1}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-[9px] border-2 border-white">
+              UN
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import {
   assignTeamLead,
   deleteProject,
   updateProject,
+  getProjectActivity,
 } from "../controllers/projectController";
 import {
   signUpload,
@@ -32,6 +33,9 @@ router.patch("/:id", protect, authorize("ADMIN"), updateProject);
 router.get("/", protect, getProjects);
 router.delete("/:id", protect, authorize("ADMIN"), deleteProject);
 router.put("/:id/assign-lead", protect, authorize("ADMIN"), assignTeamLead);
+
+// Project Activity
+router.get("/:projectId/activity", protect, getProjectActivity);
 
 // Tasks & Milestones
 router.get("/:projectId/tasks", protect, getProjectTasks);

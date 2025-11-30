@@ -52,7 +52,6 @@ export interface Project {
   owner: User;
   startDate: string;
   endDate: string;
-  color: string;
   members: User[];
   boardColumns: {
     id: string;

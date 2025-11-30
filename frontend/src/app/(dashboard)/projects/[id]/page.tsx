@@ -47,36 +47,17 @@ export default function ProjectDetailPage() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-
-  // Derived Activity Feed (Mock implementation based on dates)
-  const activities = useMemo(() => {
-    const acts: Activity[] = [];
-    tasks.forEach((t) => {
-      acts.push({
-        id: t.id + "_update",
-        type: "task",
-        action: t.status === "done" ? "completed" : "updated",
-        targetName: t.title,
-        targetId: t.id,
-        user: t.assignee?.name || "Unknown",
-        timestamp: t.updatedAt,
-      });
-    });
-    return acts
-      .sort(
-        (a, b) =>
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      )
-      .slice(0, 10);
-  }, [tasks]);
+  const [activities, setActivities] = useState<Activity[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
-      const [projectData, tasksData, milestonesData] = await Promise.all([
-        apiRequest<any>(`/projects?id=${id}`),
-        apiRequest<any[]>(`/projects/${id}/tasks`),
-        apiRequest<any[]>(`/projects/${id}/milestones`),
-      ]);
+      const [projectData, tasksData, milestonesData, activityData] =
+        await Promise.all([
+          apiRequest<any>(`/projects?id=${id}`),
+          apiRequest<any[]>(`/projects/${id}/tasks`),
+          apiRequest<any[]>(`/projects/${id}/milestones`),
+          apiRequest<Activity[]>(`/projects/${id}/activity`),
+        ]);
 
       const currentProjectRaw = Array.isArray(projectData)
         ? projectData.find((p: any) => p._id === id)
@@ -102,7 +83,6 @@ export default function ProjectDetailPage() {
         description: currentProjectRaw.description,
         startDate: currentProjectRaw.startDate,
         endDate: currentProjectRaw.endDate,
-        color: currentProjectRaw.color || "#3B82F6",
         boardColumns:
           currentProjectRaw.boardColumns?.length > 0
             ? currentProjectRaw.boardColumns.map((c: any) => ({
@@ -180,6 +160,7 @@ export default function ProjectDetailPage() {
       setProject(mappedProject);
       setTasks(mappedTasks);
       setMilestones(mappedMilestones);
+      setActivities(activityData);
     } catch (error) {
       console.error("Error loading project:", error);
     } finally {
@@ -352,15 +333,6 @@ export default function ProjectDetailPage() {
 
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ backgroundColor: project.color + "20" }}
-          >
-            <div
-              className="w-5 h-5 rounded-full"
-              style={{ backgroundColor: project.color }}
-            />
-          </div>
           <h1 className="text-2xl font-semibold text-neutral-900">
             {project.name}
           </h1>

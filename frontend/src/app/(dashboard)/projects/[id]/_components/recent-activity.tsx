@@ -1,50 +1,90 @@
 "use client";
 
-import { FileText, Calendar, CheckSquare } from "lucide-react";
+import {
+  FileText,
+  Calendar,
+  CheckSquare,
+  Flag,
+  Activity as ActivityIcon,
+} from "lucide-react";
+import type { Activity } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-const iconMap = {
-  file: FileText,
-  calendar: Calendar,
-  check: CheckSquare,
-  message: FileText,
+const iconMap: Record<string, any> = {
+  task: CheckSquare,
+  milestone: Flag,
+  project: FileText,
+  default: ActivityIcon,
 };
 
-export function RecentActivity() {
+const actionColors: Record<string, string> = {
+  created: "bg-blue-500",
+  updated: "bg-amber-500",
+  completed: "bg-emerald-500",
+  deleted: "bg-red-500",
+};
+
+interface RecentActivityProps {
+  activities: Activity[];
+}
+
+export function RecentActivity({ activities }: RecentActivityProps) {
   return (
-    <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-      <div className="p-4 border-b border-neutral-200">
+    <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden h-full flex flex-col">
+      <div className="p-4 border-b border-neutral-200 shrink-0">
         <h3 className="font-semibold text-neutral-900">Recent Activity</h3>
       </div>
 
-      <div className="p-4 space-y-4">
-        {mockActivities.map((activity) => {
-          const Icon = iconMap[activity.icon];
-          return (
-            <div key={activity.id} className="flex items-start gap-3">
-              <div
-                className={`w-2 h-2 rounded-full mt-2 shrink-0 ${activity.color}`}
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-neutral-700">
-                  {activity.user && (
-                    <span className="font-medium">{activity.user} </span>
-                  )}
-                  {activity.action}
-                  {activity.target && (
-                    <span className="font-medium"> {activity.target}</span>
-                  )}
-                </p>
-                {activity.type === "task" && (
-                  <div className="flex items-center gap-1.5 mt-1 text-xs text-neutral-500">
-                    <CheckSquare className="w-3 h-3" />
-                    <span>{activity.target}</span>
+      <div className="p-4 space-y-4 overflow-y-auto flex-1">
+        {activities.length === 0 ? (
+          <p className="text-sm text-neutral-400 text-center py-4">
+            No recent activity recorded.
+          </p>
+        ) : (
+          activities.map((activity) => {
+            const Icon = iconMap[activity.type] || iconMap.default;
+            const colorClass =
+              actionColors[activity.action] || "bg-neutral-400";
+
+            return (
+              <div key={activity.id} className="flex items-start gap-3 group">
+                <div className="relative mt-1">
+                  <div
+                    className={cn(
+                      "w-2 h-2 rounded-full ring-4 ring-white group-hover:ring-neutral-50 transition-all",
+                      colorClass
+                    )}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-neutral-700 leading-snug">
+                    <span className="font-medium text-neutral-900">
+                      {activity.user}
+                    </span>{" "}
+                    <span className="text-neutral-500">{activity.action}</span>{" "}
+                    <span className="font-medium text-neutral-900">
+                      {activity.targetName}
+                    </span>
+                  </p>
+                  <div className="flex items-center gap-1.5 mt-1 text-xs text-neutral-400">
+                    <Icon className="w-3 h-3" />
+                    <span>
+                      {new Date(activity.timestamp).toLocaleDateString(
+                        undefined,
+                        {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }
+                      )}
+                    </span>
                   </div>
-                )}
-                <p className="text-xs text-neutral-400 mt-1">{activity.time}</p>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );

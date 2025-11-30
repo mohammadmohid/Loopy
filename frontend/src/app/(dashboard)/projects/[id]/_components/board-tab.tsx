@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { Plus, Calendar, X, Check, Trash2, Edit2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Task, TaskStatus } from "@/lib/types";
+import type { Task } from "@/lib/types";
 
 interface BoardColumn {
   id: string;
@@ -322,8 +322,29 @@ export function BoardTab({
                             )}
                           </span>
                         )}
-                        <div className="w-6 h-6 bg-neutral-100 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600 border border-neutral-200">
-                          {task.assignee?.avatar || "U"}
+                        <div className="flex items-center -space-x-1.5">
+                          {task.assignees && task.assignees.length > 0 ? (
+                            <>
+                              <div
+                                className="w-6 h-6 bg-neutral-100 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600 border border-white shadow-sm"
+                                title={task.assignees[0].name}
+                              >
+                                {task.assignees[0].avatar}
+                              </div>
+                              {task.assignees.length > 1 && (
+                                <div
+                                  className="w-6 h-6 bg-neutral-800 text-white rounded-full flex items-center justify-center text-[9px] font-medium border border-white shadow-sm"
+                                  title={`+${task.assignees.length - 1} others`}
+                                >
+                                  +{task.assignees.length - 1}
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="w-6 h-6 bg-neutral-50 rounded-full flex items-center justify-center text-[10px] border border-neutral-200">
+                              U
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

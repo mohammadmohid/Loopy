@@ -2,6 +2,8 @@ import { Response } from "express";
 import mongoose from "mongoose";
 import { AuthRequest } from "../middleware/auth";
 import Project from "../models/Project";
+import Task from "../models/Task";
+import Milestone from "../models/Milestone";
 import Team from "../models/Team";
 
 interface Member {
@@ -214,6 +216,66 @@ export const assignTeamLead = async (req: AuthRequest, res: Response) => {
     await project.save();
 
     res.status(200).json(project);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get recent activity for a project
+// @route   GET /api/projects/:projectId/activity
+export const getProjectActivity = async (req: AuthRequest, res: Response) => {
+  try {
+    const { projectId } = req.params;
+
+    // Fetch latest tasks
+    const tasks = await Task.find({ projectId })
+      .sort({ updatedAt: -1 })
+      .limit(10)
+      .populate("assignees", "profile.firstName profile.lastName")
+      .lean();
+
+    // Fetch latest milestones
+    const milestones = await Milestone.find({ projectId })
+      .sort({ updatedAt: -1 })
+      .limit(10)
+      .lean();
+
+    // Normalize and merge activities
+    const activities = [
+      ...tasks.map((t: any) => ({
+        id: t._id,
+        type: "task",
+        action:
+          t.status === "done"
+            ? "completed"
+            : t.createdAt.getTime() === t.updatedAt.getTime()
+            ? "created"
+            : "updated",
+        targetName: t.title,
+        timestamp: t.updatedAt,
+        user: t.assignees?.[0]
+          ? `${t.assignees[0].profile.firstName} ${t.assignees[0].profile.lastName}`
+          : "Team Member",
+      })),
+      ...milestones.map((m: any) => ({
+        id: m._id,
+        type: "milestone",
+        action:
+          m.createdAt.getTime() === m.updatedAt.getTime()
+            ? "created"
+            : "updated",
+        targetName: m.name,
+        timestamp: m.updatedAt,
+        user: "Project Manager",
+      })),
+    ]
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      )
+      .slice(0, 10);
+
+    res.json(activities);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

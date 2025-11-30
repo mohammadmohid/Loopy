@@ -383,8 +383,23 @@ function TaskRow({ task, onClick, onStatusChange, isOverdue }: TaskRowProps) {
       </button>
 
       {/* Assignee */}
-      <div className="w-7 h-7 bg-neutral-200 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600 ml-2">
-        {task.assignee?.avatar || "MM"}
+      <div className="flex items-center -space-x-1 ml-2">
+        {task.assignees && task.assignees.length > 0 ? (
+          <>
+            <div className="w-7 h-7 bg-neutral-200 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600 border border-white">
+              {task.assignees[0].avatar || "U"}
+            </div>
+            {task.assignees.length > 1 && (
+              <div className="w-7 h-7 bg-neutral-800 text-white rounded-full flex items-center justify-center text-[9px] font-medium border border-white">
+                +{task.assignees.length - 1}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="w-7 h-7 bg-neutral-100 rounded-full flex items-center justify-center text-[10px] border border-white">
+            U
+          </div>
+        )}
       </div>
     </div>
   );

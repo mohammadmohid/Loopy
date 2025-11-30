@@ -36,15 +36,23 @@ export default function LoginForm() {
     setServerError(null);
 
     try {
-      const response = await apiRequest<{ user: any }>("/auth/login", {
-        method: "POST",
-        data: data,
-      });
+      // Backend returns: { success: true, user: { ... } }
+      const response = await apiRequest<{ success: boolean; user: any }>(
+        "/auth/login",
+        {
+          method: "POST",
+          data: data,
+        }
+      );
 
-      login(response.user);
-      router.push("/home");
+      if (response.success && response.user) {
+        login(response.user);
+        router.push("/dashboard/home");
+      } else {
+        throw new Error("Invalid response from server");
+      }
     } catch (err: any) {
-      setServerError(err.message);
+      setServerError(err.message || "Login failed");
     }
   };
 

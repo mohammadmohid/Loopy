@@ -1,6 +1,11 @@
 import express from "express";
 import { protect } from "../middleware/auth";
-import { createProject, getProjects } from "../controllers/projectController";
+import {
+  createProject,
+  getProjects,
+  assignTeamLead,
+  deleteProject,
+} from "../controllers/projectController";
 import {
   signUpload,
   createArtifact,
@@ -13,13 +18,15 @@ const router = express.Router();
 // Projects
 router.post("/", protect, createProject);
 router.get("/", protect, getProjects);
+router.delete("/:id", protect, deleteProject);
+router.put("/:id/assign-lead", protect, assignTeamLead);
 
 // Global Artifacts (Meetings)
-router.get("/artifacts", protect, getArtifacts); // Get all user's artifacts
-router.post("/artifacts/sign", protect, signUpload); // Sign upload (projectId in body)
-router.post("/artifacts", protect, createArtifact); // Create artifact (projectId in body)
+router.get("/artifacts", protect, getArtifacts);
+router.post("/artifacts/sign", protect, signUpload);
+router.post("/artifacts", protect, createArtifact);
 
-// Project-scoped Artifacts (Keep for backward compatibility if needed, or deprecate)
+// Project-scoped Artifacts
 router.post("/:id/artifacts/sign", protect, signUpload);
 router.post("/:id/artifacts", protect, createArtifact);
 

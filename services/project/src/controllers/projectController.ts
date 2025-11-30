@@ -85,7 +85,7 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
     const { id, role } = req.user!;
 
     // Admin sees all projects
-    if (role === "org_admin" || role === "ADMIN") {
+    if (role === "ADMIN") {
       const projects = await Project.find({}).sort({ updatedAt: -1 });
       return res.status(200).json(projects);
     }
@@ -116,6 +116,34 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// @desc    Delete a project
+// @route   DELETE /api/projects/:id
+export const deleteProject = async (req: AuthRequest, res: Response) => {
+  try {
+    const project = await Project.findById(req.params.id);
+
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    // Only Owner or Admin can delete
+    if (
+      project.owner.toString() !== req.user!.id &&
+      req.user!.role !== "ADMIN"
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to delete this project" });
+    }
+
+    await project.deleteOne();
+
+    res.status(200).json({ message: "Project removed" });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Assign Team Lead (Updates Member Role to MANAGER)
 // @route   PUT /api/projects/:id/assign-lead
 export const assignTeamLead = async (req: AuthRequest, res: Response) => {
@@ -130,7 +158,6 @@ export const assignTeamLead = async (req: AuthRequest, res: Response) => {
     // Check if user is owner or admin
     if (
       project.owner.toString() !== req.user!.id &&
-      req.user!.role !== "org_admin" &&
       req.user!.role !== "ADMIN"
     ) {
       return res

@@ -10,7 +10,6 @@ interface Project {
   owner: { name: string; avatar: string };
   dueDate: string;
   isPinned: boolean;
-  color: string;
 }
 
 interface ProjectCardProps {
@@ -44,15 +43,6 @@ export function ProjectCard({
           href={`/projects/${project.id}`}
           className="flex items-center gap-3 flex-1"
         >
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: project.color + "20" }}
-          >
-            <div
-              className="w-4 h-4 rounded-full"
-              style={{ backgroundColor: project.color }}
-            />
-          </div>
           <span className="font-medium text-neutral-900 group-hover:text-primary transition-colors">
             {project.name}
           </span>

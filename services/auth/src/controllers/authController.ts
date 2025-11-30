@@ -60,9 +60,12 @@ export const getMe = async (req: Request & { user?: any }, res: Response) => {
   }
 };
 
+// @desc    Register a new user
+// @route   POST /api/auth/register
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, password, name } = req.body;
+    // 1. Destructure userType from the request body
+    const { email, password, name, userType } = req.body;
 
     // Split name for profile
     const [firstName, ...lastNameParts] = name.split(" ");
@@ -73,11 +76,19 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "User already exists" });
     }
 
+    // 2. Map frontend "userType" to database "globalRole"
+    // Only 'org_admin' gets the ADMIN global role. All others are USER.
+    // You can add 'project_manager' here if you want them to be global admins too.
+    let globalRole = "USER";
+    if (userType === "org_admin") {
+      globalRole = "ADMIN";
+    }
+
     const user = await User.create({
       email,
       password,
       profile: { firstName, lastName },
-      globalRole: "USER",
+      globalRole: globalRole, // 3. Save the determined role
     });
 
     sendTokenResponse(user, 201, res);

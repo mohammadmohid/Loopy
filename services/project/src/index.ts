@@ -40,23 +40,13 @@ const router = express.Router();
 
 // Routes
 // Only Admin and Project Manager can create projects
-router.post(
-  "/",
-  protect,
-  authorize("org_admin", "project_manager"),
-  createProject
-);
+router.post("/", protect, authorize("ADMIN"), createProject);
 
 // All authenticated users can view projects (filtered by controller logic)
 router.get("/", protect, getProjects);
 
 // Assign Team Lead
-router.put(
-  "/:id/assign-lead",
-  protect,
-  authorize("org_admin", "project_manager"),
-  assignTeamLead
-);
+router.put("/:id/assign-lead", protect, authorize("ADMIN"), assignTeamLead);
 
 app.use("/api/projects", router);
 

@@ -53,15 +53,25 @@ export default function RegisterForm({
   const onSubmit = async (data: FormData) => {
     setServerError(null);
     try {
-      const response = await apiRequest<{ user: any }>("/auth/register", {
-        method: "POST",
-        data: { ...data, userType },
-      });
+      // Backend expects: name, email, password
+      const response = await apiRequest<{ success: boolean; user: any }>(
+        "/auth/register",
+        {
+          method: "POST",
+          data: {
+            ...data,
+            // userType isn't handled by backend yet (defaults to USER), but we send it for future proofing
+            userType,
+          },
+        }
+      );
 
-      login(response.user);
-      router.push("/dashboard/home");
+      if (response.success && response.user) {
+        login(response.user);
+        router.push("/dashboard/home");
+      }
     } catch (err: any) {
-      setServerError(err.message);
+      setServerError(err.message || "Registration failed");
     }
   };
 

@@ -1,6 +1,4 @@
-// Shared types for the project management system
-
-export type TaskStatus = string;
+export type TaskStatus = "todo" | "in-progress" | "done" | string;
 export type TaskType = "task" | "bug" | "feature" | "story";
 export type EventType = "task" | "milestone" | "meeting" | "deadline";
 export type Priority = "high" | "medium" | "low";
@@ -15,18 +13,17 @@ export interface User {
   name: string;
   email: string;
   avatar: string;
-  role: UserRole;
+  role: string;
 }
 
 export interface Task {
-  _id: string;
   id: string;
   title: string;
   description?: string;
   status: TaskStatus;
   type: TaskType;
   priority: Priority;
-  assignee?: User;
+  assignees: User[];
   dueDate?: string;
   milestoneId?: string;
   projectId: string;
@@ -41,11 +38,44 @@ export interface Milestone {
   description?: string;
   startDate: string;
   dueDate: string;
-  assignee?: User;
+  assignees: User[];
   team?: string;
   tasks: Task[];
   attachments?: string[];
   projectId: string;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  owner: User;
+  startDate: string;
+  endDate: string;
+  color: string;
+  members: User[];
+  boardColumns: {
+    id: string;
+    label: string;
+    color: string;
+    isLocked?: boolean;
+  }[];
+  stats: {
+    completed: number;
+    created: number;
+    updated: number;
+    dueSoon: number;
+  };
+}
+
+export interface Activity {
+  id: string;
+  type: "task" | "milestone" | "project";
+  action: "created" | "updated" | "deleted" | "completed";
+  targetName: string;
+  targetId: string;
+  user: string;
+  timestamp: string;
 }
 
 export interface CalendarEvent {
@@ -58,34 +88,4 @@ export interface CalendarEvent {
   description?: string;
   assignees?: User[];
   projectId: string;
-}
-
-export interface Project {
-  _id: string;
-  id: string;
-  name: string;
-  description?: string;
-  owner: User;
-  startDate: string;
-  endDate: string;
-  color: string;
-  members: User[];
-  boardColumns: { id: string; label: string; color: string }[]; // Added
-  stats: {
-    completed: number;
-    created: number;
-    updated: number;
-    dueSoon: number;
-  };
-}
-
-export interface Activity {
-  id: string;
-  type: "file" | "meeting" | "task" | "comment";
-  user?: string;
-  action: string;
-  target?: string;
-  time: string;
-  icon: "file" | "calendar" | "check" | "message";
-  color: string;
 }

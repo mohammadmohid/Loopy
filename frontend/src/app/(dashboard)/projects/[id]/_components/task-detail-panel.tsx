@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Upload, ChevronDown, Smile, Send } from "lucide-react";
+import { X, Upload, ChevronDown, Smile, Send, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { Task, TaskStatus } from "@/lib/types";
@@ -208,18 +208,28 @@ export function TaskDetailPanel({
             )}
           </div>
 
-          {/* Assignee */}
+          {/* Assignees */}
           <div>
             <label className="text-sm font-medium text-neutral-500 mb-2 block">
-              Assignee
+              Assignees
             </label>
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-neutral-200 rounded-full flex items-center justify-center text-xs font-medium">
-                {task.assignee?.avatar || "JD"}
-              </div>
-              <span className="text-sm text-neutral-900">
-                {task.assignee?.name || "John Doe"}
-              </span>
+            <div className="flex flex-wrap gap-2">
+              {task.assignees.map((u) => (
+                <div
+                  key={u.id}
+                  className="flex items-center gap-2 bg-neutral-50 px-2 py-1 rounded-lg border border-neutral-100"
+                >
+                  <div className="w-6 h-6 bg-neutral-200 rounded-full flex items-center justify-center text-xs font-medium">
+                    {u.avatar || "U"}
+                  </div>
+                  <span className="text-sm text-neutral-900">{u.name}</span>
+                  {canEdit && (
+                    <button className="flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-neutral-300 text-xs text-neutral-500 hover:text-neutral-700 hover:border-neutral-400">
+                      <Plus className="w-3 h-3" /> Add
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 

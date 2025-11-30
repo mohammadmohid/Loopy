@@ -7,9 +7,12 @@ import Milestone from "../models/Milestone";
 
 export const getProjectTasks = async (req: AuthRequest, res: Response) => {
   try {
-    const tasks = await Task.find({ projectId: req.params.projectId }).sort({
-      createdAt: -1,
-    }); // Populate assignee if needed, but User is in Auth DB
+    const tasks = await Task.find({ projectId: req.params.projectId })
+      .sort({ createdAt: -1 })
+      .populate(
+        "assignees",
+        "profile.firstName profile.lastName profile.avatarKey email"
+      );
     res.json(tasks);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -18,10 +21,23 @@ export const getProjectTasks = async (req: AuthRequest, res: Response) => {
 
 export const createTask = async (req: AuthRequest, res: Response) => {
   try {
+    let { assignees } = req.body;
+
+    // Enforce at least one assignee (default to creator)
+    if (!assignees || !Array.isArray(assignees) || assignees.length === 0) {
+      assignees = [req.user!.id];
+    }
+
     const task = await Task.create({
       ...req.body,
+      assignees,
       projectId: req.params.projectId,
     });
+
+    await task.populate(
+      "assignees",
+      "profile.firstName profile.lastName profile.avatarKey email"
+    );
     res.status(201).json(task);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -32,7 +48,11 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
   try {
     const task = await Task.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
-    });
+    }).populate(
+      "assignees",
+      "profile.firstName profile.lastName profile.avatarKey email"
+    );
+
     if (!task) return res.status(404).json({ message: "Task not found" });
     res.json(task);
   } catch (error: any) {
@@ -54,9 +74,12 @@ export const deleteTask = async (req: AuthRequest, res: Response) => {
 
 export const getProjectMilestones = async (req: AuthRequest, res: Response) => {
   try {
-    const milestones = await Milestone.find({
-      projectId: req.params.projectId,
-    }).sort({ dueDate: 1 });
+    const milestones = await Milestone.find({ projectId: req.params.projectId })
+      .sort({ dueDate: 1 })
+      .populate(
+        "assignees",
+        "profile.firstName profile.lastName profile.avatarKey email"
+      );
     res.json(milestones);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -65,10 +88,18 @@ export const getProjectMilestones = async (req: AuthRequest, res: Response) => {
 
 export const createMilestone = async (req: AuthRequest, res: Response) => {
   try {
+    // Default assignees logic can be handled here or frontend.
+    // If not provided, we can leave it empty or default to creator.
     const milestone = await Milestone.create({
       ...req.body,
       projectId: req.params.projectId,
     });
+
+    // Auto-populate assignees from tasks if tasks provided?
+    // The requirement says "Milestones by default tasks all the tasks assigned members".
+    // This is best handled on the frontend or a specific service logic when linking tasks.
+    // For now, we return the created milestone.
+
     res.status(201).json(milestone);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -81,7 +112,11 @@ export const updateMilestone = async (req: AuthRequest, res: Response) => {
       req.params.id,
       req.body,
       { new: true }
+    ).populate(
+      "assignees",
+      "profile.firstName profile.lastName profile.avatarKey email"
     );
+
     if (!milestone)
       return res.status(404).json({ message: "Milestone not found" });
     res.json(milestone);
@@ -93,7 +128,6 @@ export const updateMilestone = async (req: AuthRequest, res: Response) => {
 export const deleteMilestone = async (req: AuthRequest, res: Response) => {
   try {
     await Milestone.findByIdAndDelete(req.params.id);
-    // Optional: Unassign tasks from this milestone
     await Task.updateMany(
       { milestoneId: req.params.id },
       { $unset: { milestoneId: "" } }

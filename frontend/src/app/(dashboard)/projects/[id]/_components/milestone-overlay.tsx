@@ -143,15 +143,24 @@ export function MilestoneOverlay({
           {/* Assignee */}
           <div>
             <label className="text-sm font-medium text-neutral-500 mb-1 block">
-              Assignee
+              Assignees
             </label>
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-neutral-200 rounded-full flex items-center justify-center text-xs font-medium">
-                {milestone.assignee?.avatar || "MM"}
-              </div>
-              <span className="text-sm text-neutral-900">
-                {milestone.assignee?.name || "John Doe"}
-              </span>
+            <div className="flex flex-wrap gap-2">
+              {milestone.assignees && milestone.assignees.length > 0 ? (
+                milestone.assignees.map((u) => (
+                  <div
+                    key={u.id}
+                    className="flex items-center gap-2 bg-neutral-50 px-2 py-1 rounded-lg border border-neutral-100"
+                  >
+                    <div className="w-6 h-6 bg-neutral-200 rounded-full flex items-center justify-center text-xs font-medium">
+                      {u.avatar}
+                    </div>
+                    <span className="text-sm text-neutral-900">{u.name}</span>
+                  </div>
+                ))
+              ) : (
+                <span className="text-sm text-neutral-400">No assignees</span>
+              )}
             </div>
           </div>
 

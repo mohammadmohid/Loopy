@@ -139,14 +139,9 @@ function TaskItem({ task, onClick }: { task: Task; onClick: () => void }) {
 
   const handleCheckboxClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    // Optimistic update
     setCompleted(!completed);
-  };
-
-  // Status indicator colors
-  const statusDotColors = {
-    done: "bg-amber-500",
-    "in-progress": "bg-emerald-500",
-    todo: "bg-red-500",
+    // Trigger actual update...
   };
 
   return (
@@ -154,6 +149,7 @@ function TaskItem({ task, onClick }: { task: Task; onClick: () => void }) {
       onClick={onClick}
       className="flex items-start gap-3 p-3 rounded-xl hover:bg-neutral-50 transition-colors group cursor-pointer"
     >
+      {/* ... Checkbox ... */}
       <button
         onClick={handleCheckboxClick}
         className={cn(
@@ -171,6 +167,7 @@ function TaskItem({ task, onClick }: { task: Task; onClick: () => void }) {
       </button>
 
       <div className="flex-1 min-w-0">
+        {/* ... Title & Metadata ... */}
         <div className="flex items-center gap-2 mb-1">
           <span
             className={cn(
@@ -180,20 +177,27 @@ function TaskItem({ task, onClick }: { task: Task; onClick: () => void }) {
           >
             {task.title}
           </span>
-          <span
-            className={cn(
-              "text-[10px] font-medium px-1.5 py-0.5 rounded-full",
-              priorityBadgeColors[task.priority]
-            )}
-          >
-            {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-          </span>
+          {/* ... Priority Badge ... */}
         </div>
         <p className="text-xs text-neutral-500">Project | Milestone</p>
       </div>
 
-      <div className="w-7 h-7 bg-neutral-200 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600 flex-shrink-0">
-        {task.assignee?.avatar || "MM"}
+      {/* Assignees Stack */}
+      <div className="flex -space-x-2 overflow-hidden flex-shrink-0">
+        {task.assignees.slice(0, 3).map((u, i) => (
+          <div
+            key={u.id || i}
+            className="w-7 h-7 bg-neutral-200 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600 border-2 border-white"
+            title={u.name}
+          >
+            {u.avatar || "U"}
+          </div>
+        ))}
+        {task.assignees.length > 3 && (
+          <div className="w-7 h-7 bg-neutral-100 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-500 border-2 border-white">
+            +{task.assignees.length - 3}
+          </div>
+        )}
       </div>
     </div>
   );

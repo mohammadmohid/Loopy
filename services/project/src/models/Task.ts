@@ -8,7 +8,7 @@ export interface ITask extends Document {
   priority: "low" | "medium" | "high";
   projectId: mongoose.Types.ObjectId;
   milestoneId?: mongoose.Types.ObjectId;
-  assignee?: mongoose.Types.ObjectId;
+  assignees?: mongoose.Types.ObjectId[];
   dueDate?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -34,7 +34,7 @@ const TaskSchema: Schema = new Schema(
     },
     projectId: { type: Schema.Types.ObjectId, ref: "Project", required: true },
     milestoneId: { type: Schema.Types.ObjectId, ref: "Milestone" },
-    assignee: { type: Schema.Types.ObjectId, ref: "User" },
+    assignees: [{ type: Schema.Types.ObjectId, ref: "User" }],
     dueDate: { type: Date },
   },
   { timestamps: true }

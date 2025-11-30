@@ -10,6 +10,7 @@ import { TimelineTab } from "./_components/timeline-tab";
 import { BoardTab } from "./_components/board-tab";
 import { TaskDetailPanel } from "./_components/task-detail-panel";
 import { Users, MoreVertical, Folder } from "lucide-react";
+import { UploadDialog } from "@/components/upload-dialog";
 import { cn } from "@/lib/utils";
 import {
   mockProject,

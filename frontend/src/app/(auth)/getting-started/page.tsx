@@ -1,6 +1,6 @@
 "use client";
 
-import RegisterForm from "./RegisterForm";
+import RegisterForm from "./_components/RegisterForm";
 import { Button } from "@/components/ui/button";
 import { Building, ChevronLeft, Users } from "lucide-react";
 import { Suspense, useState } from "react";

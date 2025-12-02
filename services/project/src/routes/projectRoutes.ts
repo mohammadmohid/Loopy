@@ -13,6 +13,7 @@ import {
   createArtifact,
   handleTranscriptionWebhook,
   getArtifacts,
+  getArtifactById,
 } from "../controllers/artifactController";
 import {
   getProjectTasks,
@@ -50,6 +51,7 @@ router.delete("/milestones/:id", protect, deleteMilestone);
 
 // Global Artifacts
 router.get("/artifacts", protect, getArtifacts);
+router.get("/artifacts/:id", protect, getArtifactById);
 router.post("/artifacts/sign", protect, signUpload);
 router.post("/artifacts", protect, createArtifact);
 

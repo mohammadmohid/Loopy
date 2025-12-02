@@ -90,11 +90,11 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
   try {
     const { id, role } = req.user!;
 
-    // // Admin sees all projects
-    // if (role === "ADMIN") {
-    //   const projects = await Project.find({}).sort({ updatedAt: -1 });
-    //   return res.status(200).json(projects);
-    // }
+    // Admin sees all projects
+    if (role === "ADMIN") {
+      const projects = await Project.find({}).sort({ updatedAt: -1 });
+      return res.status(200).json(projects);
+    }
 
     // 1. Find all teams the user belongs to
     const userTeams = await Team.find({ members: id }).select("_id");
@@ -182,23 +182,54 @@ export const updateProject = async (req: AuthRequest, res: Response) => {
     const project = await Project.findById(req.params.id);
     if (!project) return res.status(404).json({ message: "Project not found" });
 
-    // Check permissions (Owner/Admin/Manager)
-    // For simplicity allowing update if member exists for now, enhance per RBAC needs
+    // Auth Check: Only Owner or Admin can manage sensitive fields
+    const isOwner = project.owner.toString() === req.user!.id;
+    const isAdmin = req.user!.role === "ADMIN";
+
+    // Regular members can only update board columns (e.g. moving tasks)
     const isMember = project.members.some(
       (m) => m.user.toString() === req.user!.id
     );
-    const isOwner = project.owner.toString() === req.user!.id;
-    const isAdmin = req.user!.role === "ADMIN";
 
     if (!isMember && !isOwner && !isAdmin) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    // Update allowed fields
+    // 1. Update Board Columns (Allowed for all members)
     if (req.body.boardColumns) project.boardColumns = req.body.boardColumns;
-    if (req.body.name) project.name = req.body.name;
+
+    // 2. Update Details (Owner/Admin Only)
+    if (isOwner || isAdmin) {
+      if (req.body.name) project.name = req.body.name;
+      if (req.body.description) project.description = req.body.description;
+
+      // Member Management Logic
+      if (req.body.members && Array.isArray(req.body.members)) {
+        // Transform input to match Schema { user: ObjectId, role: String }
+        const newMembers = req.body.members.map((m: any) => ({
+          user: new mongoose.Types.ObjectId(m.user || m.id),
+          role: m.role || "VIEWER",
+        }));
+
+        // Force Owner to remain as MANAGER/Owner in the list
+        const ownerExists = newMembers.find(
+          (m: any) => m.user.toString() === project.owner.toString()
+        );
+        if (!ownerExists) {
+          newMembers.push({ user: project.owner, role: "MANAGER" });
+        }
+
+        project.members = newMembers;
+      }
+    }
 
     await project.save();
+
+    // Return populated data for frontend UI
+    await project.populate(
+      "members.user",
+      "profile.firstName profile.lastName email"
+    );
     res.json(project);
   } catch (error: any) {
     res.status(500).json({ message: error.message });

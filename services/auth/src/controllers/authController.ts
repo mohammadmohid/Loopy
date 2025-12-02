@@ -61,7 +61,7 @@ const sendTokenResponse = async (
 };
 
 // @desc    Get current user profile
-// @route   GET /api/auth/me
+// @route   GET /api/auth/users/:id
 export const findUserById = async (
   req: Request & { id?: string },
   res: Response
@@ -179,5 +179,48 @@ export const logout = async (req: Request & { user?: any }, res: Response) => {
     res.status(200).json({ message: "Logged out successfully" });
   } catch (error) {
     res.status(500).json({ message: "Logout failed" });
+  }
+};
+
+// @desc    Update current user profile
+// @route   PUT /api/auth/me
+export const updateProfile = async (
+  req: Request & { user?: any },
+  res: Response
+) => {
+  try {
+    const { firstName, lastName, email } = req.body;
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Update fields if provided
+    if (firstName) user.profile.firstName = firstName;
+    if (lastName) user.profile.lastName = lastName;
+    if (email && email !== user.email) {
+      const exists = await User.findOne({ email });
+      if (exists)
+        return res.status(400).json({ message: "Email already taken" });
+      user.email = email;
+    }
+
+    await user.save();
+
+    // Re-generate avatar URL
+    const avatarUrl = await getAvatarUrl(user.profile.avatarKey);
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        profile: { ...user.profile, avatarUrl },
+        globalRole: user.globalRole,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error });
   }
 };

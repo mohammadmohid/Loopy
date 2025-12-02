@@ -15,11 +15,19 @@ app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cookieParser());
 
-// const allowedOrigins = ["http://localhost:3000", "https://loopy-mu.vercel.app"];
+const allowedOrigins = ["http://localhost:3000", "https://loopy-mu.vercel.app"];
 
 app.use(
   cors({
-    origin: true,
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) === -1) {
+        const msg =
+          "The CORS policy for this site does not allow access from the specified Origin.";
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
     credentials: true,
   })
 );

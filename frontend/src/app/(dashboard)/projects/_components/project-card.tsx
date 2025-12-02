@@ -8,7 +8,7 @@ import Image from "next/image";
 interface Project {
   id: string;
   name: string;
-  owner: { name: string; avatarUrl: string };
+  owner: { name: string; avatar: string };
   dueDate: string;
   isPinned: boolean;
 }
@@ -97,9 +97,9 @@ export function ProjectCard({
         <p className="text-xs text-neutral-500 mb-1">Owner</p>
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 bg-neutral-200 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600">
-            {project.owner.avatarUrl && (
+            {project.owner.avatar && (
               <Image
-                src={project.owner.avatarUrl}
+                src={project.owner.avatar}
                 alt={`${project.owner.name}'s avatar`}
                 width={24}
                 height={24}

@@ -8,10 +8,13 @@ interface UserProfile {
   firstName: string;
   lastName: string;
   avatarKey?: string;
+  avatarUrl?: string;
 }
 
 interface User {
   id: string;
+  firstName: string;
+  lastName: string;
   email: string;
   profile: UserProfile;
   globalRole: "ADMIN" | "USER";
@@ -37,11 +40,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        // This request will send the HttpOnly cookie automatically
         const { user } = await apiRequest<{ user: User }>("/auth/me");
         setUser(user);
       } catch (error) {
         console.log("No active session found");
+        console.log(error);
         setUser(null);
       } finally {
         setIsLoading(false);

@@ -6,8 +6,7 @@ import {
   Search,
   Menu,
   LogOut,
-  User as UserIcon,
-  Plus,
+  User,
   Video,
   ChevronDown,
 } from "lucide-react";
@@ -116,11 +115,14 @@ export function Header({
             onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
             className="flex items-center gap-2 p-1 hover:bg-neutral-100 rounded-full transition-all"
           >
-            {user?.profile?.avatarKey ? (
-              // In real app, construct full URL using R2 Public domain
+            {user?.profile?.avatarUrl ? (
               <div className="w-8 h-8 rounded-full overflow-hidden border border-neutral-200">
-                {/* Placeholder for now until avatar URL logic is fully wired */}
-                <div className="w-full h-full bg-neutral-200" />
+                <Image
+                  src={user.profile.avatarUrl}
+                  alt="Profile"
+                  fill
+                  className="object-cover rounded-full hover:outline-neutral-200 outline-2"
+                />
               </div>
             ) : (
               <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-medium">

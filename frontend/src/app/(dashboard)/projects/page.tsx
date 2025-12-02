@@ -14,7 +14,7 @@ interface Project {
   description?: string;
   owner: {
     name: string;
-    avatar: string;
+    avatarUrl: string;
   };
   dueDate: string;
   isPinned: boolean;
@@ -42,11 +42,7 @@ export default function ProjectsPage() {
           name: p.owner?.profile
             ? `${p.owner.profile.firstName} ${p.owner.profile.lastName}`
             : "Unknown",
-          avatar: p.owner?.profile
-            ? (
-                p.owner.profile.firstName[0] + p.owner.profile.lastName[0]
-              ).toUpperCase()
-            : "NA",
+          avatarUrl: p.owner?.profile.avatarUrl,
         },
         // Format date or provide default
         dueDate: p.endDate

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { X, Upload, ChevronDown, Smile, Send, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import type { Task, TaskStatus } from "@/lib/types";
+import type { Task, TaskStatus, Priority } from "@/lib/types";
 
 interface TaskDetailPanelProps {
   task: Task | null;
@@ -24,33 +24,38 @@ const statusOptions: {
 }[] = [
   {
     value: "todo",
-    label: "TO DO",
+    label: "To Do",
     bg: "bg-neutral-200",
     text: "text-neutral-700",
   },
   {
     value: "in-progress",
-    label: "IN PROGRESS",
+    label: "In Progress",
     bg: "bg-blue-500",
     text: "text-white",
   },
-  { value: "done", label: "DONE", bg: "bg-emerald-500", text: "text-white" },
+  { value: "done", label: "Done", bg: "bg-emerald-500", text: "text-white" },
 ];
 
-const mockComments = [
+const priorityOptions: {
+  value: Priority;
+  label: string;
+  bg: string;
+  text: string;
+}[] = [
   {
-    id: 1,
-    user: "Sarah Wilson",
-    avatar: "SW",
-    text: "A comment",
-    time: "1 day ago",
+    value: "low",
+    label: "Low",
+    bg: "bg-emerald-100",
+    text: "text-emerald-700",
   },
   {
-    id: 2,
-    user: "Automated",
-    text: "Sarah Wilson created this task",
-    time: "3 days ago",
+    value: "medium",
+    label: "Medium",
+    bg: "bg-amber-100",
+    text: "text-amber-700",
   },
+  { value: "high", label: "High", bg: "bg-red-100", text: "text-red-700" },
 ];
 
 export function TaskDetailPanel({
@@ -62,10 +67,8 @@ export function TaskDetailPanel({
   canEdit,
   canDelete,
 }: TaskDetailPanelProps) {
-  const [activeTab, setActiveTab] = useState<"All" | "Comments" | "History">(
-    "All"
-  );
   const [isStatusOpen, setIsStatusOpen] = useState(false);
+  const [isPriorityOpen, setIsPriorityOpen] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [editedTitle, setEditedTitle] = useState("");
   const [editedDescription, setEditedDescription] = useState("");
@@ -73,10 +76,18 @@ export function TaskDetailPanel({
   if (!isOpen || !task) return null;
 
   const currentStatus = statusOptions.find((s) => s.value === task.status);
+  const currentPriority = priorityOptions.find(
+    (s) => s.value === task.priority
+  );
 
   const handleStatusChange = (status: TaskStatus) => {
     onUpdate({ ...task, status });
     setIsStatusOpen(false);
+  };
+
+  const handlePriorityChange = (priority: Priority) => {
+    onUpdate({ ...task, priority });
+    setIsPriorityOpen(false);
   };
 
   const formatDate = (dateStr?: string) => {
@@ -130,7 +141,7 @@ export function TaskDetailPanel({
                 onClick={() => canEdit && setIsStatusOpen(!isStatusOpen)}
                 disabled={!canEdit}
                 className={cn(
-                  "px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1",
+                  "px-3 py-1.5 rounded text-sm font-medium flex items-center gap-1",
                   currentStatus?.bg,
                   currentStatus?.text,
                   !canEdit && "opacity-75 cursor-not-allowed"
@@ -175,6 +186,61 @@ export function TaskDetailPanel({
             </div>
           </div>
 
+          {/* Priority */}
+          <div>
+            <label className="text-sm font-medium text-neutral-500 mb-2 block">
+              Priority
+            </label>
+            <div className="relative">
+              <button
+                onClick={() => canEdit && setIsPriorityOpen(!isPriorityOpen)}
+                disabled={!canEdit}
+                className={cn(
+                  "px-3 py-1.5 rounded text-sm font-medium flex items-center gap-1",
+                  currentPriority?.bg,
+                  currentPriority?.text,
+                  !canEdit && "opacity-75 cursor-not-allowed"
+                )}
+              >
+                {currentPriority?.label}
+                {canEdit && <ChevronDown className="w-3 h-3" />}
+              </button>
+
+              {isPriorityOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setIsPriorityOpen(false)}
+                  />
+                  <div className="absolute left-0 top-full mt-1 w-36 bg-white border border-neutral-200 rounded-lg shadow-lg py-1 z-20">
+                    {priorityOptions.map((priority) => (
+                      <button
+                        key={priority.value}
+                        onClick={() => handlePriorityChange(priority.value)}
+                        className={cn(
+                          "w-full text-left px-3 py-2 text-xs font-medium transition-colors",
+                          task.priority === priority.value
+                            ? "bg-neutral-100"
+                            : "hover:bg-neutral-50"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "px-2 py-0.5 rounded",
+                            priority.bg,
+                            priority.text
+                          )}
+                        >
+                          {priority.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
           {/* Description */}
           <div>
             <label className="text-sm font-medium text-neutral-500 mb-2 block">
@@ -193,19 +259,6 @@ export function TaskDetailPanel({
               rows={3}
               className="w-full px-4 py-2.5 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none disabled:opacity-75 disabled:cursor-not-allowed"
             />
-          </div>
-
-          {/* Attachments */}
-          <div>
-            <label className="text-sm font-medium text-neutral-500 mb-2 block">
-              Attachments
-            </label>
-            {canEdit && (
-              <button className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-700 transition-colors">
-                <Upload className="w-4 h-4" />
-                Click to upload
-              </button>
-            )}
           </div>
 
           {/* Assignees */}
@@ -241,74 +294,6 @@ export function TaskDetailPanel({
             <p className="text-sm text-neutral-900">
               {formatDate(task.dueDate)}
             </p>
-          </div>
-
-          {/* Team */}
-          <div>
-            <label className="text-sm font-medium text-neutral-500 mb-2 block">
-              Team
-            </label>
-            <p className="text-sm text-neutral-500">Add a team</p>
-          </div>
-
-          {/* Dependencies */}
-          <div>
-            <label className="text-sm font-medium text-neutral-500 mb-2 block">
-              Dependencies
-            </label>
-            <button className="flex items-center gap-1.5 px-3 py-2 border border-neutral-200 rounded-xl text-sm text-neutral-700 hover:bg-neutral-50 transition-colors">
-              None
-              <ChevronDown className="w-4 h-4 text-neutral-400" />
-            </button>
-          </div>
-
-          {/* Activity */}
-          <div>
-            <div className="flex items-center gap-1 mb-4">
-              {(["All", "Comments", "History"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-medium rounded-lg transition-colors",
-                    activeTab === tab
-                      ? "bg-neutral-900 text-white"
-                      : "text-neutral-600 hover:bg-neutral-100"
-                  )}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-4">
-              {mockComments.map((comment) => (
-                <div key={comment.id} className="flex items-start gap-3">
-                  {comment.avatar ? (
-                    <div className="w-8 h-8 bg-neutral-200 rounded-full flex items-center justify-center text-xs font-medium shrink-0">
-                      {comment.avatar}
-                    </div>
-                  ) : (
-                    <div className="w-8 h-8 bg-neutral-100 rounded-full flex items-center justify-center shrink-0">
-                      <div className="w-2 h-2 rounded-full bg-neutral-400" />
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-neutral-900">
-                        {comment.user}
-                      </span>
-                      <span className="text-xs text-neutral-400">
-                        {comment.time}
-                      </span>
-                    </div>
-                    <p className="text-sm text-neutral-600 mt-1">
-                      {comment.text}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* Delete Button */}

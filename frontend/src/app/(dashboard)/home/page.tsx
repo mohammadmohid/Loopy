@@ -27,7 +27,7 @@ export default function HomePage() {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-neutral-900 mb-2">
-        Welcome back, {user.name || user.email}!
+        Welcome back, {user.firstName + " " + user.lastName || user.email}!
       </h1>
       <p className="text-neutral-500">
         Here&apos;s what&apos;s happening with your projects today.

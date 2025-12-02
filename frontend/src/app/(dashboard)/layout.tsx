@@ -7,12 +7,15 @@ import { tinykeys } from "tinykeys";
 import { Sidebar } from "./_components/sidebar";
 import { Header } from "./_components/header";
 import { SearchDialog } from "./_components/search-dialog";
+import { useAuth } from "@/lib/auth-provider";
+import { Loader2 } from "lucide-react";
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { isLoading, user } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -40,6 +43,14 @@ export default function DashboardLayout({
       unsubscribe();
     };
   }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-neutral-400" />
+      </div>
+    );
+  }
 
   return (
     <Suspense fallback={<div>Loading...</div>}>

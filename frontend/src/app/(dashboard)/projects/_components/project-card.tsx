@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { Clock, MoreVertical, Pin, Trash2, Edit } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 
 interface Project {
   id: string;
   name: string;
-  owner: { name: string; avatar: string };
+  owner: { name: string; avatarUrl: string };
   dueDate: string;
   isPinned: boolean;
 }
@@ -96,7 +97,15 @@ export function ProjectCard({
         <p className="text-xs text-neutral-500 mb-1">Owner</p>
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 bg-neutral-200 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600">
-            {project.owner.avatar}
+            {project.owner.avatarUrl && (
+              <Image
+                src={project.owner.avatarUrl}
+                alt={`${project.owner.name}'s avatar`}
+                width={24}
+                height={24}
+                className="rounded-full"
+              />
+            )}
           </div>
           <span className="text-sm text-neutral-700">{project.owner.name}</span>
         </div>

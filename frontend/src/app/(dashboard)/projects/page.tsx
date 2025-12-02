@@ -14,7 +14,7 @@ interface Project {
   description?: string;
   owner: {
     name: string;
-    avatarUrl: string;
+    avatar: string;
   };
   dueDate: string;
   isPinned: boolean;
@@ -29,32 +29,38 @@ export default function ProjectsPage() {
   const fetchProjects = async () => {
     try {
       setIsLoading(true);
-      // Fetch raw data from backend
       const data = await apiRequest<any[]>("/projects");
 
-      // Map backend data to the strict Project interface
-      const mappedProjects: Project[] = data.map((p) => ({
-        _id: p._id,
-        id: p._id, // Explicitly map _id to id
-        name: p.name,
-        description: p.description,
-        owner: {
-          name: p.owner?.profile
-            ? `${p.owner.profile.firstName} ${p.owner.profile.lastName}`
-            : "Unknown",
-          avatarUrl: p.owner?.profile.avatarUrl,
-        },
-        // Format date or provide default
-        dueDate: p.endDate
-          ? new Date(p.endDate).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })
-          : "No Date",
-        color: p.color || "#3B82F6", // Provide fallback color
-        isPinned: false, // Default local state
-      }));
+      const mappedProjects: Project[] = data.map((p) => {
+        // SAFETY: Handle missing owner or missing profile
+        // If owner is populated it's an object, if not it's an ID string (or null)
+        const ownerObj =
+          typeof p.owner === "object" && p.owner !== null ? p.owner : null;
+        const profile = ownerObj?.profile;
+
+        return {
+          _id: p._id,
+          id: p._id,
+          name: p.name,
+          description: p.description,
+          owner: {
+            name: profile
+              ? `${profile.firstName} ${profile.lastName}`
+              : "Unknown User",
+            avatar: profile
+              ? (profile.firstName[0] + profile.lastName[0]).toUpperCase()
+              : "NA",
+          },
+          dueDate: p.endDate
+            ? new Date(p.endDate).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })
+            : "No Date",
+          isPinned: false,
+        };
+      });
 
       setProjects(mappedProjects);
     } catch (error) {

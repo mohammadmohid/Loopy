@@ -89,49 +89,53 @@ export const createProject = async (req: AuthRequest, res: Response) => {
 export const getProjects = async (req: AuthRequest, res: Response) => {
   try {
     const { id, role } = req.user!;
+    let query = {};
 
-    // Admin sees all projects
-    if (role === "ADMIN") {
-      const projects = await Project.find({}).sort({ updatedAt: -1 });
-      return res.status(200).json(projects);
+    // RBAC Logic:
+    // If NOT Admin, filter by ownership/membership/teams.
+    // If Admin, leave query as {} to find ALL projects.
+    if (role !== "ADMIN") {
+      // 1. Find all teams the user belongs to
+      const userTeams = await Team.find({ members: id }).select("_id");
+      const userTeamIds = userTeams.map((t) => t._id);
+
+      // 2. Build Query
+      query = {
+        $or: [
+          { owner: id },
+          { "members.user": id },
+          { "assignedTeams.team": { $in: userTeamIds } },
+        ],
+      };
     }
 
-    // 1. Find all teams the user belongs to
-    const userTeams = await Team.find({ members: id }).select("_id");
-    const userTeamIds = userTeams.map((t) => t._id);
-
-    // 2. Complex RBAC Query:
-    // - Created by user OR
-    // - Directly assigned to user OR
-    // - Assigned to one of user's teams
-    const query = {
-      $or: [
-        { owner: id },
-        { "members.user": id },
-        { "assignedTeams.team": { $in: userTeamIds } },
-      ],
-    };
-
+    // 3. Fetch & Populate
+    // Vital: We MUST populate owner, otherwise frontend receives an ID string and crashes accessing .profile
     const projects = await Project.find(query)
-      .populate("owner", "profile.firstName profile.lastName")
+      .populate("owner", "profile.firstName profile.lastName profile.avatarKey")
       .sort({ updatedAt: -1 })
       .lean();
 
+    // 4. Sign Avatars (Safely)
     const projectsWithAvatars = await Promise.all(
       projects.map(async (project: any) => {
-        if (project.owner?.profile?.avatarKey) {
+        // Safe check chain: Ensure owner AND profile exist before accessing avatarKey
+        if (
+          project.owner &&
+          project.owner.profile &&
+          project.owner.profile.avatarKey
+        ) {
           try {
             const r2 = getR2Client();
             const command = new GetObjectCommand({
               Bucket: process.env.R2_BUCKET_NAME,
               Key: project.owner.profile.avatarKey,
             });
-            // Generate a temporary URL valid for 24 hours
             const avatarUrl = await getSignedUrl(r2, command, {
               expiresIn: 86400,
             });
 
-            // Inject the URL into the profile object
+            // Safe assignment
             project.owner.profile.avatarUrl = avatarUrl;
           } catch (error) {
             console.error("Failed to sign avatar for project", project._id);

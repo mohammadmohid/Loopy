@@ -39,11 +39,13 @@ const sendTokenResponse = async (
   const token = generateToken(user._id.toString(), user.globalRole);
   const avatarUrl = await getAvatarUrl(user.profile.avatarKey);
 
+  const isLocal = process.env.NODE_ENV !== "production";
+
   const options = {
     expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 1 day
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production", // Only send over HTTPS in production
-    sameSite: "lax" as const,
+    secure: !isLocal,
+    sameSite: (isLocal ? "lax" : "none") as "none" | "lax",
   };
 
   res
@@ -171,9 +173,13 @@ export const logout = async (req: Request & { user?: any }, res: Response) => {
       await TokenBlocklist.create({ jti });
     }
 
+    const isLocal = process.env.NODE_ENV !== "production";
+
     res.cookie("token", "none", {
       expires: new Date(Date.now() + 10 * 1000),
       httpOnly: true,
+      secure: !isLocal,
+      sameSite: (isLocal ? "lax" : "none") as "none" | "lax",
     });
 
     res.status(200).json({ message: "Logged out successfully" });

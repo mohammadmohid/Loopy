@@ -10,6 +10,7 @@ const app = express();
 const PORT = process.env.PORT || 8000;
 
 app.use(helmet());
+app.set("trust proxy", 1);
 
 const allowedOrigins = ["http://localhost:3000", "https://loopy-mu.vercel.app"];
 

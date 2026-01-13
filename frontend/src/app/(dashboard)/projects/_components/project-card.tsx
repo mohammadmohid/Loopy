@@ -24,6 +24,7 @@ export function ProjectCard({
   onTogglePin,
   onDelete,
 }: ProjectCardProps) {
+  const looksLikeUrl = (s: string) => /^https?:\/\//.test(s) || s.startsWith("/");
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -98,13 +99,17 @@ export function ProjectCard({
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 bg-neutral-200 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600">
             {project.owner.avatar && (
-              <Image
-                src={project.owner.avatar}
-                alt={`${project.owner.name}'s avatar`}
-                width={24}
-                height={24}
-                className="rounded-full"
-              />
+              looksLikeUrl(project.owner.avatar) ? (
+                <Image
+                  src={project.owner.avatar}
+                  alt={`${project.owner.name}'s avatar`}
+                  width={24}
+                  height={24}
+                  className="rounded-full"
+                />
+              ) : (
+                <span className="select-none">{project.owner.avatar}</span>
+              )
             )}
           </div>
           <span className="text-sm text-neutral-700">{project.owner.name}</span>

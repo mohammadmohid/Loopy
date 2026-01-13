@@ -24,10 +24,14 @@ export default function HomePage() {
 
   if (!user) return null;
 
+ const displayName =
+    (user.profile?.firstName || user.profile?.lastName)
+      ? [user.profile?.firstName, user.profile?.lastName].filter(Boolean).join(" ")
+      : user.email || "User";
   return (
     <div>
       <h1 className="text-2xl font-semibold text-neutral-900 mb-2">
-        Welcome back, {user.firstName + " " + user.lastName || user.email}!
+        Welcome back, {displayName}!
       </h1>
       <p className="text-neutral-500">
         Here&apos;s what&apos;s happening with your projects today.

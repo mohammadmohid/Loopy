@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { UploadCloud, Search } from "lucide-react";
+import { UploadCloud, Search, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UploadDialog } from "@/components/upload-dialog";
 import { MeetingList, type Artifact } from "./_components/meeting-list";
+import { HostMeetingDialog } from "./_components/host-meeting-dialog";
 import { apiRequest } from "@/lib/api";
 
 export default function MeetingsPage() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isHostMeetingOpen, setIsHostMeetingOpen] = useState(false);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -43,13 +45,27 @@ export default function MeetingsPage() {
             Manage your recordings and transcriptions
           </p>
         </div>
-        <Button
-          onClick={() => setIsUploadOpen(true)}
-          className="gap-2 bg-primary shadow-sm"
-        >
-          <UploadCloud className="w-4 h-4" />
-          Upload Audio
-        </Button>
+        
+        <div className="flex items-center gap-3">
+          {/* New Host Meeting Button */}
+          <Button
+            onClick={() => setIsHostMeetingOpen(true)}
+            variant="outline"
+            className="gap-2"
+          >
+            <Video className="w-4 h-4" />
+            Host Meeting
+          </Button>
+
+          {/* Existing Upload Button */}
+          <Button
+            onClick={() => setIsUploadOpen(true)}
+            className="gap-2 bg-primary shadow-sm"
+          >
+            <UploadCloud className="w-4 h-4" />
+            Upload Audio
+          </Button>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -74,6 +90,12 @@ export default function MeetingsPage() {
         onUploadComplete={() => {
           fetchArtifacts(); // Refresh list after upload
         }}
+      />
+
+      {/* Host Meeting Dialog */}
+      <HostMeetingDialog
+        isOpen={isHostMeetingOpen}
+        onClose={() => setIsHostMeetingOpen(false)}
       />
     </div>
   );

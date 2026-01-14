@@ -188,6 +188,35 @@ export const logout = async (req: Request & { user?: any }, res: Response) => {
   }
 };
 
+// @desc    Get all users (for search/selection)
+// @route   GET /api/auth/users
+export const getUsers = async (req: Request, res: Response) => {
+  try {
+    // Return only necessary fields to protect privacy
+    const users = await User.find({})
+      .select("email profile.firstName profile.lastName profile.avatarKey")
+      .lean();
+
+    const usersWithAvatar = await Promise.all(
+      users.map(async (user: any) => {
+        // Reuse your existing getAvatarUrl logic here if possible
+        // For now, we return the structure
+        return {
+          id: user._id,
+          email: user.email,
+          firstName: user.profile?.firstName,
+          lastName: user.profile?.lastName,
+          // avatarUrl: ... (add if you have the helper imported)
+        };
+      })
+    );
+
+    res.json(usersWithAvatar);
+  } catch (error) {
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
 // @desc    Update current user profile
 // @route   PUT /api/auth/me
 export const updateProfile = async (

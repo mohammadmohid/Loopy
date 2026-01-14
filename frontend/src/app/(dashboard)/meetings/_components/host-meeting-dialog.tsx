@@ -1,14 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Video, X, Loader2, Users } from "lucide-react";
+import { Video, X, Loader2, Users, Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 
 interface Project {
   _id: string;
   name: string;
+}
+
+interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
 }
 
 interface HostMeetingDialogProps {
@@ -18,37 +34,70 @@ interface HostMeetingDialogProps {
 
 export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
   const router = useRouter();
+  
+  // Data State
   const [projects, setProjects] = useState<Project[]>([]);
-  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
   
   // Form State
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [title, setTitle] = useState("");
-  const [participants, setParticipants] = useState(""); // Comma separated emails
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]); // User IDs
   const [isCreating, setIsCreating] = useState(false);
 
-  // Fetch projects when dialog opens
+  // Dropdown State
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Fetch projects AND users when dialog opens
   useEffect(() => {
     if (isOpen) {
-      const fetchProjects = async () => {
+      const fetchData = async () => {
         try {
-          setLoadingProjects(true);
-          const res = await apiRequest<Project[]>("/projects");
-          setProjects(res);
-          if (res.length > 0) setSelectedProjectId(res[0]._id);
+          setLoadingData(true);
+          // Fetch both lists in parallel
+          const [projectsRes, usersRes] = await Promise.all([
+            apiRequest<Project[]>("/projects"),
+            apiRequest<User[]>("/auth/users"), 
+          ]);
+
+          setProjects(projectsRes);
+          setUsers(usersRes);
+
+          if (projectsRes.length > 0) setSelectedProjectId(projectsRes[0]._id);
         } catch (error) {
-          console.error("Failed to load projects", error);
+          console.error("Failed to load data", error);
         } finally {
-          setLoadingProjects(false);
+          setLoadingData(false);
         }
       };
-      fetchProjects();
+      fetchData();
       
       // Reset form
       setTitle("");
-      setParticipants("");
+      setSelectedParticipants([]);
     }
   }, [isOpen]);
+
+  const toggleParticipant = (userId: string) => {
+    setSelectedParticipants((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
+    );
+  };
 
   const handleStartMeeting = async () => {
     if (!selectedProjectId || !title) return;
@@ -56,22 +105,25 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
     try {
       setIsCreating(true);
       
-      // 1. Call your Node.js Meeting Service
+      // Map selected IDs back to emails to send to the meeting service
+      const participantEmails = users
+        .filter((u) => selectedParticipants.includes(u.id))
+        .map((u) => u.email);
+
+      // 1. Call Meeting Service
       const response = await apiRequest<{ meetingUrl: string }>(
-        "/meetings", // This routes via Gateway -> Meeting Service
+        "/meetings",
         {
           method: "POST",
           data: {
             projectId: selectedProjectId,
             title: title,
-            // We can send participants if backend supports it, otherwise it's ignored for now
-            participants: participants.split(",").map(p => p.trim()) 
+            participants: participantEmails, 
           },
         }
       );
 
-      // 2. Redirect to the Live Meeting Page
-      // Append projectId so the upload dialog knows where to save the recording later
+      // 2. Redirect
       router.push(`${response.meetingUrl}?projectId=${selectedProjectId}`);
       onClose();
     } catch (error) {
@@ -103,7 +155,7 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
           {/* Project Selection */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-neutral-700">Project Context</label>
-            {loadingProjects ? (
+            {loadingData ? (
                <div className="h-10 w-full bg-neutral-100 animate-pulse rounded-lg" />
             ) : (
               <select
@@ -130,22 +182,63 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
             />
           </div>
 
-          {/* Participants (Optional) */}
-          <div className="space-y-1.5">
+          {/* Participants Dropdown */}
+          <div className="space-y-1.5 relative" ref={dropdownRef}>
             <label className="text-sm font-medium text-neutral-700 flex items-center justify-between">
               <span>Participants</span>
-              <span className="text-xs font-normal text-neutral-400">Optional</span>
+              <span className="text-xs font-normal text-neutral-400">
+                {selectedParticipants.length} selected
+              </span>
             </label>
-            <div className="relative">
-              <Users className="absolute left-3 top-2.5 w-4 h-4 text-neutral-400" />
-              <input
-                type="text"
-                placeholder="Enter emails separated by commas"
-                className="w-full pl-9 p-2.5 border border-neutral-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                value={participants}
-                onChange={(e) => setParticipants(e.target.value)}
-              />
+            
+            <div 
+              className="w-full p-2.5 border border-neutral-200 rounded-lg text-sm bg-white focus-within:ring-2 focus-within:ring-primary/20 flex items-center justify-between cursor-pointer"
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            >
+              <div className="flex items-center gap-2 text-neutral-500 overflow-hidden">
+                <Users className="w-4 h-4 shrink-0" />
+                <span className="truncate">
+                  {selectedParticipants.length === 0 
+                    ? "Select team members..." 
+                    : `${selectedParticipants.length} user(s) selected`}
+                </span>
+              </div>
+              <ChevronsUpDown className="w-4 h-4 text-neutral-400 shrink-0" />
             </div>
+
+            {/* Dropdown Content */}
+            {isDropdownOpen && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-neutral-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                <Command>
+                  <CommandInput placeholder="Search users..." />
+                  <CommandList>
+                    <CommandEmpty>No users found.</CommandEmpty>
+                    <CommandGroup className="max-h-48 overflow-y-auto">
+                      {users.map((user) => (
+                        <CommandItem
+                          key={user.id}
+                          onSelect={() => toggleParticipant(user.id)}
+                          className="cursor-pointer"
+                        >
+                          <div className={cn(
+                            "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                            selectedParticipants.includes(user.id)
+                              ? "bg-primary text-primary-foreground"
+                              : "opacity-50 [&_svg]:invisible"
+                          )}>
+                            <Check className={cn("h-4 w-4 text-white")} />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{user.firstName} {user.lastName}</span>
+                            <span className="text-xs text-neutral-400">{user.email}</span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </div>
+            )}
           </div>
         </div>
 

@@ -52,6 +52,16 @@ app.use(
   })
 );
 
+// Route: Meeting Service
+app.use(
+  "/api/meetings",
+  createProxyMiddleware({
+    target: process.env.MEETING_SERVICE_URL,
+    changeOrigin: true,
+    pathRewrite: { "^": "/api/meetings" },
+  })
+);
+
 app.listen(PORT, () => {
   console.log(`Gateway running on port ${PORT}`);
 });

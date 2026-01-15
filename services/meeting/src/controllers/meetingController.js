@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import Meeting from "../models/Meeting.js"; // Import the Mongoose Model
+import { generateJitsiToken } from "../utils/jitsiToken.js";
 
 // @desc    Create a new meeting room
 // @route   POST /api/meetings
@@ -36,5 +37,25 @@ export const createMeeting = async (req, res) => {
   } catch (error) {
     console.error("Error creating meeting:", error);
     res.status(500).json({ message: "Server error generating meeting" });
+  }
+};
+
+// @desc    Get Jitsi JWT for joining a room
+// @route   GET /api/meetings/join/:roomName
+export const getJoinToken = async (req, res) => {
+  try {
+    const { roomName } = req.params;
+    
+    // req.user comes from the protect middleware
+    if (!req.user) {
+        return res.status(401).json({ message: "User not authenticated" });
+    }
+
+    const token = generateJitsiToken(req.user, roomName);
+
+    res.json({ token, roomName });
+  } catch (error) {
+    console.error("Token Gen Error:", error);
+    res.status(500).json({ message: "Failed to generate token" });
   }
 };

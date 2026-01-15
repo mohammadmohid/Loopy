@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
+import cookieParser from "cookie-parser";
 import connectDB from "./config/db.js"; // Import the DB connection
 import meetingRoutes from "./routes/meetingRoutes.js";
 
@@ -15,8 +16,9 @@ const PORT = process.env.PORT || 8003; // Running on port 8003 (or 5003 if set i
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
 
 // Routes
 app.use("/api/meetings", meetingRoutes);

@@ -1,8 +1,9 @@
 import express from "express";
-import { createMeeting } from "../controllers/meetingcontroller.js";
+import { createMeeting, getJoinToken } from "../controllers/meetingcontroller.js";
+import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
 
-router.post("/", createMeeting);
-
+router.post("/", protect, createMeeting);
+router.get("/join/:roomName", protect, getJoinToken);
 export default router;

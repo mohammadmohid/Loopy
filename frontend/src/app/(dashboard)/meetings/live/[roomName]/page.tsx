@@ -1,20 +1,48 @@
 "use client";
 
 import { JitsiMeeting } from "@jitsi/react-sdk";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
-import { UploadDialog } from "@/components/upload-dialog"; // Reusing your existing component
+import { useState, useEffect } from "react";
+import { UploadDialog } from "@/components/upload-dialog";
+import { apiRequest } from "@/lib/api";
 
 export default function LiveMeetingPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
   const roomName = params.roomName as string;
+  const projectId = searchParams.get("projectId") || undefined;
+
+  const [jwtToken, setJwtToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
+
+  // 1. Fetch the Jitsi Token from your Backend
+  useEffect(() => {
+    const fetchToken = async () => {
+      if (!roomName) return;
+      
+      try {
+        setLoading(true);
+        // This calls the endpoint we created: GET /api/meetings/join/:roomName
+        const res = await apiRequest<{ token: string }>(`/meetings/join/${roomName}`);
+        setJwtToken(res.token);
+      } catch (error) {
+        console.error("Failed to get meeting token", error);
+        alert("Could not join meeting. Please check your permissions.");
+        router.push("/meetings");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchToken();
+  }, [roomName, router]);
 
   // Handle meeting end
   const handleReadyToClose = () => {
-    // Check if user wants to upload the recording immediately
     const shouldUpload = window.confirm(
       "Meeting ended. Do you have a recording to upload for transcription?"
     );
@@ -26,20 +54,32 @@ export default function LiveMeetingPage() {
     }
   };
 
-  if (!roomName) return <Loader2 className="animate-spin" />;
+  if (loading || !roomName) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="animate-spin w-8 h-8 text-neutral-400" />
+        <span className="ml-2 text-neutral-400">Joining secure room...</span>
+      </div>
+    );
+  }
+
+  // 2. Construct the full JaaS Room ID (AppID/RoomName)
+  // Ensure NEXT_PUBLIC_JITSI_APP_ID is set in your frontend .env
+  const appId = process.env.NEXT_PUBLIC_JITSI_APP_ID;
+  const fullRoomName = appId ? `${appId}/${roomName}` : roomName;
 
   return (
     <div className="h-[calc(100vh-100px)] w-full bg-neutral-900 rounded-xl overflow-hidden relative">
       <JitsiMeeting
-        domain="meet.jit.si"
-        roomName={roomName}
+        domain="8x8.vc" // Use the 8x8 JaaS domain
+        roomName={fullRoomName}
+        jwt={jwtToken || undefined} // Pass the token here
         configOverwrite={{
           startWithAudioMuted: true,
           disableThirdPartyRequests: true,
           prejoinPageEnabled: false,
         }}
         interfaceConfigOverwrite={{
-          // Custom toolbar with recording button
           TOOLBAR_BUTTONS: [
             "microphone", "camera", "closedcaptions", "desktop", 
             "fullscreen", "fodeviceselection", "hangup", "profile", 
@@ -47,7 +87,7 @@ export default function LiveMeetingPage() {
           ],
         }}
         userInfo={{
-          displayName: "Loopy User",
+          displayName: "Loopy User", // The JWT will actually override this
           email: "user@loopy.local",
         }}
         onReadyToClose={handleReadyToClose}
@@ -56,18 +96,18 @@ export default function LiveMeetingPage() {
         }}
       />
 
-      {/* Reusing your existing Upload Dialog */}
+      {/* Upload Dialog with Project Context */}
       <UploadDialog 
         isOpen={showUpload} 
         onClose={() => {
             setShowUpload(false);
-            router.push("/meetings"); // Redirect after closing dialog
+            router.push("/meetings");
         }}
         onUploadComplete={() => {
             setShowUpload(false);
-            router.push("/meetings"); // Redirect after successful upload
+            router.push("/meetings");
         }}
-        // You can pass the projectId here if you stored it in the URL query params
+        projectId={projectId} // Pass projectId so upload is auto-tagged
       />
     </div>
   );

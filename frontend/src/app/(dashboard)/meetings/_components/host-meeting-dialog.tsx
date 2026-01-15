@@ -104,13 +104,13 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
 
     try {
       setIsCreating(true);
-      
-      // Map selected IDs back to emails to send to the meeting service
-      const participantEmails = users
-        .filter((u) => selectedParticipants.includes(u.id))
-        .map((u) => u.email);
 
-      // 1. Call Meeting Service
+      // 1. Get current user profile (for hostName)
+      // We fetch this so we can tell invited users exactly who is hosting
+      const userRes = await apiRequest<{ user: { profile: { firstName: string; lastName: string } } }>("/auth/me");
+      const hostName = `${userRes.user.profile.firstName} ${userRes.user.profile.lastName}`;
+      
+      // 2. Call Meeting Service
       const response = await apiRequest<{ meetingUrl: string }>(
         "/meetings",
         {
@@ -118,12 +118,14 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
           data: {
             projectId: selectedProjectId,
             title: title,
-            participants: participantEmails, 
+            // Send IDs directly (Backend now expects array of User IDs)
+            participants: selectedParticipants, 
+            hostName: hostName, 
           },
         }
       );
 
-      // 2. Redirect
+      // 3. Redirect
       router.push(`${response.meetingUrl}?projectId=${selectedProjectId}`);
       onClose();
     } catch (error) {

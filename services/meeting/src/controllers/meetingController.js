@@ -7,7 +7,8 @@ import { generateJitsiToken } from "../utils/jitsiToken.js";
 export const createMeeting = async (req, res) => {
   try {
     // 1. Extract participants along with other fields
-    const { projectId, title, participants } = req.body;
+    const { projectId, title, participants, hostName } = req.body;
+    const hostId = req.user.id;
 
     if (!projectId) {
       return res.status(400).json({ message: "Project ID is required" });
@@ -22,6 +23,8 @@ export const createMeeting = async (req, res) => {
       title: title || "Untitled Meeting",
       projectId,
       participants: participants || [], // Defaults to empty array if not provided
+      hostId,
+      hostName: hostName || "Unknown Host",
       status: "active",
     });
 
@@ -37,6 +40,25 @@ export const createMeeting = async (req, res) => {
   } catch (error) {
     console.error("Error creating meeting:", error);
     res.status(500).json({ message: "Server error generating meeting" });
+  }
+};
+
+// @desc    Get meetings for the current user (Host or Participant)
+// @route   GET /api/meetings
+export const getMyMeetings = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Find meetings where user is Host OR in Participants list
+    const meetings = await Meeting.find({
+      $or: [{ hostId: userId }, { participants: userId }],
+      status: "active" // Only show active meetings
+    }).sort({ createdAt: -1 });
+
+    res.json(meetings);
+  } catch (error) {
+    console.error("Error fetching meetings:", error);
+    res.status(500).json({ message: "Server error fetching meetings" });
   }
 };
 

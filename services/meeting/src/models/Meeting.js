@@ -23,6 +23,11 @@ const meetingSchema = new mongoose.Schema(
       type: String,
       // required: true, // Uncomment if you are passing the user ID from the frontend
     },
+    hostName: {
+      type: String,
+      required: true,
+    },
+    
     status: {
       type: String,
       enum: ["active", "ended"],

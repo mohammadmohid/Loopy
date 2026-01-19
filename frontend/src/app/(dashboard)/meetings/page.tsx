@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { UploadDialog } from "@/components/upload-dialog";
 import { MeetingList, type Artifact } from "./_components/meeting-list";
 import { HostMeetingDialog } from "./_components/host-meeting-dialog";
-import { LiveMeetingList, type LiveMeeting } from "./_components/live-meeting-list"; // Import new component
+import { LiveMeetingList } from "./_components/live-meeting-list";
+import { MeetingHistoryList, type Meeting } from "./_components/meeting-history-list"; 
 import { apiRequest } from "@/lib/api";
 
 export default function MeetingsPage() {
@@ -15,21 +16,21 @@ export default function MeetingsPage() {
   
   // Data State
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [liveMeetings, setLiveMeetings] = useState<LiveMeeting[]>([]); // New State for Live Meetings
+  const [allMeetings, setAllMeetings] = useState<Meeting[]>([]); // Store ALL meetings here
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      // Fetch both Lists in parallel
+      // Fetch Artifacts and Meetings in parallel
       const [artifactsData, meetingsData] = await Promise.all([
         apiRequest<Artifact[]>("/projects/artifacts"),
-        apiRequest<LiveMeeting[]>("/meetings"), // Fetch from Meeting Service
+        apiRequest<Meeting[]>("/meetings"), // This now returns both active and ended
       ]);
       
       setArtifacts(artifactsData);
-      setLiveMeetings(meetingsData);
+      setAllMeetings(meetingsData);
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
@@ -41,9 +42,14 @@ export default function MeetingsPage() {
     fetchData();
   }, []);
 
+  // Filter Data
   const filteredArtifacts = artifacts.filter((a) =>
     a.filename.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Split meetings into Live and Past
+  const activeMeetings = allMeetings.filter(m => m.status === "active") as any[];
+  const pastMeetings = allMeetings.filter(m => m.status === "ended");
 
   return (
     <div className="space-y-6">
@@ -57,7 +63,6 @@ export default function MeetingsPage() {
         </div>
         
         <div className="flex items-center gap-3">
-          {/* Host Meeting Button */}
           <Button
             onClick={() => setIsHostMeetingOpen(true)}
             variant="outline"
@@ -67,7 +72,6 @@ export default function MeetingsPage() {
             Host Meeting
           </Button>
 
-          {/* Upload Button */}
           <Button
             onClick={() => setIsUploadOpen(true)}
             className="gap-2 bg-primary shadow-sm"
@@ -78,8 +82,11 @@ export default function MeetingsPage() {
         </div>
       </div>
 
-      {/* NEW: Live Meetings Section */}
-      <LiveMeetingList meetings={liveMeetings} isLoading={isLoading} />
+      {/* 1. Live Meetings Section (Only Active) */}
+      <LiveMeetingList meetings={activeMeetings} isLoading={isLoading} />
+
+      {/* 2. Past Meetings Section (Only Ended) */}
+      <MeetingHistoryList meetings={pastMeetings} />
 
       {/* Search and Filters */}
       <div className="flex items-center gap-3 bg-white p-1 rounded-xl border border-neutral-200 max-w-md">
@@ -93,17 +100,16 @@ export default function MeetingsPage() {
         />
       </div>
 
-      {/* Artifacts (Recordings) List */}
+      {/* 3. Uploaded Recordings List */}
       <MeetingList artifacts={filteredArtifacts} isLoading={isLoading} />
 
-      {/* Upload Dialog */}
+      {/* Dialogs */}
       <UploadDialog
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
         onUploadComplete={() => fetchData()}
       />
 
-      {/* Host Meeting Dialog */}
       <HostMeetingDialog
         isOpen={isHostMeetingOpen}
         onClose={() => setIsHostMeetingOpen(false)}

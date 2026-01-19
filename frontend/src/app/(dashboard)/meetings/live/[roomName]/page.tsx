@@ -42,7 +42,18 @@ export default function LiveMeetingPage() {
   }, [roomName, router]);
 
   // Handle meeting end
-  const handleReadyToClose = () => {
+  const handleReadyToClose = async () => {
+    // 1. Tell backend to mark as ended BEFORE asking for upload
+    try {
+      console.log("Ending meeting...");
+      await apiRequest(`/meetings/end/${roomName}`, { method: "PATCH" });
+      console.log("Meeting marked as ended.");
+    } catch (err) {
+      console.error("Failed to mark meeting ended", err);
+      // We continue anyway so the user isn't stuck
+    }
+
+    // 2. Ask user about upload
     const shouldUpload = window.confirm(
       "Meeting ended. Do you have a recording to upload for transcription?"
     );

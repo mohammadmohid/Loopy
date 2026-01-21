@@ -68,17 +68,29 @@ export default function LiveMeetingPage() {
   const handleReadyToClose = async () => {
     try {
       console.log("Ending meeting...");
+      
+      let meetingId = null;
 
-      // 1. EXTRACT ID from "Loopy-<ProjectID>-<MeetingID>"
-      // The roomName format is strict, so we grab the 3rd part (index 2)
-      const parts = (roomName as string).split("-");
-      const meetingId = parts.length >= 3 ? parts[2] : null;
+      // 🔍 SMART PARSING
+      // Check if roomName is JUST a Mongo ID (24 characters, no dashes)
+      const isDirectId = /^[0-9a-fA-F]{24}$/.test(roomName);
+
+      if (isDirectId) {
+        meetingId = roomName; // It's already the ID!
+      } else {
+        // Otherwise, try the "Loopy-Project-Meeting" format
+        const parts = roomName.split("-");
+        // If format is Loopy-PID-MID, the ID is at index 2
+        if (parts.length >= 3) {
+            meetingId = parts[2];
+        }
+      }
 
       if (meetingId) {
-        // 2. CALL API with the correct ID
+        // Call the API with the clean ID
         await apiRequest(`/meetings/${meetingId}`, {
           method: "PATCH",
-          data: { status: "ended" }, // Send status update in body
+          data: { status: "ended" },
         });
         console.log("Meeting marked as ended.");
       } else {
@@ -88,18 +100,8 @@ export default function LiveMeetingPage() {
       console.error("Failed to mark meeting ended", err);
     }
 
-    // 3. Ask user about upload (or just redirect)
-    // Since you have auto-recording, you might typically skip this, 
-    // but keeping your logic intact:
-    const shouldUpload = window.confirm(
-      "Meeting ended. Do you have a local recording to upload manually?"
-    );
-
-    if (shouldUpload) {
-      setShowUpload(true);
-    } else {
-      router.push("/meetings");
-    }
+    // Redirect to dashboard
+    router.push("/meetings");
   };
 
   if (loading || !roomName) {

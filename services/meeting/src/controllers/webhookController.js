@@ -55,7 +55,7 @@ export const handleJaaSWebhook = async (req, res) => {
 
       // 1. PARSE ROOM NAME (Position Based)
       // Expected Format: "Loopy-<ProjectID>-<MeetingID>-<SessionUUID>"
-      let jaasRoomName = "";
+    let jaasRoomName = "";
       if (event.fqn) {
         jaasRoomName = event.fqn.split("/")[1]; 
       }
@@ -65,25 +65,31 @@ export const handleJaaSWebhook = async (req, res) => {
       let meetingId = null;
       let projectId = null;
 
-      // Split string by dashes
-      const parts = jaasRoomName.split("-");
+      // 2. SMART PARSING (The Fix)
+      // Regex for a 24-character Mongo ID
+      const isDirectId = /^[0-9a-fA-F]{24}$/.test(jaasRoomName);
 
-      if (parts.length >= 3) {
-          // parts[0] is "Loopy"
-          projectId = parts[1]; // Index 1 = Project ID
-          meetingId = parts[2]; // Index 2 = Meeting ID
-          console.log(` Parsed IDs -> Project: ${projectId} | Meeting: ${meetingId}`);
+      if (isDirectId) {
+          // CASE A: Room Name IS the Meeting ID
+          meetingId = jaasRoomName;
+          console.log(`🧩 Direct ID Match: ${meetingId}`);
       } else {
-          console.log(" Room name format is invalid (not enough dashes)");
+          // CASE B: Room Name is "Loopy-ProjectID-MeetingID"
+          const parts = jaasRoomName.split("-");
+          if (parts.length >= 3) {
+              projectId = parts[1]; 
+              meetingId = parts[2]; 
+              console.log(`🧩 Parsed Long Format -> Project: ${projectId} | Meeting: ${meetingId}`);
+          }
       }
 
-      // 2. DATABASE LOOKUP (Targeted by Meeting ID)
+      // 3. DATABASE LOOKUP
       let meeting = null;
       if (meetingId) {
           try {
              meeting = await Meeting.findById(meetingId);
           } catch (e) {
-             console.log("Parsed Meeting ID was not a valid Mongo ID");
+             console.log("⚠️ Parsed Meeting ID was not a valid Mongo ID");
           }
       }
 

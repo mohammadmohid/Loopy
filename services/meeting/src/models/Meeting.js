@@ -15,6 +15,10 @@ const meetingSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    projectName: {
+      type: String,
+      default: "Unknown Project" 
+    },
     participants: {
       type: [String], // Array of strings (emails or user IDs)
       default: [],
@@ -33,6 +37,7 @@ const meetingSchema = new mongoose.Schema(
       enum: ["active", "ended"],
       default: "active",
     },
+    recordingUrl: { type: String },
   },
   { timestamps: true } // Automatically adds createdAt and updatedAt
 );

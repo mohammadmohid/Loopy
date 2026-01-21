@@ -2,46 +2,42 @@ import { v4 as uuidv4 } from "uuid";
 import Meeting from "../models/Meeting.js";
 import { generateJitsiToken } from "../utils/jitsiToken.js";
 
-// @desc    Create a new meeting room
-// @route   POST /api/meetings
+
 export const createMeeting = async (req, res) => {
   try {
-    // 1. Extract fields (Added projectName back)
+    // 1. Extract fields
     const { projectId, projectName, title, participants, hostName } = req.body;
-    const hostId = req.user.id;
+    const hostId = req.user.id; // Assuming user is authenticated via middleware
 
     if (!projectId) {
       return res.status(400).json({ message: "Project ID is required" });
     }
 
-    // 2. Generate a unique room name
-    const roomName = `Loopy-${projectId}-${uuidv4()}`;
-
-    // 3. Save to MongoDB
-    const meeting = await Meeting.create({
-      roomName,
+    // 2. Initialize the Meeting Instance (Do not save yet)
+    // Mongoose automatically creates the '_id' here, which we need for the room name.
+    const meeting = new Meeting({
       title: title || "Untitled Meeting",
       projectId,
-      projectName: projectName || "Unknown Project", // Ensure this is saved
+      projectName: projectName || "Unknown Project", // Crucial for folder organization
       participants: participants || [],
       hostId,
       hostName: hostName || "Unknown Host",
       status: "active",
     });
 
-    // 4. Return the saved data
-    res.status(201).json({
-      success: true,
-      roomName: meeting.roomName,
-      meetingUrl: `/meetings/live/${meeting.roomName}`,
-      meetingId: meeting._id,
-      projectId: meeting.projectId,
-      title: meeting.title,
-      participants: meeting.participants,
-    });
+    // 3. Generate the "Double ID" Room Name
+    // Format: Loopy-<ProjectID>-<MeetingID>
+    // This allows the Webhook to parse both IDs instantly.
+    meeting.roomName = `Loopy-${projectId}-${meeting._id}`;
+
+    // 4. Save to MongoDB
+    await meeting.save();
+
+    res.status(201).json(meeting);
+
   } catch (error) {
-    console.error("Error creating meeting:", error);
-    res.status(500).json({ message: "Server error generating meeting" });
+    console.error("Create Meeting Error:", error);
+    res.status(500).json({ message: "Failed to create meeting" });
   }
 };
 
@@ -110,5 +106,46 @@ export const getJoinToken = async (req, res) => {
   } catch (error) {
     console.error("Token Gen Error:", error);
     res.status(500).json({ message: "Failed to generate token" });
+  }
+};
+// Get a single meeting by ID
+export const getMeetingById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate if ID is a valid MongoDB ObjectId to prevent crashes
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ message: "Invalid Meeting ID format" });
+    }
+
+    const meeting = await Meeting.findById(id);
+
+    if (!meeting) {
+      return res.status(404).json({ message: "Meeting not found in DB" });
+    }
+
+    res.status(200).json(meeting);
+  } catch (error) {
+    console.error("Get Meeting Error:", error);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+export const updateMeeting = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body; // e.g. { status: "ended" }
+
+    // Find by ID and update whatever fields are sent in the body
+    const meeting = await Meeting.findByIdAndUpdate(id, updates, { new: true });
+
+    if (!meeting) {
+      return res.status(404).json({ message: "Meeting not found" });
+    }
+
+    res.status(200).json(meeting);
+  } catch (error) {
+    console.error("Update Meeting Error:", error);
+    res.status(500).json({ message: "Failed to update meeting" });
   }
 };

@@ -110,13 +110,17 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
       const userRes = await apiRequest<{ user: { profile: { firstName: string; lastName: string } } }>("/auth/me");
       const hostName = `${userRes.user.profile.firstName} ${userRes.user.profile.lastName}`;
       
+      const selectedProject = projects.find(p => p._id === selectedProjectId);
+      const projectName = selectedProject ? selectedProject.name : "Unknown Project";
+
       // 2. Call Meeting Service
-      const response = await apiRequest<{ meetingUrl: string }>(
+      const response = await apiRequest<{ _id : string }>(
         "/meetings",
         {
           method: "POST",
           data: {
             projectId: selectedProjectId,
+            projectName: projectName,
             title: title,
             // Send IDs directly (Backend now expects array of User IDs)
             participants: selectedParticipants, 
@@ -126,7 +130,8 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
       );
 
       // 3. Redirect
-      router.push(`${response.meetingUrl}?projectId=${selectedProjectId}`);
+     // router.push(`/meetings/${response._id}?projectId=${selectedProjectId}`);
+      router.push(`/meetings/live/${response._id}`);
       onClose();
     } catch (error) {
       console.error("Failed to start meeting:", error);

@@ -1,6 +1,7 @@
 import express from "express";
-import { createMeeting, getJoinToken, getMyMeetings, endMeeting } from "../controllers/meetingcontroller.js";
+import { createMeeting, getJoinToken, getMyMeetings, endMeeting, getMeetingById, updateMeeting } from "../controllers/meetingcontroller.js";
 import { protect } from "../middleware/auth.js";
+import { handleJaaSWebhook } from "../controllers/webhookController.js";
 
 const router = express.Router();
 
@@ -8,4 +9,7 @@ router.post("/", protect, createMeeting);
 router.get("/", protect, getMyMeetings);
 router.get("/join/:roomName", protect, getJoinToken);
 router.patch("/end/:roomName", protect, endMeeting);
+router.post("/webhook", handleJaaSWebhook);
+router.get("/:id", getMeetingById);
+router.patch("/:id", protect, updateMeeting);
 export default router;

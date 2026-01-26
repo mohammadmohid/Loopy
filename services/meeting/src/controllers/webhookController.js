@@ -29,16 +29,10 @@ const r2 = new S3Client({
 const sanitize = (str) => str.replace(/[^a-zA-Z0-9-_]/g, "_");
 
 export const handleJaaSWebhook = async (req, res) => {
-  // ----------------------------------------------------------
-  // ⚡ STEP 1: FAST EXIT (THE ONLY RESPONSE)
+
   // We reply immediately so JaaS knows we received it.
-  // ----------------------------------------------------------
   res.status(200).send("OK");
 
-  // ----------------------------------------------------------
-  // 🐢 STEP 2: BACKGROUND PROCESSING
-  // Everything below runs silently. failing here won't hurt JaaS.
-  // ----------------------------------------------------------
   try {
     const event = req.body;
     
@@ -140,12 +134,29 @@ export const handleJaaSWebhook = async (req, res) => {
       console.log(`Bridge Complete: Uploaded to "${r2Key}"`);
 
       // 5. UPDATE DB
-      const publicR2Url = `${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET_NAME}/${r2Key}`;
+      const publicR2Url =  `${process.env.R2_PUBLIC_DOMAIN}/${r2Key}`;                         //`${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET_NAME}/${r2Key}`;
       
       if (meeting) {
         meeting.recordingUrl = publicR2Url;
         await meeting.save();
         console.log("Database updated.");
+
+        try {
+          // Adjust URL if your service is on a different host
+          const transcriptionServiceUrl = "http://localhost:4002/transcribe"; 
+          
+          console.log("Triggering Transcription Service...");
+          await axios.post(transcriptionServiceUrl, {
+            meetingId: meeting._id,
+            projectId: meeting.projectId,
+            recordingUrl: publicR2Url,
+            filename: fileName
+          });
+          
+        } catch (transcribeError) {
+          console.error("⚠️ Failed to trigger transcription:", transcribeError.message);
+          // We assume the service might be down, but the recording is safe.
+        }
       }
     }
   } catch (error) {

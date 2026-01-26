@@ -62,6 +62,14 @@ app.use(
   })
 );
 
+app.use(
+  "/api/artifacts",
+  createProxyMiddleware({
+    target: process.env.TRANSCRIPTION_SERVICE_URL || "http://localhost:4002",
+    changeOrigin: true,
+  })
+);
+
 app.listen(PORT, () => {
   console.log(`Gateway running on port ${PORT}`);
 });

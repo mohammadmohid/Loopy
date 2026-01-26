@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation"; // 👈 1. Import Router
 import { Users, X, Play, FileText, Calendar, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 
-// This interface must match the data sent from your Backend
 export interface Meeting {
   _id: string;
   title: string;
@@ -24,6 +24,7 @@ interface MeetingHistoryListProps {
 
 export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
+  const router = useRouter(); // 👈 2. Initialize Router
 
   if (meetings.length === 0) return null;
 
@@ -123,13 +124,28 @@ export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
 
               <div className="h-px bg-neutral-100 w-full" />
 
-              {/* Action Buttons (Placeholders for now) */}
+              {/* Action Buttons */}
               <div className="grid grid-cols-2 gap-3">
-                <Button variant="outline" className="gap-2 h-auto py-3 border-dashed border-neutral-300 text-neutral-600 hover:text-primary hover:border-primary hover:bg-primary/5">
+                <Button 
+                    variant="outline" 
+                    className="gap-2 h-auto py-3 border-dashed border-neutral-300 text-neutral-600 hover:text-primary hover:border-primary hover:bg-primary/5"
+                    onClick={() => {
+                        // Optional: Also go to page or open video player
+                        router.push(`/meetings/${selectedMeeting._id}`);
+                    }}
+                >
                     <Play className="w-4 h-4" />
                     <span>View Recording</span>
                 </Button>
-                <Button variant="outline" className="gap-2 h-auto py-3 border-dashed border-neutral-300 text-neutral-600 hover:text-primary hover:border-primary hover:bg-primary/5">
+
+                {/* 👇 3. THE FIX: Link to the detailed page */}
+                <Button 
+                    variant="outline" 
+                    className="gap-2 h-auto py-3 border-dashed border-neutral-300 text-neutral-600 hover:text-primary hover:border-primary hover:bg-primary/5"
+                    onClick={() => {
+                        router.push(`/meetings/${selectedMeeting._id}`);
+                    }}
+                >
                     <FileText className="w-4 h-4" />
                     <span>View Summary</span>
                 </Button>

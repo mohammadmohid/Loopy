@@ -12,7 +12,10 @@ const PORT = process.env.PORT || 8000;
 app.use(helmet());
 app.set("trust proxy", 1);
 
-const allowedOrigins = ["http://localhost:3000", "https://loopy-mu.vercel.app"];
+const MY_IP_ADDRESS = "http://192.168.7.15:3000";
+
+const allowedOrigins = ["http://localhost:3000", "https://loopy-mu.vercel.app", MY_IP_ADDRESS];
+
 
 app.use(
   cors({

@@ -19,6 +19,30 @@ export default function LiveMeetingPage() {
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
 
+  // 👇 NEW: State for User Name & Email
+  const [userInfo, setUserInfo] = useState({
+    displayName: "Loopy User",
+    email: "user@loopy.local"
+  });
+
+  // 👇 NEW: Load User Info from Local Storage on Mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        try {
+          const parsed = JSON.parse(storedUser);
+          setUserInfo({
+            displayName: parsed.name || parsed.username || parsed.email || "Loopy User",
+            email: parsed.email || "user@loopy.local"
+          });
+        } catch (e) {
+          console.error("Failed to parse user info", e);
+        }
+      }
+    }
+  }, []);
+
   // 1. Fetch the Jitsi Token from your Backend
   useEffect(() => {
     const fetchToken = async () => {
@@ -26,7 +50,6 @@ export default function LiveMeetingPage() {
       
       try {
         setLoading(true);
-        // This calls the endpoint we created: GET /api/meetings/join/:roomName
         const res = await apiRequest<{ token: string }>(`/meetings/join/${roomName}`);
         setJwtToken(res.token);
       } catch (error) {
@@ -41,30 +64,6 @@ export default function LiveMeetingPage() {
     fetchToken();
   }, [roomName, router]);
 
-  // Handle meeting end
- /* const handleReadyToClose = async () => {
-    // 1. Tell backend to mark as ended BEFORE asking for upload
-    try {
-      console.log("Ending meeting...");
-      await apiRequest(`/meetings/end/${roomName}`, { method: "PATCH" });
-      console.log("Meeting marked as ended.");
-    } catch (err) {
-      console.error("Failed to mark meeting ended", err);
-      // We continue anyway so the user isn't stuck
-    }
-
-    // 2. Ask user about upload
-    const shouldUpload = window.confirm(
-      "Meeting ended. Do you have a recording to upload for transcription?"
-    );
-
-    if (shouldUpload) {
-      setShowUpload(true);
-    } else {
-      router.push("/meetings");
-    }
-  }; */
-
   const handleReadyToClose = async () => {
     try {
       console.log("Ending meeting...");
@@ -72,22 +71,18 @@ export default function LiveMeetingPage() {
       let meetingId = null;
 
       // 🔍 SMART PARSING
-      // Check if roomName is JUST a Mongo ID (24 characters, no dashes)
       const isDirectId = /^[0-9a-fA-F]{24}$/.test(roomName);
 
       if (isDirectId) {
-        meetingId = roomName; // It's already the ID!
+        meetingId = roomName; 
       } else {
-        // Otherwise, try the "Loopy-Project-Meeting" format
         const parts = roomName.split("-");
-        // If format is Loopy-PID-MID, the ID is at index 2
         if (parts.length >= 3) {
             meetingId = parts[2];
         }
       }
 
       if (meetingId) {
-        // Call the API with the clean ID
         await apiRequest(`/meetings/${meetingId}`, {
           method: "PATCH",
           data: { status: "ended" },
@@ -113,17 +108,15 @@ export default function LiveMeetingPage() {
     );
   }
 
-  // 2. Construct the full JaaS Room ID (AppID/RoomName)
-  // Ensure NEXT_PUBLIC_JITSI_APP_ID is set in your frontend .env
   const appId = process.env.NEXT_PUBLIC_JITSI_APP_ID;
   const fullRoomName = appId ? `${appId}/${roomName}` : roomName;
 
   return (
     <div className="h-[calc(100vh-100px)] w-full bg-neutral-900 rounded-xl overflow-hidden relative">
       <JitsiMeeting
-        domain="8x8.vc" // Use the 8x8 JaaS domain
+        domain="8x8.vc"
         roomName={fullRoomName}
-        jwt={jwtToken || undefined} // Pass the token here
+        jwt={jwtToken || undefined}
         configOverwrite={{
           startWithAudioMuted: true,
           disableThirdPartyRequests: true,
@@ -136,9 +129,10 @@ export default function LiveMeetingPage() {
             "chat", "recording", "raisehand", "videoquality", "tileview"
           ],
         }}
+        // 👇 UPDATE: Use the state variable here
         userInfo={{
-          displayName: "Loopy User", // The JWT will actually override this
-          email: "user@loopy.local",
+          displayName: userInfo.displayName,
+          email: userInfo.email,
         }}
         onReadyToClose={handleReadyToClose}
         getIFrameRef={(iframeRef) => {
@@ -146,7 +140,6 @@ export default function LiveMeetingPage() {
         }}
       />
 
-      {/* Upload Dialog with Project Context */}
       <UploadDialog 
         isOpen={showUpload} 
         onClose={() => {
@@ -157,7 +150,7 @@ export default function LiveMeetingPage() {
             setShowUpload(false);
             router.push("/meetings");
         }}
-        projectId={projectId} // Pass projectId so upload is auto-tagged
+        projectId={projectId} 
       />
     </div>
   );

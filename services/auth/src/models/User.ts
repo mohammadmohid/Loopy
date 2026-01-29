@@ -27,7 +27,7 @@ const userSchema = new Schema<IUser>(
     password: { type: String, minLength: 8, required: true, select: false },
     globalRole: {
       type: String,
-      enum: ["ADMIN", "USER"],
+      enum: ["ADMIN", "USER","PROJECT_MANAGER", "TEAM_MEMBER", "TEAM_LEAD"],
       default: "USER",
     },
     profile: {

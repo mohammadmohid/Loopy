@@ -140,23 +140,28 @@ export const handleJaaSWebhook = async (req, res) => {
         meeting.recordingUrl = publicR2Url;
         await meeting.save();
         console.log("Database updated.");
+// 🟢 NEW FAST WAY (Fire-and-Forget)
+const transcriptionServiceUrl = "http://localhost:4002/transcribe"; 
 
-        try {
-          // Adjust URL if your service is on a different host
-          const transcriptionServiceUrl = "http://localhost:4002/transcribe"; 
-          
-          console.log("Triggering Transcription Service...");
-          await axios.post(transcriptionServiceUrl, {
-            meetingId: meeting._id,
-            projectId: meeting.projectId,
-            recordingUrl: publicR2Url,
-            filename: fileName
-          });
-          
-        } catch (transcribeError) {
-          console.error("⚠️ Failed to trigger transcription:", transcribeError.message);
-          // We assume the service might be down, but the recording is safe.
-        }
+console.log("🚀 Triggering Transcription Service (Fire-and-Forget)...");
+
+// 1. No "await" keyword. We send it and immediately run the next line.
+// 2. Timeout of 1000ms ensures we don't hang if the port is weird.
+axios.post(transcriptionServiceUrl, {
+  meetingId: meeting._id,
+  projectId: meeting.projectId,
+  recordingUrl: publicR2Url,
+  filename: fileName
+}, { timeout: 2000 }) 
+.then(() => console.log("✅ Transcription Service acknowledge receipt."))
+.catch((err) => {
+  // We ignore timeouts because that means the request was sent!
+  if (err.code === 'ECONNABORTED') {
+      console.log("✅ Trigger sent (Background processing started)");
+  } else {
+      console.error("⚠️ Trigger Warning:", err.message);
+  }
+});
       }
     }
   } catch (error) {

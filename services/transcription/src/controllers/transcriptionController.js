@@ -4,13 +4,13 @@ import Artifact from "../models/Artifact.js";
 import mongoose from "mongoose";
 import { GoogleGenerativeAI } from "@google/generative-ai"; // 👈 Replaces OpenAI
 
-// Helper: Convert ElevenLabs JSON to plain text
+//  Convert ElevenLabs JSON to plain text
 const parseTranscriptToText = (transcriptJson) => {
     if (!transcriptJson || !transcriptJson.words) return "";
     return transcriptJson.words.map(w => w.text).join(" ");
 };
 
-// --- HELPER: Gemini Logic (Reusable) ---
+//  Gemini Logic
 async function runGeminiSummary(fullText, { title, date } = {} ) {
     if (!fullText || fullText.length < 50) return "Transcript too short to summarize.";
     
@@ -64,6 +64,7 @@ async function runGeminiSummary(fullText, { title, date } = {} ) {
 
 // 1. TRIGGER TRANSCRIPTION (Automatic - Webhook)
 export const startTranscription = async (req, res) => {
+  console.log("RAW BODY:", req.body);
   try {
     const { meetingId, projectId, recordingUrl, filename } = req.body;
     console.log(`[Transcription] Request received for: ${filename}`);

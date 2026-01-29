@@ -15,7 +15,7 @@ app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cookieParser());
 
-const allowedOrigins = ["http://localhost:3000", "https://loopy-mu.vercel.app"];
+const allowedOrigins = ["http://localhost:3000", "https://loopy-mu.vercel.app", "http://192.168.7.15:3000"];
 
 app.use(
   cors({

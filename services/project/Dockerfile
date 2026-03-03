@@ -4,5 +4,6 @@ RUN npm install -g pnpm
 COPY package.json ./
 RUN pnpm install
 COPY . .
+RUN pnpm run build
 EXPOSE 5002
-CMD ["pnpm", "run", "dev"]
+CMD ["node", "dist/index.js"]

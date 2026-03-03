@@ -1,0 +1,61 @@
+version: "3.8"
+
+services:
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./services/gateway/.env
+    networks:
+      - loopy-network
+
+  auth:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    env_file:
+      - ./services/auth/.env
+    networks:
+      - loopy-network
+
+  project:
+    build:
+      context: ./services/project
+      dockerfile: Dockerfile
+    ports:
+      - "5002:5002"
+    env_file:
+      - ./services/project/.env
+    networks:
+      - loopy-network
+
+  meeting:
+    build:
+      context: ./services/meeting
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    env_file:
+      - ./services/meeting/.env
+    networks:
+      - loopy-network
+
+  transcription:
+    build:
+      context: ./services/transcription
+      dockerfile: Dockerfile
+    ports:
+      - "4002:4002"
+    env_file:
+      - ./services/transcription/.env
+    networks:
+      - loopy-network
+
+networks:
+  loopy-network:
+    driver: bridge

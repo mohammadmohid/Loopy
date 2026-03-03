@@ -2,7 +2,9 @@
   "name": "loopy-project",
   "version": "1.0.0",
   "scripts": {
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
   },
   "packageManager": "pnpm@10.15.1",
   "dependencies": {

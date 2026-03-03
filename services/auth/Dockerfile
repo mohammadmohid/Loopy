@@ -10,7 +10,8 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+RUN pnpm run build
+
 EXPOSE 5001
 
-# We use 'tsx' directly to run the TypeScript file without a separate build step for now.
-CMD ["pnpm", "exec", "tsx", "src/index.ts"]
+CMD ["node", "dist/index.js"]

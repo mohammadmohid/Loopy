@@ -1,5 +1,5 @@
 import express from "express";
-import { createMeeting, getJoinToken, getMyMeetings, endMeeting, getMeetingById, updateMeeting } from "../controllers/meetingcontroller.js";
+import { createMeeting, getJoinToken, getMyMeetings, endMeeting, getMeetingById, updateMeeting } from "../controllers/meetingController.js";
 import { protect } from "../middleware/auth.js";
 import { handleJaaSWebhook } from "../controllers/webhookController.js";
 

@@ -1,27 +1,26 @@
 import axios from "axios";
-import FormData from "form-data";
 import Artifact from "../models/Artifact.js";
 import mongoose from "mongoose";
 import { GoogleGenerativeAI } from "@google/generative-ai"; // 👈 Replaces OpenAI
 
 //  Convert ElevenLabs JSON to plain text
 const parseTranscriptToText = (transcriptJson) => {
-    if (!transcriptJson || !transcriptJson.words) return "";
-    return transcriptJson.words.map(w => w.text).join(" ");
+  if (!transcriptJson || !transcriptJson.words) return "";
+  return transcriptJson.words.map(w => w.text).join(" ");
 };
 
 //  Gemini Logic
-async function runGeminiSummary(fullText, { title, date } = {} ) {
-    if (!fullText || fullText.length < 50) return "Transcript too short to summarize.";
-    
-    try {
-        // Initialize Gemini
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        
+async function runGeminiSummary(fullText, { title, date } = {}) {
+  if (!fullText || fullText.length < 50) return "Transcript too short to summarize.";
 
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  try {
+    // Initialize Gemini
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-        const prompt = `
+
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const prompt = `
         You are an expert professional meeting secretary. 
         Generate formal Meeting Minutes based on the transcript below.
         
@@ -51,14 +50,14 @@ async function runGeminiSummary(fullText, { title, date } = {} ) {
         ${fullText}
         `;
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        return response.text();
-        
-    } catch (error) {
-        console.error("⚠️ Gemini API Error:", error.message);
-        return "Summary generation failed. Please try again.";
-    }
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
+
+  } catch (error) {
+    console.error("⚠️ Gemini API Error:", error.message);
+    return "Summary generation failed. Please try again.";
+  }
 }
 
 
@@ -71,7 +70,7 @@ export const startTranscription = async (req, res) => {
 
     // Check if already exists to prevent duplicates
     let artifact = await Artifact.findOne({ meetingId });
-    
+
     if (artifact) {
       if (artifact.transcriptionStatus === "COMPLETED") {
         return res.status(200).json({ message: "Already completed", artifact });
@@ -96,42 +95,45 @@ export const startTranscription = async (req, res) => {
     // --- BACKGROUND PROCESS ---
     (async () => {
       try {
-        console.log(`Downloading audio stream from R2...`);
-        // A. Get File Stream from R2
+        console.log(`Downloading audio file from R2...`);
+        // A. Get File as ArrayBuffer to solve the Multipart Boundary Content-Length bug
         const fileResponse = await axios({
           method: "get",
           url: recordingUrl,
-          responseType: "stream"
+          responseType: "arraybuffer"
         });
 
-        // B. Prepare ElevenLabs Form
+        // B. Prepare Native FormData
         const form = new FormData();
-        form.append("file", fileResponse.data, { filename: "audio.mp4" });
+        const fileBlob = new Blob([fileResponse.data], { type: "video/mp4" });
+        form.append("file", fileBlob, "audio.mp4");
         form.append("model_id", "scribe_v1");
-        form.append("language_code", "en"); 
+        form.append("language_code", "en");
 
         console.log(` Sending to ElevenLabs API...`);
-        const elevenRes = await axios.post(
-          "https://api.elevenlabs.io/v1/speech-to-text",
-          form,
-          {
-            headers: {
-              ...form.getHeaders(),
-              "xi-api-key": process.env.ELEVENLABS_API_KEY
-            },
-            maxBodyLength: Infinity, 
-            maxContentLength: Infinity
-          }
-        );
+        // We use native fetch because axios + form-data in Node stream bugs out the multipart boundaries and API key 
+        const elevenRes = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+          method: "POST",
+          headers: {
+            "xi-api-key": process.env.ELEVENLABS_API_KEY,
+            // DO NOT set Content-Type manually with fetch, the browser/node native FormData will set the boundary automatically 
+          },
+          body: form,
+        });
+
+        if (!elevenRes.ok) {
+          const errText = await elevenRes.text();
+          throw new Error(`ElevenLabs Error ${elevenRes.status}: ${errText}`);
+        }
 
         // --- TRANSCRIPTION COMPLETE ---
-        const transcriptData = elevenRes.data;
+        const transcriptData = await elevenRes.json();
         console.log(`✅ Transcription Success! Generated ${transcriptData.words?.length || 0} words.`);
 
         // --- C. GENERATE SUMMARY (Gemini) ---
         console.log(`🧠 Generating Summary with Gemini...`);
         const fullText = parseTranscriptToText(transcriptData);
-        
+
         // Use the helper function
         const summaryText = await runGeminiSummary(fullText);
         console.log("✅ Summary Generated.");
@@ -163,11 +165,11 @@ export const startTranscription = async (req, res) => {
 export const getArtifact = async (req, res) => {
   try {
     const { meetingId } = req.params;
-    
+
     // Robust query: checks for String OR ObjectId match
-    const artifact = await Artifact.findOne({ 
+    const artifact = await Artifact.findOne({
       $or: [
-        { meetingId: meetingId }, 
+        { meetingId: meetingId },
         { meetingId: mongoose.isValidObjectId(meetingId) ? new mongoose.Types.ObjectId(meetingId) : null }
       ]
     });
@@ -190,9 +192,9 @@ export const generateSummary = async (req, res) => {
     console.log(`🧠 Manual Summary Trigger for: ${meetingId}`);
 
     // 1. Find the artifact
-    const artifact = await Artifact.findOne({ 
+    const artifact = await Artifact.findOne({
       $or: [
-        { meetingId: meetingId }, 
+        { meetingId: meetingId },
         { meetingId: mongoose.isValidObjectId(meetingId) ? new mongoose.Types.ObjectId(meetingId) : null }
       ]
     });
@@ -206,25 +208,25 @@ export const generateSummary = async (req, res) => {
 
     // 3. Run AI in Background
     (async () => {
-        try {
-            const fullText = parseTranscriptToText(artifact.transcriptJson);
-            const summaryText = await runGeminiSummary(fullText);
+      try {
+        const fullText = parseTranscriptToText(artifact.transcriptJson);
+        const summaryText = await runGeminiSummary(fullText);
 
-            artifact.summary = summaryText;
-            await artifact.save();
-            console.log("✅ Manual Summary Generated & Saved (Background).");
-        } catch (bgError) {
-            console.error("Background Summary Failed:", bgError);
-            artifact.summary = "Summary generation failed. Please try again.";
-            await artifact.save();
-        }
+        artifact.summary = summaryText;
+        await artifact.save();
+        console.log("✅ Manual Summary Generated & Saved (Background).");
+      } catch (bgError) {
+        console.error("Background Summary Failed:", bgError);
+        artifact.summary = "Summary generation failed. Please try again.";
+        await artifact.save();
+      }
     })();
 
   } catch (error) {
     console.error("Summary Request Error:", error);
     // Only send response if we haven't already (though we likely haven't if we are here)
     if (!res.headersSent) {
-        res.status(500).json({ message: "Failed to init summary", error: error.message });
+      res.status(500).json({ message: "Failed to init summary", error: error.message });
     }
   }
 };

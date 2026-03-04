@@ -30,13 +30,12 @@ const sanitize = (str) => str.replace(/[^a-zA-Z0-9-_]/g, "_");
 
 export const handleJaaSWebhook = async (req, res) => {
 
-  // We reply immediately so JaaS knows we received it.
+  // reply first so JaaS knows we received it.
   res.status(200).send("OK");
 
   try {
     const event = req.body;
 
-    // Safety check
     if (!event || !event.eventType) return;
 
     if (event.eventType === "RECORDING_UPLOADED" ||
@@ -140,7 +139,7 @@ export const handleJaaSWebhook = async (req, res) => {
         meeting.recordingUrl = publicR2Url;
         await meeting.save();
         console.log("Database updated.");
-        // 🟢 NEW FAST WAY (Fire-and-Forget)
+
         const transcriptionServiceUrl = `${process.env.TRANSCRIPTION_SERVICE_URL}/transcribe`;
 
         console.log("🚀 Triggering Transcription Service...");

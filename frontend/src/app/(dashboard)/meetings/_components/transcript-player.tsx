@@ -16,9 +16,9 @@ interface TranscriptPlayerProps {
   audioUrl?: string; // Kept in interface to prevent breaking parent, but unused
 }
 
-export function TranscriptPlayer({ transcript }: TranscriptPlayerProps) {
-  
-  // 1. Grouping Algorithm (Kept this so it looks structured)
+export function qTranscriptPlayer({ transcript }: TranscriptPlayerProps) {
+
+  // 1. Grouping Algorithm
   const segments = useMemo(() => {
     const grouped: { speaker: string; words: Word[] }[] = [];
     let currentSegment: { speaker: string; words: Word[] } | null = null;
@@ -42,7 +42,7 @@ export function TranscriptPlayer({ transcript }: TranscriptPlayerProps) {
 
   return (
     <div className="flex flex-col h-full bg-white rounded-xl border border-neutral-200 overflow-hidden shadow-sm">
-      
+
       {/* ❌ REMOVED: Audio Controls, Play Button, Scrubber, Time Display 
           ❌ REMOVED: Hidden <audio> element
       */}
@@ -52,7 +52,7 @@ export function TranscriptPlayer({ transcript }: TranscriptPlayerProps) {
         <div className="max-w-3xl mx-auto space-y-8 pb-20">
           {segments.map((segment, sIndex) => (
             <div key={sIndex} className="flex gap-6 group">
-              
+
               {/* Speaker Avatar (Left Side) */}
               <div className="w-24 flex-shrink-0 pt-1">
                 <div className="h-8 w-8 rounded-full bg-neutral-200 flex items-center justify-center text-xs font-bold text-neutral-600 mb-2 border border-white shadow-sm">
@@ -77,7 +77,7 @@ export function TranscriptPlayer({ transcript }: TranscriptPlayerProps) {
                         className={cn(
                           "inline-block px-0.5 py-0.5", // Removed cursor-pointer & hover effects
                           isEvent &&
-                            "text-neutral-400 italic text-sm border border-neutral-100 px-1 rounded-md mx-1"
+                          "text-neutral-400 italic text-sm border border-neutral-100 px-1 rounded-md mx-1"
                         )}
                       >
                         {isEvent ? `[${word.text}]` : word.text}{" "}

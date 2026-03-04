@@ -35,23 +35,23 @@ export const handleJaaSWebhook = async (req, res) => {
 
   try {
     const event = req.body;
-    
+
     // Safety check
     if (!event || !event.eventType) return;
 
-    if (event.eventType === "RECORDING_UPLOADED" || 
-        event.eventType === "CERTIFIED_REC_UPLOADED") {
-      
+    if (event.eventType === "RECORDING_UPLOADED" ||
+      event.eventType === "CERTIFIED_REC_UPLOADED") {
+
       console.log(`📥 Processing Background Upload: ${event.eventType}`);
-      
+
       const { data } = event;
       const downloadLink = data.preAuthenticatedLink;
 
       // 1. PARSE ROOM NAME (Position Based)
       // Expected Format: "Loopy-<ProjectID>-<MeetingID>-<SessionUUID>"
-    let jaasRoomName = "";
+      let jaasRoomName = "";
       if (event.fqn) {
-        jaasRoomName = event.fqn.split("/")[1]; 
+        jaasRoomName = event.fqn.split("/")[1];
       }
 
       console.log(`🔎 Analyzing Room String: ${jaasRoomName}`);
@@ -64,27 +64,27 @@ export const handleJaaSWebhook = async (req, res) => {
       const isDirectId = /^[0-9a-fA-F]{24}$/.test(jaasRoomName);
 
       if (isDirectId) {
-          // CASE A: Room Name IS the Meeting ID
-          meetingId = jaasRoomName;
-          console.log(`🧩 Direct ID Match: ${meetingId}`);
+        // CASE A: Room Name IS the Meeting ID
+        meetingId = jaasRoomName;
+        console.log(`🧩 Direct ID Match: ${meetingId}`);
       } else {
-          // CASE B: Room Name is "Loopy-ProjectID-MeetingID"
-          const parts = jaasRoomName.split("-");
-          if (parts.length >= 3) {
-              projectId = parts[1]; 
-              meetingId = parts[2]; 
-              console.log(`🧩 Parsed Long Format -> Project: ${projectId} | Meeting: ${meetingId}`);
-          }
+        // CASE B: Room Name is "Loopy-ProjectID-MeetingID"
+        const parts = jaasRoomName.split("-");
+        if (parts.length >= 3) {
+          projectId = parts[1];
+          meetingId = parts[2];
+          console.log(`🧩 Parsed Long Format -> Project: ${projectId} | Meeting: ${meetingId}`);
+        }
       }
 
       // 3. DATABASE LOOKUP
       let meeting = null;
       if (meetingId) {
-          try {
-             meeting = await Meeting.findById(meetingId);
-          } catch (e) {
-             console.log("⚠️ Parsed Meeting ID was not a valid Mongo ID");
-          }
+        try {
+          meeting = await Meeting.findById(meetingId);
+        } catch (e) {
+          console.log("⚠️ Parsed Meeting ID was not a valid Mongo ID");
+        }
       }
 
       // 3. DETERMINE FOLDERS
@@ -92,21 +92,21 @@ export const handleJaaSWebhook = async (req, res) => {
       let fileName = "Untitled";
 
       if (meeting) {
-          // Success! We found the exact doc.
-          folderName = sanitize(meeting.projectName || "Unknown_Project");
-          fileName = sanitize(meeting.title || "Untitled_Meeting");
-          console.log(` DATABASE MATCH: Saving to "${folderName}/${fileName}"`);
-      } 
+        // Success! We found the exact doc.
+        folderName = sanitize(meeting.projectName || "Unknown_Project");
+        fileName = sanitize(meeting.title || "Untitled_Meeting");
+        console.log(` DATABASE MATCH: Saving to "${folderName}/${fileName}"`);
+      }
       else if (projectId) {
-          // Fallback: If DB lookup fails, use the Project ID from the URL!
-          folderName = `Project_${projectId}`;
-          fileName = `Meeting_${meetingId || "Unknown"}`;
-          console.log(` DB Lookup failed. Using IDs from URL for folder name.`);
+        // Fallback: If DB lookup fails, use the Project ID from the URL!
+        folderName = `Project_${projectId}`;
+        fileName = `Meeting_${meetingId || "Unknown"}`;
+        console.log(` DB Lookup failed. Using IDs from URL for folder name.`);
       }
 
       if (!downloadLink) {
         console.log(" No download link. Stopping.");
-        return; 
+        return;
       }
 
       // 4. UPLOAD LOGIC
@@ -134,34 +134,33 @@ export const handleJaaSWebhook = async (req, res) => {
       console.log(`Bridge Complete: Uploaded to "${r2Key}"`);
 
       // 5. UPDATE DB
-      const publicR2Url =  `${process.env.R2_PUBLIC_DOMAIN}/${r2Key}`;                         //`${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET_NAME}/${r2Key}`;
-      
+      const publicR2Url = `${process.env.R2_PUBLIC_DOMAIN}/${r2Key}`;                         //`${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET_NAME}/${r2Key}`;
+
       if (meeting) {
         meeting.recordingUrl = publicR2Url;
         await meeting.save();
         console.log("Database updated.");
-// 🟢 NEW FAST WAY (Fire-and-Forget)
-const transcriptionServiceUrl = "http://localhost:4002/transcribe"; 
+        // 🟢 NEW FAST WAY (Fire-and-Forget)
+        const transcriptionServiceUrl = `${process.env.TRANSCRIPTION_SERVICE_URL}/transcribe`;
 
-console.log("🚀 Triggering Transcription Service (Fire-and-Forget)...");
+        console.log("🚀 Triggering Transcription Service...");
 
-// 1. No "await" keyword. We send it and immediately run the next line.
-// 2. Timeout of 1000ms ensures we don't hang if the port is weird.
-axios.post(transcriptionServiceUrl, {
-  meetingId: meeting._id,
-  projectId: meeting.projectId,
-  recordingUrl: publicR2Url,
-  filename: fileName
-}, { timeout: 2000 }) 
-.then(() => console.log("✅ Transcription Service acknowledge receipt."))
-.catch((err) => {
-  // We ignore timeouts because that means the request was sent!
-  if (err.code === 'ECONNABORTED') {
-      console.log("✅ Trigger sent (Background processing started)");
-  } else {
-      console.error("⚠️ Trigger Warning:", err.message);
-  }
-});
+        // 2. Timeout of 1000ms ensures we don't hang if the port is weird.
+        axios.post(transcriptionServiceUrl, {
+          meetingId: meeting._id,
+          projectId: meeting.projectId,
+          recordingUrl: publicR2Url,
+          filename: fileName
+        }, { timeout: 2000 })
+          .then(() => console.log("✅ Transcription Service acknowledge receipt."))
+          .catch((err) => {
+            // We ignore timeouts because that means the request was sent!
+            if (err.code === 'ECONNABORTED') {
+              console.log("✅ Trigger sent (Background processing started)");
+            } else {
+              console.error("⚠️ Trigger Warning:", err.message);
+            }
+          });
       }
     }
   } catch (error) {

@@ -1,7 +1,6 @@
 import axios from "axios";
 import Artifact from "../models/Artifact.js";
 import mongoose from "mongoose";
-import { GoogleGenerativeAI } from "@google/generative-ai"; // 👈 Replaces OpenAI
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
 const DEEPGRAM_API_KEY = '42241804822934221c93299c1ede5ad763c5af6b';
@@ -13,53 +12,66 @@ const parseTranscriptToText = (transcriptJson) => {
   return transcriptJson.words.map(w => w.text).join(" ");
 };
 
-//  Gemini Logic
+//  OpenRouter Summary Logic (replaces Gemini)
 async function runGeminiSummary(fullText, { title, date } = {}) {
   if (!fullText || fullText.length < 50) return "Transcript too short to summarize.";
 
   try {
-    // Initialize Gemini
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const prompt = `You are an expert professional meeting secretary. 
+Generate formal Meeting Minutes based on the transcript below.
 
+Metadata provided:
+- Meeting Title: ${title || "Untitled Meeting"}
+- Date: ${date || new Date().toLocaleString()}
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+Please strictly format the output using the following Markdown structure:
 
-    const prompt = `
-        You are an expert professional meeting secretary. 
-        Generate formal Meeting Minutes based on the transcript below.
-        
-        Metadata provided:
-        - Meeting Title: ${title || "Untitled Meeting"}
-        - Date: ${date || new Date().toLocaleString()}
+ ${title || "Meeting Minutes"}
 
-        Please strictly format the output using the following Markdown structure:
+Date and Time: ${date || "Not specified"}
 
-         ${title || "Meeting Minutes"}
-        
-        Date and Time: ${date || "Not specified"}
-        
-        Participants: - [List participants identified from speech or context. If unknown, write "Unspecified"]
+Participants: - [List participants identified from speech or context. If unknown, write "Unspecified"]
 
-         Agenda
-        - [Infer the main agenda items discussed]
+ Agenda
+- [Infer the main agenda items discussed]
 
-         Meeting Minutes / Key Takeaways
-        - [Bulleted list of key discussion points and decisions]
+ Meeting Minutes / Key Takeaways
+- [Bulleted list of key discussion points and decisions]
 
-         Action Items
-        - [ ] [Task 1] (Assignee)
-        - [ ] [Task 2] (Assignee)
+ Action Items
+- [ ] [Task 1] (Assignee)
+- [ ] [Task 2] (Assignee)
 
-        TRANSCRIPT:
-        ${fullText}
-        `;
+TRANSCRIPT:
+${fullText}`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENROUTER_API}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "z-ai/glm-4.5-air:free",
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`OpenRouter Error ${response.status}: ${errText}`);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || "Summary generation returned empty.";
 
   } catch (error) {
-    console.error("⚠️ Gemini API Error:", error.message);
+    console.error("⚠️ OpenRouter API Error:", error.message);
     return "Summary generation failed. Please try again.";
   }
 }

@@ -16,7 +16,7 @@ interface TranscriptPlayerProps {
   audioUrl?: string; // Kept in interface to prevent breaking parent, but unused
 }
 
-export function qTranscriptPlayer({ transcript }: TranscriptPlayerProps) {
+export function TranscriptPlayer({ transcript }: TranscriptPlayerProps) {
 
   // 1. Grouping Algorithm
   const segments = useMemo(() => {

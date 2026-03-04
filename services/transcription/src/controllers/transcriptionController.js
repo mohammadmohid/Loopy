@@ -2,9 +2,13 @@ import axios from "axios";
 import Artifact from "../models/Artifact.js";
 import mongoose from "mongoose";
 import { GoogleGenerativeAI } from "@google/generative-ai"; // 👈 Replaces OpenAI
+import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
-//  Convert ElevenLabs JSON to plain text
+const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || '42241804822934221c93299c1ede5ad763c5af6b';
+
+//  Convert ElevenLabs or Deepgram JSON to plain text
 const parseTranscriptToText = (transcriptJson) => {
+  if (transcriptJson && transcriptJson.deepgram) return transcriptJson.text || "";
   if (!transcriptJson || !transcriptJson.words) return "";
   return transcriptJson.words.map(w => w.text).join(" ");
 };
@@ -92,7 +96,9 @@ export const startTranscription = async (req, res) => {
     // Respond fast so we don't block the caller
     res.status(200).json({ message: "Transcription started", artifactId: artifact._id });
 
-    // --- BACKGROUND PROCESS ---
+    // --- BACKGROUND PROCESS (DEEPGRAM) ---
+    /*
+    // --- OLD ELEVENLABS BACKGROUND PROCESS ---
     (async () => {
       try {
         console.log(`Downloading audio file from R2...`);
@@ -148,6 +154,96 @@ export const startTranscription = async (req, res) => {
 
       } catch (err) {
         console.error(`Pipeline Failed:`, err.response?.data || err.message);
+        artifact.transcriptionStatus = "FAILED";
+        artifact.error = err.message;
+        await artifact.save();
+      }
+    })();
+    */
+
+    (async () => {
+      try {
+        const deepgram = createClient(DEEPGRAM_API_KEY);
+
+        const connection = deepgram.listen.live({
+          model: 'nova-3',
+          language: 'en',
+        });
+
+        let fullTranscript = "";
+        let isClosed = false;
+
+        connection.on(LiveTranscriptionEvents.Open, async () => {
+          console.log(`Transcribing ${recordingUrl}...`);
+
+          const response = await fetch(recordingUrl, { redirect: 'follow' });
+          const reader = response.body.getReader();
+
+          const pump = async () => {
+            const { done, value } = await reader.read();
+            if (done) {
+              connection.finish();
+              return;
+            }
+            connection.send(value);
+            pump();
+          };
+          pump();
+        });
+
+        connection.on(LiveTranscriptionEvents.Transcript, (data) => {
+          if (data.channel?.alternatives?.[0]) {
+            const transcript = data.channel.alternatives[0].transcript;
+            if (transcript) {
+              fullTranscript += transcript + " ";
+              console.log(transcript);
+            }
+          }
+        });
+
+        connection.on(LiveTranscriptionEvents.SpeechStarted, (data) => {
+          // Handle speech started event
+        });
+
+        connection.on(LiveTranscriptionEvents.UtteranceEnd, (data) => {
+          // Handle utterance end event
+        });
+
+        connection.on(LiveTranscriptionEvents.Close, async () => {
+          console.log('Connection closed.');
+          if (isClosed) return;
+          isClosed = true;
+
+          try {
+            console.log(`🧠 Generating Summary with Gemini...`);
+            const summaryText = await runGeminiSummary(fullTranscript);
+            console.log("✅ Summary Generated.");
+
+            const transcriptData = { deepgram: true, text: fullTranscript.trim() };
+
+            artifact.transcriptionStatus = "COMPLETED";
+            artifact.transcriptJson = transcriptData;
+            artifact.summary = summaryText;
+            await artifact.save();
+
+            console.log("💾 Database Updated Successfully.");
+          } catch (err) {
+            artifact.transcriptionStatus = "FAILED";
+            artifact.error = err.message;
+            await artifact.save();
+          }
+        });
+
+        connection.on(LiveTranscriptionEvents.Error, async (err) => {
+          console.error(err);
+          if (isClosed) return;
+          isClosed = true;
+          artifact.transcriptionStatus = "FAILED";
+          artifact.error = err.message || "Deepgram Error";
+          await artifact.save();
+        });
+      } catch (err) {
+        console.error(`Pipeline setup failed:`, err);
         artifact.transcriptionStatus = "FAILED";
         artifact.error = err.message;
         await artifact.save();

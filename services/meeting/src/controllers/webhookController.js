@@ -130,7 +130,7 @@ export const handleJaaSWebhook = async (req, res) => {
         },
       });
 
-      await upload.done();
+      await upload.done()
       console.log(`Bridge Complete: Uploaded to "${r2Key}"`);
 
       // 5. UPDATE DB

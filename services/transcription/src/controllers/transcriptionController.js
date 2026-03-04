@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 import { GoogleGenerativeAI } from "@google/generative-ai"; // 👈 Replaces OpenAI
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
-const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || '42241804822934221c93299c1ede5ad763c5af6b';
+const DEEPGRAM_API_KEY = '42241804822934221c93299c1ede5ad763c5af6b';
 
 //  Convert ElevenLabs or Deepgram JSON to plain text
 const parseTranscriptToText = (transcriptJson) => {

@@ -144,7 +144,7 @@ export const handleJaaSWebhook = async (req, res) => {
 
         console.log("🚀 Triggering Transcription Service...");
 
-        // 2. Timeout of 1000ms ensures we don't hang if the port is weird.
+        // 2. Timeout of 1000ms ensures we don't hang.
         axios.post(transcriptionServiceUrl, {
           meetingId: meeting._id,
           projectId: meeting.projectId,

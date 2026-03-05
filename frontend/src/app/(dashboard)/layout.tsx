@@ -6,6 +6,7 @@ import { Suspense, useCallback, useState, useEffect } from "react";
 import { tinykeys } from "tinykeys";
 import { Sidebar } from "./_components/sidebar";
 import { Header } from "./_components/header";
+import { ActiveMeetingBanner } from "./_components/active-meeting-banner";
 import { SearchDialog } from "./_components/search-dialog";
 import { useAuth } from "@/lib/auth-provider";
 import { Loader2 } from "lucide-react";
@@ -58,6 +59,7 @@ export default function DashboardLayout({
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header onMenuClick={toggleSidebar} onOpenSearch={openSearch} />
+          <ActiveMeetingBanner />
           <main className="flex-1 overflow-auto p-6">{children}</main>
         </div>
       </div>

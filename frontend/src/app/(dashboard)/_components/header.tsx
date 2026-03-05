@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth-provider";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/api";
 
 export function Header({
   onMenuClick,
@@ -25,6 +26,7 @@ export function Header({
   const { user, logout } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [upcomingCount, setUpcomingCount] = useState(0);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -34,6 +36,20 @@ export function Header({
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Fetch scheduled meetings count
+  useEffect(() => {
+    const fetchUpcomingCount = async () => {
+      try {
+        const meetings = await apiRequest<any[]>("/meetings");
+        const scheduled = meetings.filter(m => m.status === "scheduled");
+        setUpcomingCount(scheduled.length);
+      } catch (error) {
+        console.error("Failed to fetch meetings for header count");
+      }
+    };
+    fetchUpcomingCount();
   }, []);
 
   const getInitials = () => {
@@ -90,15 +106,27 @@ export function Header({
 
       {/* Right: Actions & Profile */}
       <div className="flex items-center gap-3">
+
+        {/* Upcoming Meetings Pill */}
+        {upcomingCount > 0 && (
+          <Link href="/meetings/upcoming" className="hidden sm:block">
+            <Button variant="outline" className="h-9 px-3 border border-neutral-200 bg-gradient-to-r from-white to-[#fdfafb] hover:bg-neutral-50 text-neutral-700 font-medium text-sm flex items-center gap-2 rounded-lg shadow-sm">
+              <span className="bg-[#cc2233] text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold">
+                {upcomingCount}
+              </span>
+              Upcoming Meeting{upcomingCount !== 1 ? 's' : ''}
+            </Button>
+          </Link>
+        )}
+
         {/* Capture/Create Button */}
         <div className="hidden sm:flex items-center">
-          <Button className="rounded-r-none gap-2 h-9 px-3">
+          <Button className="rounded-r-none gap-2 h-9 px-3 bg-[#cc2233] hover:bg-[#b01d2c] text-white">
             <Video className="w-4 h-4" />
             Capture
           </Button>
           <Button
-            variant="outline"
-            className="rounded-l-none border-l-0 h-9 px-2 bg-primary/5 hover:bg-primary/10 border-primary text-primary"
+            className="rounded-l-none border-l border-[#b01d2c] h-9 px-2 bg-[#cc2233] hover:bg-[#b01d2c] text-white rounded-r-md"
           >
             <ChevronDown className="w-4 h-4" />
           </Button>

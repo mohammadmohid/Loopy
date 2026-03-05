@@ -27,12 +27,13 @@ interface User {
   lastName: string;
 }
 
-interface HostMeetingDialogProps {
+interface ScheduleMeetingDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onScheduleComplete?: () => void;
 }
 
-export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
+export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: ScheduleMeetingDialogProps) {
   const router = useRouter();
 
   // Data State
@@ -43,7 +44,8 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
   // Form State
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [title, setTitle] = useState("");
-  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]); // User IDs
+  const [date, setDate] = useState(""); // YYYY-MM-DD
+  const [time, setTime] = useState(""); // HH:mm
   const [isCreating, setIsCreating] = useState(false);
 
   // Dropdown State
@@ -87,26 +89,23 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
 
       // Reset form
       setTitle("");
-      setSelectedParticipants([]);
+      setDate("");
+      setTime("");
     }
   }, [isOpen]);
 
-  const toggleParticipant = (userId: string) => {
-    setSelectedParticipants((prev) =>
-      prev.includes(userId)
-        ? prev.filter((id) => id !== userId)
-        : [...prev, userId]
-    );
-  };
-
   const handleStartMeeting = async () => {
-    if (!selectedProjectId || !title) return;
+    if (!selectedProjectId || !title || !date || !time) return;
 
     try {
       setIsCreating(true);
 
+      // Combine Date and Time into an ISO timestamp string
+      // E.g., Date: "2025-10-25", Time: "14:30" => "2025-10-25T14:30:00.000Z"
+      const dateTimeString = `${date}T${time}:00`;
+      const scheduledAt = new Date(dateTimeString).toISOString();
+
       // 1. Get current user profile (for hostName)
-      // We fetch this so we can tell invited users exactly who is hosting
       const userRes = await apiRequest<{ user: { profile: { firstName: string; lastName: string } } }>("/auth/me");
       const hostName = `${userRes.user.profile.firstName} ${userRes.user.profile.lastName}`;
 
@@ -114,7 +113,7 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
       const projectName = selectedProject ? selectedProject.name : "Unknown Project";
 
       // 2. Call Meeting Service
-      const response = await apiRequest<{ _id: string, roomName: string }>(
+      await apiRequest<{ _id: string, roomName: string }>(
         "/meetings",
         {
           method: "POST",
@@ -122,19 +121,21 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
             projectId: selectedProjectId,
             projectName: projectName,
             title: title,
-            // Send IDs directly (Backend now expects array of User IDs)
-            participants: selectedParticipants,
+            scheduledAt, // Pass scheduled date to backend!
+            participants: [], // No participants at scheduling time from this UI
             hostName: hostName,
           },
         }
       );
 
-      // 3. Redirect
-      router.push(`/meetings/live/${response.roomName}?projectId=${selectedProjectId}`);
+      // 3. Close & Refresh
       onClose();
+      if (onScheduleComplete) {
+        onScheduleComplete();
+      }
     } catch (error) {
-      console.error("Failed to start meeting:", error);
-      alert("Failed to create meeting room. Please try again.");
+      console.error("Failed to schedule meeting:", error);
+      alert("Failed to schedule meeting. Please try again.");
     } finally {
       setIsCreating(false);
     }
@@ -149,8 +150,7 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-neutral-900 flex items-center gap-2">
-            <Video className="w-5 h-5 text-primary" />
-            Host New Meeting
+            Schedule New Meeting
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-neutral-100 rounded-lg">
             <X className="w-5 h-5 text-neutral-500" />
@@ -188,63 +188,30 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
             />
           </div>
 
-          {/* Participants Dropdown */}
-          <div className="space-y-1.5 relative" ref={dropdownRef}>
-            <label className="text-sm font-medium text-neutral-700 flex items-center justify-between">
-              <span>Participants</span>
-              <span className="text-xs font-normal text-neutral-400">
-                {selectedParticipants.length} selected
-              </span>
-            </label>
-
-            <div
-              className="w-full p-2.5 border border-neutral-200 rounded-lg text-sm bg-white focus-within:ring-2 focus-within:ring-primary/20 flex items-center justify-between cursor-pointer"
-              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            >
-              <div className="flex items-center gap-2 text-neutral-500 overflow-hidden">
-                <Users className="w-4 h-4 shrink-0" />
-                <span className="truncate">
-                  {selectedParticipants.length === 0
-                    ? "Select team members..."
-                    : `${selectedParticipants.length} user(s) selected`}
-                </span>
+          {/* Date and Time Pickers (Horizontally aligned) */}
+          <div className="space-y-1.5 pt-2">
+            <label className="text-sm font-medium text-neutral-700">When will meeting be scheduled?</label>
+            <div className="flex gap-4">
+              {/* Date Input */}
+              <div className="relative flex-1">
+                <input
+                  type="date"
+                  className="w-full pl-3 pr-3 py-2.5 border border-neutral-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary/20 text-neutral-600 appearance-none bg-white"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                />
               </div>
-              <ChevronsUpDown className="w-4 h-4 text-neutral-400 shrink-0" />
+
+              {/* Time Input */}
+              <div className="relative flex-1">
+                <input
+                  type="time"
+                  className="w-full pl-3 pr-3 py-2.5 border border-neutral-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary/20 text-neutral-600 appearance-none bg-white font-mono"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                />
+              </div>
             </div>
-
-            {/* Dropdown Content */}
-            {isDropdownOpen && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-neutral-200 rounded-lg shadow-lg z-50 overflow-hidden">
-                <Command>
-                  <CommandInput placeholder="Search users..." />
-                  <CommandList>
-                    <CommandEmpty>No users found.</CommandEmpty>
-                    <CommandGroup className="max-h-48 overflow-y-auto">
-                      {users.map((user) => (
-                        <CommandItem
-                          key={user.id}
-                          onSelect={() => toggleParticipant(user.id)}
-                          className="cursor-pointer"
-                        >
-                          <div className={cn(
-                            "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                            selectedParticipants.includes(user.id)
-                              ? "bg-primary text-primary-foreground"
-                              : "opacity-50 [&_svg]:invisible"
-                          )}>
-                            <Check className={cn("h-4 w-4 text-white")} />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{user.firstName} {user.lastName}</span>
-                            <span className="text-xs text-neutral-400">{user.email}</span>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </div>
-            )}
           </div>
         </div>
 
@@ -255,16 +222,16 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
           </Button>
           <Button
             onClick={handleStartMeeting}
-            disabled={isCreating || !title || !selectedProjectId}
+            disabled={isCreating || !title || !selectedProjectId || !date || !time}
             className="bg-primary text-white"
           >
             {isCreating ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Creating Room...
+                Scheduling...
               </>
             ) : (
-              "Start Meeting"
+              "Schedule Meeting"
             )}
           </Button>
         </div>

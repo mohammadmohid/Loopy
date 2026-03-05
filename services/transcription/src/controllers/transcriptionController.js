@@ -3,7 +3,6 @@ import Artifact from "../models/Artifact.js";
 import mongoose from "mongoose";
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
-
 //  Convert ElevenLabs or Deepgram JSON to plain text
 const parseTranscriptToText = (transcriptJson) => {
   if (transcriptJson && transcriptJson.deepgram) return transcriptJson.text || "";

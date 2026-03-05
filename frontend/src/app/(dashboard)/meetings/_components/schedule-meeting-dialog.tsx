@@ -46,6 +46,7 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(""); // YYYY-MM-DD
   const [time, setTime] = useState(""); // HH:mm
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
 
   // Dropdown State
@@ -91,6 +92,7 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
       setTitle("");
       setDate("");
       setTime("");
+      setSelectedUsers([]);
     }
   }, [isOpen]);
 
@@ -122,7 +124,7 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
             projectName: projectName,
             title: title,
             scheduledAt, // Pass scheduled date to backend!
-            participants: [], // No participants at scheduling time from this UI
+            participants: selectedUsers, // Selected participants from UI
             hostName: hostName,
           },
         }
@@ -140,6 +142,15 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
       setIsCreating(false);
     }
   };
+
+  const toggleUser = (userId: string) => {
+    setSelectedUsers((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
 
   if (!isOpen) return null;
 
@@ -211,6 +222,66 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
                   onChange={(e) => setTime(e.target.value)}
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Add Participants */}
+          <div className="space-y-1.5 z-50">
+            <label className="text-sm font-medium text-neutral-700">Add Participants</label>
+            <div className="relative" ref={dropdownRef}>
+              <div
+                className="w-full flex items-center justify-between p-2.5 border border-neutral-200 rounded-lg bg-white cursor-pointer hover:border-neutral-300 transition-colors"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              >
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-neutral-400" />
+                  <span className={selectedUsers.length ? "text-neutral-900 text-sm" : "text-neutral-400 text-sm"}>
+                    {selectedUsers.length > 0
+                      ? `${selectedUsers.length} user${selectedUsers.length > 1 ? "s" : ""} selected`
+                      : "Search and select users..."}
+                  </span>
+                </div>
+                <ChevronsUpDown className="w-4 h-4 text-neutral-400" />
+              </div>
+
+              {isDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-neutral-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                  <Command>
+                    <CommandInput placeholder="Search users by name or email..." className="border-none focus:ring-0" />
+                    <CommandList className="max-h-[200px] overflow-y-auto p-1">
+                      <CommandEmpty className="py-6 text-center text-sm text-neutral-500">
+                        {loadingData ? "Loading users..." : "No users found."}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {users.map((user) => {
+                          const isSelected = selectedUsers.includes(user.id);
+                          return (
+                            <CommandItem
+                              key={user.id}
+                              value={`${user.firstName} ${user.lastName} ${user.email}`}
+                              onSelect={() => toggleUser(user.id)}
+                              className="flex items-center gap-3 px-3 py-2 cursor-pointer rounded-md hover:bg-neutral-50 aria-selected:bg-neutral-50"
+                            >
+                              <div className={cn(
+                                "flex items-center justify-center w-4 h-4 rounded border",
+                                isSelected ? "bg-primary border-primary text-white" : "border-neutral-300"
+                              )}>
+                                {isSelected && <Check className="w-3 h-3" />}
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium text-neutral-900">
+                                  {user.firstName} {user.lastName}
+                                </span>
+                                <span className="text-xs text-neutral-500">{user.email}</span>
+                              </div>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </div>
+              )}
             </div>
           </div>
         </div>

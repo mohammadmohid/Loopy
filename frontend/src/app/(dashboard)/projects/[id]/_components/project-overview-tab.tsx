@@ -20,6 +20,7 @@ interface ProjectOverviewTabProps {
   onTaskClick: (task: Task) => void;
   onActivityClick: (activity: Activity) => void;
   canEdit: boolean;
+  meetings?: any[];
 }
 
 export function ProjectOverviewTab({
@@ -27,6 +28,7 @@ export function ProjectOverviewTab({
   tasks,
   milestones,
   activities,
+  meetings = [],
   onTaskClick,
   onActivityClick,
   canEdit,
@@ -88,7 +90,7 @@ export function ProjectOverviewTab({
         })}
       </div>
 
-      <ProjectCalendar tasks={tasks} milestones={milestones} />
+      <ProjectCalendar tasks={tasks} milestones={milestones} meetings={meetings} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
@@ -110,11 +112,10 @@ export function ProjectOverviewTab({
                   onClick={() => onActivityClick(activity)}
                 >
                   <div
-                    className={`w-2 h-2 rounded-full mt-2 shrink-0 ${
-                      activity.action === "completed"
+                    className={`w-2 h-2 rounded-full mt-2 shrink-0 ${activity.action === "completed"
                         ? "bg-emerald-500"
                         : "bg-blue-500"
-                    }`}
+                      }`}
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-neutral-700">

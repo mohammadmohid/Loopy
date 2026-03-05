@@ -48,16 +48,23 @@ export default function ProjectDetailPage() {
   const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [meetings, setMeetings] = useState<any[]>([]); // New state for meetings
 
   const fetchData = useCallback(async () => {
     try {
-      const [projectData, tasksData, milestonesData, activityData] =
-        await Promise.all([
-          apiRequest<any>(`/projects?id=${id}`),
-          apiRequest<any[]>(`/projects/${id}/tasks`),
-          apiRequest<any[]>(`/projects/${id}/milestones`),
-          apiRequest<Activity[]>(`/projects/${id}/activity`),
-        ]);
+      const results = await Promise.allSettled([
+        apiRequest<any>(`/projects?id=${id}`),
+        apiRequest<any[]>(`/projects/${id}/tasks`),
+        apiRequest<any[]>(`/projects/${id}/milestones`),
+        apiRequest<Activity[]>(`/projects/${id}/activity`),
+        apiRequest<any[]>("/meetings"),
+      ]);
+
+      const projectData = results[0].status === "fulfilled" ? results[0].value : [];
+      const tasksData = results[1].status === "fulfilled" ? results[1].value : [];
+      const milestonesData = results[2].status === "fulfilled" ? results[2].value : [];
+      const activityData = results[3].status === "fulfilled" ? results[3].value : [];
+      const allMeetings = results[4].status === "fulfilled" ? results[4].value : [];
 
       const currentProjectRaw = Array.isArray(projectData)
         ? projectData.find((p: any) => p._id === id)
@@ -86,9 +93,9 @@ export default function ProjectDetailPage() {
         boardColumns:
           currentProjectRaw.boardColumns?.length > 0
             ? currentProjectRaw.boardColumns.map((c: any) => ({
-                ...c,
-                isLocked: ["todo", "in-progress", "done"].includes(c.id),
-              }))
+              ...c,
+              isLocked: ["todo", "in-progress", "done"].includes(c.id),
+            }))
             : defaultColumns,
         owner: mapUser(currentProjectRaw.owner),
         members: currentProjectRaw.members.map((m: any) => ({
@@ -161,6 +168,12 @@ export default function ProjectDetailPage() {
       setTasks(mappedTasks);
       setMilestones(mappedMilestones);
       setActivities(activityData);
+
+      // Filter upcoming meetings related to this specific project
+      const projectMeetings = allMeetings.filter(
+        (m) => m.projectId === id && m.status === "scheduled" && m.scheduledAt
+      );
+      setMeetings(projectMeetings);
     } catch (error) {
       console.error("Error loading project:", error);
     } finally {
@@ -388,6 +401,7 @@ export default function ProjectDetailPage() {
               tasks={tasks}
               activities={activities}
               milestones={milestones}
+              meetings={meetings}
               onTaskClick={(t) => {
                 setSelectedTask(t);
                 setIsTaskPanelOpen(true);

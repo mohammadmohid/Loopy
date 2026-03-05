@@ -113,8 +113,8 @@ export function ProjectOverviewTab({
                 >
                   <div
                     className={`w-2 h-2 rounded-full mt-2 shrink-0 ${activity.action === "completed"
-                        ? "bg-emerald-500"
-                        : "bg-blue-500"
+                      ? "bg-emerald-500"
+                      : "bg-blue-500"
                       }`}
                   />
                   <div className="flex-1 min-w-0">

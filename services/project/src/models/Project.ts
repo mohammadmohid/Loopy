@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IProject extends Document {
   name: string;
   description?: string;
+  workspaceId: mongoose.Types.ObjectId;
   owner: mongoose.Types.ObjectId;
   members: { user: mongoose.Types.ObjectId; role: string }[];
   assignedTeams: { team: mongoose.Types.ObjectId; role: string }[];
@@ -18,6 +19,7 @@ const ProjectSchema: Schema = new Schema(
   {
     name: { type: String, required: true },
     description: { type: String },
+    workspaceId: { type: Schema.Types.ObjectId, required: true, index: true },
     owner: { type: Schema.Types.ObjectId, ref: "User", required: true },
 
     // Direct Member Assignment with Roles

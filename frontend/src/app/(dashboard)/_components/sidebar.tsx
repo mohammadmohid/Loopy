@@ -79,9 +79,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <nav className="flex-1 px-2 space-y-1">
         <NavItemWrapper collapsed={collapsed} label="Collapse Sidebar">
           <div
-            className={`pt-4 w-full flex justify-center ${
-              !collapsed && "justify-end"
-            }`}
+            className={`pt-4 w-full flex justify-center ${!collapsed && "justify-end"
+              }`}
           >
             <button
               onClick={onToggle}

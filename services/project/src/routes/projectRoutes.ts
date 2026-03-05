@@ -29,11 +29,11 @@ import {
 const router = express.Router();
 
 // Projects
-router.post("/", protect, authorize("ADMIN"), createProject);
-router.patch("/:id", protect, authorize("ADMIN"), updateProject);
+router.post("/", protect, authorize("ADMIN", "PROJECT_MANAGER"), createProject);
+router.patch("/:id", protect, authorize("ADMIN", "PROJECT_MANAGER"), updateProject);
 router.get("/", protect, getProjects);
-router.delete("/:id", protect, authorize("ADMIN"), deleteProject);
-router.put("/:id/assign-lead", protect, authorize("ADMIN"), assignTeamLead);
+router.delete("/:id", protect, authorize("ADMIN", "PROJECT_MANAGER"), deleteProject);
+router.put("/:id/assign-lead", protect, authorize("ADMIN", "PROJECT_MANAGER"), assignTeamLead);
 
 // Project Activity
 router.get("/:projectId/activity", protect, getProjectActivity);

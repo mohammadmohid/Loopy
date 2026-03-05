@@ -18,6 +18,10 @@ interface User {
   email: string;
   profile: UserProfile;
   globalRole: "ADMIN" | "USER";
+  isEmailConfirmed?: boolean;
+  activeWorkspace?: string;
+  workspaceName?: string;
+  workspaceRole?: "ADMIN" | "PROJECT_MANAGER" | "MEMBER";
 }
 
 interface AuthContextType {
@@ -29,7 +33,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const PUBLIC_PATHS = ["/login", "/getting-started", "/"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/getting-started",
+  "/",
+  "/verify-otp",
+  "/create-workspace",
+  "/join",
+  "/confirm-email",
+];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -42,9 +54,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { user } = await apiRequest<{ user: User }>("/auth/me");
         setUser(user);
+
+        // If user has no workspace and is not on workspace creation page, redirect
+        if (
+          user &&
+          user.isEmailConfirmed &&
+          !user.activeWorkspace &&
+          !PUBLIC_PATHS.includes(pathname)
+        ) {
+          router.push("/create-workspace");
+        }
       } catch (error) {
         console.log("No active session found");
-        console.log(error);
         setUser(null);
       } finally {
         setIsLoading(false);

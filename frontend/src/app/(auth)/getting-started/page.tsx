@@ -1,6 +1,7 @@
 "use client";
 
 import RegisterForm from "./_components/RegisterForm";
+<<<<<<< HEAD
 import { Button } from "@/components/ui/button";
 import { Building, ChevronLeft, Users } from "lucide-react";
 import { Suspense, useState } from "react";
@@ -205,6 +206,21 @@ function GettingStartedContent() {
           <RegisterForm userType={orgEmail ? "team_member" : "personal"} />
         </>
       )}
+=======
+import { Suspense } from "react";
+
+function GettingStartedContent() {
+  return (
+    <div className="space-y-8">
+      <header>
+        <h1 className="font-medium text-2xl">Create your account</h1>
+        <p className="text-neutral-600">
+          Get started with Loopy — manage projects, meetings, and team collaboration.
+        </p>
+      </header>
+
+      <RegisterForm />
+>>>>>>> 2000e39 (feat: Workspace added)
     </div>
   );
 }

@@ -61,9 +61,9 @@ export default function DashboardLayout({
           <Header onMenuClick={toggleSidebar} onOpenSearch={openSearch} />
           <ActiveMeetingBanner />
           <main className="flex-1 overflow-auto p-6">{children}</main>
-        </div>
-      </div>
+        </div >
+      </div >
       <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
-    </Suspense>
+    </Suspense >
   );
 }

@@ -36,6 +36,7 @@ export default function LoginForm() {
     setServerError(null);
 
     try {
+<<<<<<< HEAD
       // Backend returns: { success: true, user: { ... } }
       const response = await apiRequest<{ success: boolean; user: any }>(
         "/auth/login",
@@ -48,6 +49,34 @@ export default function LoginForm() {
       if (response.success && response.user) {
         login(response.user);
         router.push("/home");
+=======
+      const response = await apiRequest<{
+        success: boolean;
+        user: any;
+        needsOTP?: boolean;
+        needsWorkspace?: boolean;
+        userId?: string;
+        email?: string;
+      }>("/auth/login", {
+        method: "POST",
+        data: data,
+      });
+
+      if (response.needsOTP) {
+        router.push(
+          `/verify-otp?userId=${response.userId}&email=${encodeURIComponent(response.email || "")}`
+        );
+        return;
+      }
+
+      if (response.success && response.user) {
+        login(response.user);
+        if (response.needsWorkspace) {
+          router.push("/create-workspace");
+        } else {
+          router.push("/home");
+        }
+>>>>>>> 2000e39 (feat: Workspace added)
       } else {
         throw new Error("Invalid response from server");
       }

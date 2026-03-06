@@ -13,8 +13,8 @@ export function ActiveMeetingBanner() {
     const [elapsedTime, setElapsedTime] = useState("00:00");
 
     useEffect(() => {
-        // Hide the banner if we are on the meetings page
-        if (pathname === '/meetings') return;
+        // Hide the banner if we are on the meetings page or live meeting page
+        if (pathname === '/meetings' || pathname.startsWith('/meetings/live')) return;
 
         const fetchActiveMeetings = async () => {
             try {
@@ -56,8 +56,8 @@ export function ActiveMeetingBanner() {
         return () => clearInterval(interval);
     }, [activeMeeting]);
 
-    // Do not render if on the meetings page or if there are no active meetings
-    if (pathname === '/meetings' || !activeMeeting) {
+    // Do not render if on the meetings page, the live meeting page itself, or if there are no active meetings
+    if (pathname === '/meetings' || pathname.startsWith('/meetings/live') || !activeMeeting) {
         return null;
     }
 

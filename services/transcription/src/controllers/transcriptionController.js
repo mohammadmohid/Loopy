@@ -4,7 +4,6 @@ import mongoose from "mongoose";
 import { GoogleGenerativeAI } from "@google/generative-ai"; // 👈 Replaces OpenAI
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
-const DEEPGRAM_API_KEY = '42241804822934221c93299c1ede5ad763c5af6b';
 
 //  Convert ElevenLabs or Deepgram JSON to plain text
 const parseTranscriptToText = (transcriptJson) => {
@@ -32,23 +31,13 @@ async function runGeminiSummary(fullText, { title, date } = {}) {
         - Meeting Title: ${title || "Untitled Meeting"}
         - Date: ${date || new Date().toLocaleString()}
 
-        Please strictly format the output using the following Markdown structure:
-
-         ${title || "Meeting Minutes"}
+        Please strictly format the output as a valid JSON object matching the exact structure below. DO NOT wrap it in markdown code blocks (\`\`\`json). Return ONLY the raw JSON object.
         
-        Date and Time: ${date || "Not specified"}
-        
-        Participants: - [List participants identified from speech or context. If unknown, write "Unspecified"]
-
-         Agenda
-        - [Infer the main agenda items discussed]
-
-         Meeting Minutes / Key Takeaways
-        - [Bulleted list of key discussion points and decisions]
-
-         Action Items
-        - [ ] [Task 1] (Assignee)
-        - [ ] [Task 2] (Assignee)
+        {
+          "overview": "A short 2-3 sentence general overview of the meeting's main purpose and outcome.",
+          "agenda": ["Infer the mian agenda items discussed in the meeting"],
+          "minutes": "The full detailed meeting minutes, formatted using markdown (bullet points, bold text, etc.) detailing all key discussion points, decisions, and action items. also include asignee to the action items in the following format [Task] assigned to [Assignee]."
+        }
 
         TRANSCRIPT:
         ${fullText}
@@ -56,7 +45,14 @@ async function runGeminiSummary(fullText, { title, date } = {}) {
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    return response.text();
+    let text = response.text().trim();
+
+    // Safety cleanup in case Gemini still wraps in Markdown
+    if (text.startsWith("\`\`\`json")) {
+      text = text.replace(/^\`\`\`json/i, "").replace(/\`\`\`$/i, "").trim();
+    }
+
+    return text;
 
   } catch (error) {
     console.error("⚠️ Gemini API Error:", error.message);
@@ -163,11 +159,13 @@ export const startTranscription = async (req, res) => {
 
     (async () => {
       try {
-        const deepgram = createClient(DEEPGRAM_API_KEY);
+        const deepgram = createClient(process.env.DEEPGRAM_API_SECRET);
 
         const connection = deepgram.listen.live({
           model: 'nova-3',
           language: 'en',
+          smart_format: true,
+          diarize: true,
         });
 
         let fullTranscript = "";

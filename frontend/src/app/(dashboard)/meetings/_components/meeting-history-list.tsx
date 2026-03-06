@@ -24,7 +24,6 @@ interface MeetingHistoryListProps {
 }
 
 export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
-  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [filterProject, setFilterProject] = useState("all"); // 👈 3. New State for Filter
   const router = useRouter();
 
@@ -91,7 +90,7 @@ export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
             return (
               <div
                 key={meeting._id}
-                onClick={() => setSelectedMeeting(meeting)}
+                onClick={() => router.push(`/meetings/${meeting._id}`)}
                 className="group flex flex-col sm:flex-row sm:items-center justify-between py-5 bg-white hover:bg-neutral-50 cursor-pointer transition-colors px-4 -mx-4 rounded-lg"
               >
                 <div className="flex items-start sm:items-center gap-16 w-full max-w-2xl">
@@ -133,87 +132,6 @@ export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
         )}
       </div>
 
-      {/* --- Detail Dialog (Modal) --- */}
-      {
-        selectedMeeting && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <div
-              className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-xl relative animate-in zoom-in-95 duration-200"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => setSelectedMeeting(null)}
-                className="absolute top-4 right-4 p-2 hover:bg-neutral-100 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5 text-neutral-500" />
-              </button>
-
-              {/* Modal Header */}
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-neutral-900">{selectedMeeting.title}</h2>
-                <div className="flex items-center gap-2 text-sm text-neutral-500 mt-2">
-                  <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs font-medium">Ended</span>
-                  <span>{format(new Date(selectedMeeting.createdAt), "PPP p")}</span>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                {/* Metadata Grid */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-neutral-50 p-3 rounded-xl border border-neutral-100">
-                    <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider block mb-1">Project</span>
-                    <span className="font-medium text-sm text-neutral-900">{selectedMeeting.projectName}</span>
-                  </div>
-                  <div className="bg-neutral-50 p-3 rounded-xl border border-neutral-100">
-                    <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider block mb-1">Host</span>
-                    <span className="font-medium text-sm text-neutral-900">{selectedMeeting.hostName}</span>
-                  </div>
-                </div>
-
-                {/* Participants Section */}
-                <div>
-                  <h3 className="text-sm font-medium text-neutral-900 flex items-center gap-2 mb-2">
-                    <Users className="w-4 h-4 text-neutral-500" />
-                    Participants ({selectedMeeting.participants.length})
-                  </h3>
-                  <div className="bg-neutral-50 p-3 rounded-xl border border-neutral-100 text-sm text-neutral-600">
-                    {selectedMeeting.participants.length > 0
-                      ? "Participants list available"
-                      : "No other participants invited."}
-                  </div>
-                </div>
-
-                <div className="h-px bg-neutral-100 w-full" />
-
-                {/* Action Buttons */}
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    variant="outline"
-                    className="gap-2 h-auto py-3 border-dashed border-neutral-300 text-neutral-600 hover:text-primary hover:border-primary hover:bg-primary/5"
-                    onClick={() => {
-                      router.push(`/meetings/${selectedMeeting._id}/recording`);
-                    }}
-                  >
-                    <Play className="w-4 h-4" />
-                    <span>View Recording</span>
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    className="gap-2 h-auto py-3 border-dashed border-neutral-300 text-neutral-600 hover:text-primary hover:border-primary hover:bg-primary/5"
-                    onClick={() => {
-                      router.push(`/meetings/${selectedMeeting._id}`);
-                    }}
-                  >
-                    <FileText className="w-4 h-4" />
-                    <span>View Summary</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      }
     </div >
   );
 }

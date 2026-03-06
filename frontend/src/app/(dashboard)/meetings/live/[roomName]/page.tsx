@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { UploadDialog } from "@/components/upload-dialog";
 import { apiRequest } from "@/lib/api";
+import { useAuth } from "@/lib/auth-provider";
 
 export default function LiveMeetingPage() {
   const params = useParams();
@@ -19,35 +20,29 @@ export default function LiveMeetingPage() {
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
 
+  const { user } = useAuth();
+
   // 👇 NEW: State for User Name & Email
   const [userInfo, setUserInfo] = useState({
     displayName: "Loopy User",
     email: "user@loopy.local"
   });
 
-  // 👇 NEW: Load User Info from Local Storage on Mount
+  // 👇 NEW: Load User Info safely from AuthProvider
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedUser = localStorage.getItem("user");
-      if (storedUser) {
-        try {
-          const parsed = JSON.parse(storedUser);
-          setUserInfo({
-            displayName: parsed.name || parsed.username || parsed.email || "Loopy User",
-            email: parsed.email || "user@loopy.local"
-          });
-        } catch (e) {
-          console.error("Failed to parse user info", e);
-        }
-      }
+    if (user) {
+      setUserInfo({
+        displayName: `${user.profile?.firstName || ""} ${user.profile?.lastName || ""}`.trim() || user.email || "Loopy User",
+        email: user.email || "user@loopy.local"
+      });
     }
-  }, []);
+  }, [user]);
 
   // 1. Fetch the Jitsi Token from your Backend
   useEffect(() => {
     const fetchToken = async () => {
       if (!roomName) return;
-      
+
       try {
         setLoading(true);
         const res = await apiRequest<{ token: string }>(`/meetings/join/${roomName}`);
@@ -67,18 +62,18 @@ export default function LiveMeetingPage() {
   const handleReadyToClose = async () => {
     try {
       console.log("Ending meeting...");
-      
+
       let meetingId = null;
 
       // 🔍 SMART PARSING
       const isDirectId = /^[0-9a-fA-F]{24}$/.test(roomName);
 
       if (isDirectId) {
-        meetingId = roomName; 
+        meetingId = roomName;
       } else {
         const parts = roomName.split("-");
         if (parts.length >= 3) {
-            meetingId = parts[2];
+          meetingId = parts[2];
         }
       }
 
@@ -124,8 +119,8 @@ export default function LiveMeetingPage() {
         }}
         interfaceConfigOverwrite={{
           TOOLBAR_BUTTONS: [
-            "microphone", "camera", "closedcaptions", "desktop", 
-            "fullscreen", "fodeviceselection", "hangup", "profile", 
+            "microphone", "camera", "closedcaptions", "desktop",
+            "fullscreen", "fodeviceselection", "hangup", "profile",
             "chat", "recording", "raisehand", "videoquality", "tileview"
           ],
         }}
@@ -140,17 +135,17 @@ export default function LiveMeetingPage() {
         }}
       />
 
-      <UploadDialog 
-        isOpen={showUpload} 
+      <UploadDialog
+        isOpen={showUpload}
         onClose={() => {
-            setShowUpload(false);
-            router.push("/meetings");
+          setShowUpload(false);
+          router.push("/meetings");
         }}
         onUploadComplete={() => {
-            setShowUpload(false);
-            router.push("/meetings");
+          setShowUpload(false);
+          router.push("/meetings");
         }}
-        projectId={projectId} 
+        projectId={projectId}
       />
     </div>
   );

@@ -87,17 +87,21 @@ export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
               .substring(0, 2)
               .toUpperCase();
 
+            const isScheduled = meeting.status === "scheduled";
+
             return (
               <div
                 key={meeting._id}
-                onClick={() => router.push(`/meetings/${meeting._id}`)}
-                className="group flex flex-col sm:flex-row sm:items-center justify-between py-5 bg-white hover:bg-neutral-50 cursor-pointer transition-colors px-4 -mx-4 rounded-lg"
+                onClick={isScheduled ? undefined : () => router.push(`/meetings/${meeting._id}`)}
+                className={`group flex flex-col sm:flex-row sm:items-center justify-between py-5 bg-white transition-colors px-4 -mx-4 rounded-lg ${isScheduled ? "cursor-default" : "hover:bg-neutral-50 cursor-pointer"
+                  }`}
               >
                 <div className="flex items-start sm:items-center gap-16 w-full max-w-2xl">
 
                   {/* Column 1: Title and Host */}
                   <div className="flex flex-col gap-1.5 min-w-[200px]">
-                    <span className="font-semibold text-neutral-900 group-hover:text-primary transition-colors text-base">
+                    <span className={`font-semibold text-neutral-900 transition-colors text-base ${isScheduled ? "" : "group-hover:text-primary"
+                      }`}>
                       {meeting.title}
                     </span>
                     <div className="flex items-center gap-2 text-sm text-neutral-500">

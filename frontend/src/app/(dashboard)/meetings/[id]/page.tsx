@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Markdown from "react-markdown";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiRequest } from "@/lib/api";
@@ -42,6 +43,8 @@ interface ArtifactDetail {
   transcriptionStatus: "pending" | "processing" | "COMPLETED" | "FAILED";
   transcriptJson?: any;
   summary?: string;
+  overview?: string;
+  agenda?: string[];
   createdAt: string;
   error?: string;
 }
@@ -189,7 +192,11 @@ export default function MeetingDetailPage() {
       // 1. Trigger Backend (Returns immediately now)
       await apiRequest("/artifacts/summary", {
         method: "POST",
-        data: { meetingId: meeting?._id }
+        data: {
+          meetingId: meeting?._id,
+          meetingTitle: meeting?.title,
+          date: meeting?.createdAt
+        }
       });
 
       // 2. Clear local summary temporarily so polling waits for the NEW one
@@ -237,13 +244,22 @@ export default function MeetingDetailPage() {
     );
   }
 
-  let parsedSummary = { overview: "", agenda: [], minutes: "" };
-  if (artifact?.summary) {
+  // Retroactive support + New DB format mapping
+  let parsedSummary: { overview: string, agenda: string[], minutes: string } = {
+    overview: artifact?.overview || "",
+    agenda: artifact?.agenda || [],
+    minutes: artifact?.summary || ""
+  };
+
+  // Fallback for older database entries where 'summary' was entirely a JSON string
+  if (artifact?.summary && artifact.summary.trim().startsWith("{")) {
     try {
-      parsedSummary = JSON.parse(artifact.summary);
-      // In case it comes back as an object but missing explicit fields, handle it safely
+      const parsed = JSON.parse(artifact.summary);
+      if (parsed.overview) parsedSummary.overview = parsed.overview;
+      if (parsed.agenda) parsedSummary.agenda = parsed.agenda;
+      if (parsed.minutes) parsedSummary.minutes = parsed.minutes;
     } catch (e) {
-      parsedSummary.minutes = artifact.summary;
+      // It's just a raw text summary
     }
   }
 
@@ -429,9 +445,21 @@ export default function MeetingDetailPage() {
                 ) : (
                   <div className="prose prose-sm prose-neutral max-w-none">
                     {parsedSummary.minutes ? (
-                      <pre className="whitespace-pre-wrap font-sans leading-relaxed text-neutral-700">
-                        {parsedSummary.minutes}
-                      </pre>
+                      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 sm:p-8">
+                        <Markdown
+                          components={{
+                            h1: ({ node, ...props }) => <h1 className="text-2xl font-bold text-[#cc2233] mb-6 pb-4 border-b border-neutral-100" {...props} />,
+                            h2: ({ node, ...props }) => <h2 className="text-lg font-bold text-neutral-800 mt-8 mb-4" {...props} />,
+                            h3: ({ node, ...props }) => <h3 className="text-md font-bold text-neutral-800 mt-6 mb-3" {...props} />,
+                            p: ({ node, ...props }) => <p className="text-sm text-neutral-600 mb-4 leading-relaxed" {...props} />,
+                            ul: ({ node, ...props }) => <ul className="list-disc list-outside ml-5 space-y-2 mb-6 text-sm text-neutral-600" {...props} />,
+                            li: ({ node, ...props }) => <li className="pl-1" {...props} />,
+                            strong: ({ node, ...props }) => <strong className="font-semibold text-neutral-900" {...props} />,
+                          }}
+                        >
+                          {parsedSummary.minutes}
+                        </Markdown>
+                      </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 border border-dashed border-neutral-200 rounded-xl bg-neutral-50">
                         <Bot className="w-10 h-10 text-neutral-400" />

@@ -236,6 +236,54 @@ export default function MeetingDetailPage() {
     }
   };
 
+  // 6. Export to PDF native
+  const handleExportPDF = () => {
+    const printContent = document.getElementById("printable-minutes");
+    if (!printContent) return;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${meeting?.title || "Meeting Minutes"}</title>
+          <style>
+            body { font-family: ui-sans-serif, system-ui, sans-serif; padding: 40px; color: #333; line-height: 1.6; }
+            h1 { color: #cc2233; font-size: 24px; border-bottom: 2px solid #f0f0f0; padding-bottom: 12px; margin-bottom: 24px; }
+            h2 { color: #111; font-size: 18px; margin-top: 32px; margin-bottom: 12px; }
+            h3 { color: #333; font-size: 16px; margin-top: 24px; margin-bottom: 8px; }
+            ul { margin-left: 20px; list-style-type: disc; margin-bottom: 16px; }
+            li { margin-bottom: 6px; }
+            p { margin-bottom: 16px; }
+            strong { color: #000; font-weight: 600; }
+            
+            /* Print Specific Styles */
+            @media print {
+              @page { margin: 20mm; }
+              body { padding: 0; font-size: 12pt; }
+              h1 { font-size: 18pt; }
+              h2 { font-size: 14pt; }
+            }
+          </style>
+        </head>
+        <body>
+          ${printContent.innerHTML}
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+
+    // Small delay to ensure styles apply before print dialog opens
+    setTimeout(() => {
+      printWindow.print();
+      // Optional: printWindow.close(); // Leaving it open or closed is a choice. We'll close.
+      printWindow.close();
+    }, 250);
+  };
+
   // --- Loading State ---
   if (loading) {
     return (
@@ -477,19 +525,21 @@ export default function MeetingDetailPage() {
                             onChange={(e) => setEditedMinutes(e.target.value)}
                           />
                         ) : (
-                          <Markdown
-                            components={{
-                              h1: ({ node, ...props }) => <h1 className="text-2xl font-bold text-[#cc2233] mb-6 pb-4 border-b border-neutral-100" {...props} />,
-                              h2: ({ node, ...props }) => <h2 className="text-lg font-bold text-neutral-800 mt-8 mb-4" {...props} />,
-                              h3: ({ node, ...props }) => <h3 className="text-md font-bold text-neutral-800 mt-6 mb-3" {...props} />,
-                              p: ({ node, ...props }) => <p className="text-sm text-neutral-600 mb-4 leading-relaxed" {...props} />,
-                              ul: ({ node, ...props }) => <ul className="list-disc list-outside ml-5 space-y-2 mb-6 text-sm text-neutral-600" {...props} />,
-                              li: ({ node, ...props }) => <li className="pl-1" {...props} />,
-                              strong: ({ node, ...props }) => <strong className="font-semibold text-neutral-900" {...props} />,
-                            }}
-                          >
-                            {parsedSummary.minutes}
-                          </Markdown>
+                          <div id="printable-minutes">
+                            <Markdown
+                              components={{
+                                h1: ({ node, ...props }) => <h1 className="text-2xl font-bold text-[#cc2233] mb-6 pb-4 border-b border-neutral-100" {...props} />,
+                                h2: ({ node, ...props }) => <h2 className="text-lg font-bold text-neutral-800 mt-8 mb-4" {...props} />,
+                                h3: ({ node, ...props }) => <h3 className="text-md font-bold text-neutral-800 mt-6 mb-3" {...props} />,
+                                p: ({ node, ...props }) => <p className="text-sm text-neutral-600 mb-4 leading-relaxed" {...props} />,
+                                ul: ({ node, ...props }) => <ul className="list-disc list-outside ml-5 space-y-2 mb-6 text-sm text-neutral-600" {...props} />,
+                                li: ({ node, ...props }) => <li className="pl-1" {...props} />,
+                                strong: ({ node, ...props }) => <strong className="font-semibold text-neutral-900" {...props} />,
+                              }}
+                            >
+                              {parsedSummary.minutes}
+                            </Markdown>
+                          </div>
                         )}
 
                         {/* Edit / Approve Action Buttons */}
@@ -502,9 +552,15 @@ export default function MeetingDetailPage() {
                               </Button>
                             </>
                           ) : (
-                            <Button variant="outline" onClick={() => { setEditedMinutes(parsedSummary.minutes); setIsEditing(true); }}>
-                              Edit Minutes
-                            </Button>
+                            <>
+                              <Button variant="outline" onClick={() => { setEditedMinutes(parsedSummary.minutes); setIsEditing(true); }}>
+                                Edit Minutes
+                              </Button>
+                              <Button onClick={handleExportPDF} className="bg-neutral-900 text-white hover:bg-neutral-800">
+                                <Download className="w-4 h-4 mr-2" />
+                                Export to PDF
+                              </Button>
+                            </>
                           )}
                         </div>
                       </div>

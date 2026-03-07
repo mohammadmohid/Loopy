@@ -359,3 +359,35 @@ export const generateSummary = async (req, res) => {
     }
   }
 };
+
+// 4. UPDATE SUMMARY (Manual Edit by User)
+export const updateArtifactSummary = async (req, res) => {
+  try {
+    const { meetingId } = req.params;
+    const { minutes } = req.body; // The newly edited markdown text
+
+    if (!minutes) {
+      return res.status(400).json({ message: "Minutes content is required." });
+    }
+
+    const artifact = await Artifact.findOne({
+      $or: [
+        { meetingId: meetingId },
+        { meetingId: mongoose.isValidObjectId(meetingId) ? new mongoose.Types.ObjectId(meetingId) : null }
+      ]
+    });
+
+    if (!artifact) {
+      return res.status(404).json({ message: "Artifact not found." });
+    }
+
+    // Overwrite the summary string with the new manual edits
+    artifact.summary = minutes;
+    await artifact.save();
+
+    res.status(200).json({ message: "Minutes updated successfully", artifact });
+  } catch (error) {
+    console.error("Update Summary Error:", error);
+    res.status(500).json({ message: "Failed to update summary." });
+  }
+};

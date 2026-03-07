@@ -73,6 +73,11 @@ export default function MeetingDetailPage() {
   // New State: Are we waiting for a background summary to finish?
   const [isPollingSummary, setIsPollingSummary] = useState(false);
 
+  // New State: Editing minutes
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedMinutes, setEditedMinutes] = useState("");
+  const [isSavingMinutes, setIsSavingMinutes] = useState(false);
+
   const [error, setError] = useState("");
   const [viewMode, setViewMode] = useState<"summary" | "transcript">("summary");
 
@@ -209,6 +214,25 @@ export default function MeetingDetailPage() {
       alert("Failed to start summary generation.");
       console.error(err);
       setSummarizing(false);
+    }
+  };
+
+  // 5. Save Edited Minutes
+  const handleSaveMinutes = async () => {
+    if (!meeting) return;
+    try {
+      setIsSavingMinutes(true);
+      await apiRequest(`/artifacts/summary/${meeting._id}`, {
+        method: "PUT",
+        data: { minutes: editedMinutes }
+      });
+      setArtifact(prev => prev ? { ...prev, summary: editedMinutes } : null);
+      setIsEditing(false);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save edited minutes.");
+    } finally {
+      setIsSavingMinutes(false);
     }
   };
 
@@ -445,20 +469,44 @@ export default function MeetingDetailPage() {
                 ) : (
                   <div className="prose prose-sm prose-neutral max-w-none">
                     {parsedSummary.minutes ? (
-                      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 sm:p-8">
-                        <Markdown
-                          components={{
-                            h1: ({ node, ...props }) => <h1 className="text-2xl font-bold text-[#cc2233] mb-6 pb-4 border-b border-neutral-100" {...props} />,
-                            h2: ({ node, ...props }) => <h2 className="text-lg font-bold text-neutral-800 mt-8 mb-4" {...props} />,
-                            h3: ({ node, ...props }) => <h3 className="text-md font-bold text-neutral-800 mt-6 mb-3" {...props} />,
-                            p: ({ node, ...props }) => <p className="text-sm text-neutral-600 mb-4 leading-relaxed" {...props} />,
-                            ul: ({ node, ...props }) => <ul className="list-disc list-outside ml-5 space-y-2 mb-6 text-sm text-neutral-600" {...props} />,
-                            li: ({ node, ...props }) => <li className="pl-1" {...props} />,
-                            strong: ({ node, ...props }) => <strong className="font-semibold text-neutral-900" {...props} />,
-                          }}
-                        >
-                          {parsedSummary.minutes}
-                        </Markdown>
+                      <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6 sm:p-8 flex flex-col h-full">
+                        {isEditing ? (
+                          <textarea
+                            className="w-full h-full min-h-[400px] p-4 text-sm text-neutral-700 bg-neutral-50 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y font-mono"
+                            value={editedMinutes}
+                            onChange={(e) => setEditedMinutes(e.target.value)}
+                          />
+                        ) : (
+                          <Markdown
+                            components={{
+                              h1: ({ node, ...props }) => <h1 className="text-2xl font-bold text-[#cc2233] mb-6 pb-4 border-b border-neutral-100" {...props} />,
+                              h2: ({ node, ...props }) => <h2 className="text-lg font-bold text-neutral-800 mt-8 mb-4" {...props} />,
+                              h3: ({ node, ...props }) => <h3 className="text-md font-bold text-neutral-800 mt-6 mb-3" {...props} />,
+                              p: ({ node, ...props }) => <p className="text-sm text-neutral-600 mb-4 leading-relaxed" {...props} />,
+                              ul: ({ node, ...props }) => <ul className="list-disc list-outside ml-5 space-y-2 mb-6 text-sm text-neutral-600" {...props} />,
+                              li: ({ node, ...props }) => <li className="pl-1" {...props} />,
+                              strong: ({ node, ...props }) => <strong className="font-semibold text-neutral-900" {...props} />,
+                            }}
+                          >
+                            {parsedSummary.minutes}
+                          </Markdown>
+                        )}
+
+                        {/* Edit / Approve Action Buttons */}
+                        <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-neutral-100 shrink-0">
+                          {isEditing ? (
+                            <>
+                              <Button variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
+                              <Button onClick={handleSaveMinutes} disabled={isSavingMinutes}>
+                                {isSavingMinutes ? "Saving..." : "Approve & Save"}
+                              </Button>
+                            </>
+                          ) : (
+                            <Button variant="outline" onClick={() => { setEditedMinutes(parsedSummary.minutes); setIsEditing(true); }}>
+                              Edit Minutes
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 border border-dashed border-neutral-200 rounded-xl bg-neutral-50">

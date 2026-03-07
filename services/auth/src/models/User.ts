@@ -1,20 +1,14 @@
 import mongoose, { Document, Schema } from "mongoose";
-<<<<<<< HEAD
-=======
 import "./Workspace.js";
->>>>>>> 2000e39 (feat: Workspace added)
 import bcrypt from "bcryptjs";
 
 export interface IUser extends Document {
   email: string;
   password?: string;
   globalRole: "ADMIN" | "USER";
-<<<<<<< HEAD
-=======
   isEmailConfirmed: boolean;
   workspaces: mongoose.Types.ObjectId[];
   activeWorkspace?: mongoose.Types.ObjectId;
->>>>>>> 2000e39 (feat: Workspace added)
   profile: {
     firstName: string;
     lastName: string;
@@ -37,18 +31,12 @@ const userSchema = new Schema<IUser>(
     password: { type: String, minLength: 8, required: true, select: false },
     globalRole: {
       type: String,
-<<<<<<< HEAD
-      enum: ["ADMIN", "USER","PROJECT_MANAGER", "TEAM_MEMBER", "TEAM_LEAD"],
-      default: "USER",
-    },
-=======
       enum: ["ADMIN", "USER", "PROJECT_MANAGER", "TEAM_MEMBER", "TEAM_LEAD"],
       default: "USER",
     },
     isEmailConfirmed: { type: Boolean, default: false },
     workspaces: [{ type: Schema.Types.ObjectId, ref: "Workspace" }],
     activeWorkspace: { type: Schema.Types.ObjectId, ref: "Workspace" },
->>>>>>> 2000e39 (feat: Workspace added)
     profile: {
       firstName: { type: String, required: true },
       lastName: { type: String, required: true },

@@ -8,8 +8,6 @@ import {
   updateProfile,
   getUsers,
 } from "../controllers/authController.js";
-<<<<<<< HEAD
-=======
 import {
   verifyOTP,
   resendOTP,
@@ -21,7 +19,6 @@ import {
   updateMemberRole,
   switchWorkspace,
 } from "../controllers/workspaceController.js";
->>>>>>> 2000e39 (feat: Workspace added)
 import { signAvatarUpload } from "../controllers/uploadController.js";
 import { protect } from "../middleware/auth.js";
 

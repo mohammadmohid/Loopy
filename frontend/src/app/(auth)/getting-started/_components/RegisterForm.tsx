@@ -219,16 +219,14 @@ export default function RegisterForm({
         {passwordValue.length > 0 && (
           <div className="p-3 bg-neutral-50 rounded-md text-xs space-y-1">
             <div
-              className={`flex items-center gap-2 ${
-                hasMinLength ? "text-emerald-600" : "text-neutral-500"
-              }`}
+              className={`flex items-center gap-2 ${hasMinLength ? "text-emerald-600" : "text-neutral-500"
+                }`}
             >
               {hasMinLength ? <Check size={12} /> : <X size={12} />} 8+ chars
             </div>
             <div
-              className={`flex items-center gap-2 ${
-                hasDigit ? "text-emerald-600" : "text-neutral-500"
-              }`}
+              className={`flex items-center gap-2 ${hasDigit ? "text-emerald-600" : "text-neutral-500"
+                }`}
             >
               {hasDigit ? <Check size={12} /> : <X size={12} />} Contains number
             </div>

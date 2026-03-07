@@ -20,6 +20,13 @@ const artifactSchema = new mongoose.Schema({
   overview: { type: String }, // Explicit Overview field
   agenda: [{ type: String }], // Optional: Extracted specific Agenda array
 
+  chatHistory: [
+    {
+      role: { type: String, enum: ["user", "model"] },
+      content: { type: String }
+    }
+  ],
+
   error: { type: String }
 }, { timestamps: true });
 

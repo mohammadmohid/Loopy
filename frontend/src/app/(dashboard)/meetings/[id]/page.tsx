@@ -45,6 +45,7 @@ interface ArtifactDetail {
   summary?: string;
   overview?: string;
   agenda?: string[];
+  chatHistory?: { role: "user" | "model", content: string }[];
   createdAt: string;
   error?: string;
 }
@@ -78,6 +79,11 @@ export default function MeetingDetailPage() {
   const [editedMinutes, setEditedMinutes] = useState("");
   const [isSavingMinutes, setIsSavingMinutes] = useState(false);
 
+  // New State: Chat Bot
+  const [chatInput, setChatInput] = useState("");
+  const [chatHistory, setChatHistory] = useState<{ role: "user" | "model", content: string }[]>([]);
+  const [isAsking, setIsAsking] = useState(false);
+
   const [error, setError] = useState("");
   const [viewMode, setViewMode] = useState<"summary" | "transcript">("summary");
 
@@ -107,6 +113,9 @@ export default function MeetingDetailPage() {
             next: { revalidate: 0 }
           } as any);
           setArtifact(artifactData);
+          if (artifactData.chatHistory) {
+            setChatHistory(artifactData.chatHistory);
+          }
         } catch (artifactErr) {
           console.warn("⚠️ Artifact fetch failed:", artifactErr);
           setArtifact(null);
@@ -282,6 +291,32 @@ export default function MeetingDetailPage() {
       // Optional: printWindow.close(); // Leaving it open or closed is a choice. We'll close.
       printWindow.close();
     }, 250);
+  };
+
+  // 7. Ask Bot
+  const handleAskBot = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!chatInput.trim() || !meeting) return;
+
+    const userMsg = chatInput.trim();
+    setChatInput("");
+    setChatHistory(prev => [...prev, { role: "user", content: userMsg }]);
+    setIsAsking(true);
+
+    try {
+      const res = await apiRequest<{ answer: string, chatHistory: any[] }>(`/artifacts/ask/${meeting._id}`, {
+        method: "POST",
+        data: { question: userMsg }
+      });
+      if (res && res.answer) {
+        setChatHistory(prev => [...prev, { role: "model", content: res.answer }]);
+      }
+    } catch (err) {
+      console.error(err);
+      setChatHistory(prev => [...prev, { role: "model", content: "Sorry, I encountered an error answering that." }]);
+    } finally {
+      setIsAsking(false);
+    }
   };
 
   // --- Loading State ---
@@ -575,7 +610,57 @@ export default function MeetingDetailPage() {
               </div>
             )}
 
-            {(activeTab === "Comments" || activeTab === "Ask Bot") && (
+            {activeTab === "Ask Bot" && (
+              <div className="h-full flex flex-col relative w-full">
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-[80px]">
+                  {chatHistory.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-10 opacity-60">
+                      <Bot className="w-10 h-10 mb-3" />
+                      <p className="text-sm font-medium">Ask a question about this meeting!</p>
+                    </div>
+                  )}
+                  {chatHistory.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <div className={`p-3 rounded-xl max-w-[80%] text-sm ${msg.role === "user" ? "bg-primary text-white ml-auto" : "bg-neutral-100 text-neutral-800"}`}>
+                        <Markdown
+                          components={{
+                            p: ({ node, ...props }) => <p className="mb-2 last:mb-0 leading-relaxed" {...props} />,
+                            ul: ({ node, ...props }) => <ul className="list-disc list-outside ml-4 mb-2" {...props} />,
+                            li: ({ node, ...props }) => <li className="" {...props} />,
+                            strong: ({ node, ...props }) => <strong className="font-semibold" {...props} />,
+                          }}
+                        >
+                          {msg.content}
+                        </Markdown>
+                      </div>
+                    </div>
+                  ))}
+                  {isAsking && (
+                    <div className="flex justify-start">
+                      <div className="p-3 rounded-xl bg-neutral-100 text-neutral-800 flex items-center gap-2 text-sm">
+                        <Loader2 className="w-4 h-4 animate-spin text-neutral-400" /> Thinking...
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <form onSubmit={handleAskBot} className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-neutral-100 flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 bg-neutral-50 border border-neutral-200 rounded-full px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-neutral-900"
+                    placeholder="Ask about the meeting..."
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    disabled={isAsking}
+                  />
+                  <Button type="submit" disabled={isAsking || !chatInput.trim()} className="rounded-full w-10 h-10 p-0 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4" />
+                  </Button>
+                </form>
+              </div>
+            )}
+
+            {activeTab === "Comments" && (
               <div className="h-full flex flex-col items-center justify-center p-8 text-center text-neutral-400">
                 <MessageSquare className="w-10 h-10 mb-4 opacity-50" />
                 <p>This tab is coming soon!</p>

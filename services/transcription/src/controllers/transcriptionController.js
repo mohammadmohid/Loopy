@@ -391,3 +391,58 @@ export const updateArtifactSummary = async (req, res) => {
     res.status(500).json({ message: "Failed to update summary." });
   }
 };
+
+// 5. ASK BOT (Chat with Transcript)
+export const askQuestion = async (req, res) => {
+  try {
+    const { meetingId } = req.params;
+    const { question } = req.body;
+
+    if (!question) {
+      return res.status(400).json({ message: "Question is required." });
+    }
+
+    const artifact = await Artifact.findOne({
+      $or: [
+        { meetingId: meetingId },
+        { meetingId: mongoose.isValidObjectId(meetingId) ? new mongoose.Types.ObjectId(meetingId) : null }
+      ]
+    });
+
+    if (!artifact || !artifact.transcriptJson) {
+      return res.status(404).json({ message: "Artifact or transcript not found." });
+    }
+
+    const fullText = parseTranscriptToText(artifact.transcriptJson);
+
+    // Initialize Gemini
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const prompt = `
+      You are a helpful, professional AI assistant assigned to answer questions about a specific meeting.
+      Your ONLY source of truth is the transcript provided below.
+      If the user's question cannot be answered using the transcript, politely inform them that it wasn't mentioned in the meeting.
+
+      TRANSCRIPT:
+      ${fullText}
+
+      USER QUESTION:
+      ${question}
+    `;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const answer = response.text().trim();
+
+    // Optionally save to history
+    artifact.chatHistory.push({ role: "user", content: question });
+    artifact.chatHistory.push({ role: "model", content: answer });
+    await artifact.save();
+
+    res.status(200).json({ answer, chatHistory: artifact.chatHistory });
+  } catch (error) {
+    console.error("Ask Bot Error:", error);
+    res.status(500).json({ message: "Failed to generate answer." });
+  }
+};

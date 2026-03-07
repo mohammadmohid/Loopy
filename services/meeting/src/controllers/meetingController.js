@@ -6,7 +6,7 @@ import { generateJitsiToken } from "../utils/jitsiToken.js";
 export const createMeeting = async (req, res) => {
   try {
     // 1. Extract fields
-    const { projectId, projectName, title, participants, hostName } = req.body;
+    const { projectId, projectName, title, participants, hostName, scheduledAt } = req.body;
     const hostId = req.user.id; // Assuming user is authenticated via middleware
 
     if (!projectId) {
@@ -22,7 +22,8 @@ export const createMeeting = async (req, res) => {
       participants: participants || [],
       hostId,
       hostName: hostName || "Unknown Host",
-      status: "active",
+      status: scheduledAt ? "scheduled" : "active",
+      ...(scheduledAt && { scheduledAt }),
     });
 
     // 3. Generate the "Double ID" Room Name
@@ -49,8 +50,8 @@ export const getMyMeetings = async (req, res) => {
 
     // --- 1. AUTO-CLEANUP LOGIC (Run this FIRST) ---
     // If a meeting is still "active" but created more than 24 hours ago, mark it as ended.
-    const cutoffDate = new Date(Date.now() - 24 * 60 * 60 * 1000); 
-    
+    const cutoffDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
     await Meeting.updateMany(
       { status: "active", createdAt: { $lt: cutoffDate } },
       { $set: { status: "ended", endedAt: new Date() } }
@@ -58,6 +59,7 @@ export const getMyMeetings = async (req, res) => {
 
     // --- 2. FETCH MEETINGS (Run this ONCE) ---
     // Now fetch the updated list (Active + Ended)
+    console.log(`[MeetingService] Fetching meetings for user: ${userId}`);
     const meetings = await Meeting.find({
       $or: [{ hostId: userId }, { participants: userId }],
     }).sort({ createdAt: -1 });
@@ -74,7 +76,7 @@ export const getMyMeetings = async (req, res) => {
 export const endMeeting = async (req, res) => {
   try {
     const { roomName } = req.params;
-    
+
     const meeting = await Meeting.findOneAndUpdate(
       { roomName },
       { status: "ended", endedAt: new Date() },
@@ -95,9 +97,9 @@ export const endMeeting = async (req, res) => {
 export const getJoinToken = async (req, res) => {
   try {
     const { roomName } = req.params;
-    
+
     if (!req.user) {
-        return res.status(401).json({ message: "User not authenticated" });
+      return res.status(401).json({ message: "User not authenticated" });
     }
 
     const token = generateJitsiToken(req.user, roomName);
@@ -115,7 +117,7 @@ export const getMeetingById = async (req, res) => {
 
     // Validate if ID is a valid MongoDB ObjectId to prevent crashes
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-        return res.status(400).json({ message: "Invalid Meeting ID format" });
+      return res.status(400).json({ message: "Invalid Meeting ID format" });
     }
 
     const meeting = await Meeting.findById(id);

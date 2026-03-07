@@ -34,12 +34,12 @@ interface HostMeetingDialogProps {
 
 export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
   const router = useRouter();
-  
+
   // Data State
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loadingData, setLoadingData] = useState(false);
-  
+
   // Form State
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [title, setTitle] = useState("");
@@ -70,7 +70,7 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
           // Fetch both lists in parallel
           const [projectsRes, usersRes] = await Promise.all([
             apiRequest<Project[]>("/projects"),
-            apiRequest<User[]>("/auth/users"), 
+            apiRequest<User[]>("/auth/users"),
           ]);
 
           setProjects(projectsRes);
@@ -84,7 +84,7 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
         }
       };
       fetchData();
-      
+
       // Reset form
       setTitle("");
       setSelectedParticipants([]);
@@ -109,12 +109,12 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
       // We fetch this so we can tell invited users exactly who is hosting
       const userRes = await apiRequest<{ user: { profile: { firstName: string; lastName: string } } }>("/auth/me");
       const hostName = `${userRes.user.profile.firstName} ${userRes.user.profile.lastName}`;
-      
+
       const selectedProject = projects.find(p => p._id === selectedProjectId);
       const projectName = selectedProject ? selectedProject.name : "Unknown Project";
 
       // 2. Call Meeting Service
-      const response = await apiRequest<{ _id : string }>(
+      const response = await apiRequest<{ _id: string, roomName: string }>(
         "/meetings",
         {
           method: "POST",
@@ -123,15 +123,14 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
             projectName: projectName,
             title: title,
             // Send IDs directly (Backend now expects array of User IDs)
-            participants: selectedParticipants, 
-            hostName: hostName, 
+            participants: selectedParticipants,
+            hostName: hostName,
           },
         }
       );
 
       // 3. Redirect
-     // router.push(`/meetings/${response._id}?projectId=${selectedProjectId}`);
-      router.push(`/meetings/live/${response._id}`);
+      router.push(`/meetings/live/${response.roomName}?projectId=${selectedProjectId}`);
       onClose();
     } catch (error) {
       console.error("Failed to start meeting:", error);
@@ -146,7 +145,7 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-200">
       <div className="bg-white rounded-2xl w-full max-w-md mx-4 p-6 shadow-xl animate-in zoom-in-95">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-neutral-900 flex items-center gap-2">
@@ -163,7 +162,7 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-neutral-700">Project Context</label>
             {loadingData ? (
-               <div className="h-10 w-full bg-neutral-100 animate-pulse rounded-lg" />
+              <div className="h-10 w-full bg-neutral-100 animate-pulse rounded-lg" />
             ) : (
               <select
                 className="w-full p-2.5 border border-neutral-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary/20 outline-none"
@@ -197,16 +196,16 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
                 {selectedParticipants.length} selected
               </span>
             </label>
-            
-            <div 
+
+            <div
               className="w-full p-2.5 border border-neutral-200 rounded-lg text-sm bg-white focus-within:ring-2 focus-within:ring-primary/20 flex items-center justify-between cursor-pointer"
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             >
               <div className="flex items-center gap-2 text-neutral-500 overflow-hidden">
                 <Users className="w-4 h-4 shrink-0" />
                 <span className="truncate">
-                  {selectedParticipants.length === 0 
-                    ? "Select team members..." 
+                  {selectedParticipants.length === 0
+                    ? "Select team members..."
                     : `${selectedParticipants.length} user(s) selected`}
                 </span>
               </div>
@@ -254,8 +253,8 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
           <Button variant="outline" onClick={onClose} disabled={isCreating}>
             Cancel
           </Button>
-          <Button 
-            onClick={handleStartMeeting} 
+          <Button
+            onClick={handleStartMeeting}
             disabled={isCreating || !title || !selectedProjectId}
             className="bg-primary text-white"
           >

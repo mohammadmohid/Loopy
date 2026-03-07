@@ -29,8 +29,6 @@ export const generateJitsiToken = (user, roomName) => {
     context: {
       user: {
         id: user.id,
-        name: `${user.firstName || "User"} ${user.lastName || ""}`,
-        email: user.email,
         avatar: user.avatarUrl || "",
         "moderator": isModerator
       },

@@ -17,7 +17,7 @@ const meetingSchema = new mongoose.Schema(
     },
     projectName: {
       type: String,
-      default: "Unknown Project" 
+      default: "Unknown Project"
     },
     participants: {
       type: [String], // Array of strings (emails or user IDs)
@@ -31,11 +31,14 @@ const meetingSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    
+
     status: {
       type: String,
-      enum: ["active", "ended"],
+      enum: ["scheduled", "active", "ended"],
       default: "active",
+    },
+    scheduledAt: {
+      type: Date
     },
     recordingUrl: { type: String },
   },

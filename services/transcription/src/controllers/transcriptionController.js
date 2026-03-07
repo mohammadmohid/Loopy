@@ -3,7 +3,6 @@ import Artifact from "../models/Artifact.js";
 import mongoose from "mongoose";
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
-const DEEPGRAM_API_KEY = '42241804822934221c93299c1ede5ad763c5af6b';
 
 //  Convert ElevenLabs or Deepgram JSON to plain text
 const parseTranscriptToText = (transcriptJson) => {
@@ -28,6 +27,7 @@ Please strictly format the output using the following Markdown structure:
 
  ${title || "Meeting Minutes"}
 
+<<<<<<< HEAD
 Date and Time: ${date || "Not specified"}
 
 Participants: - [List participants identified from speech or context. If unknown, write "Unspecified"]
@@ -41,10 +41,29 @@ Participants: - [List participants identified from speech or context. If unknown
  Action Items
 - [ ] [Task 1] (Assignee)
 - [ ] [Task 2] (Assignee)
+=======
+        Please strictly format the output as a valid JSON object matching the exact structure below. 
+        DO NOT wrap it in markdown code blocks (\`\`\`json). Return ONLY the raw JSON object.
+        
+        {
+          "overview": "A short 1-2 sentence general overview.",
+          "agenda": ["Infer the main agenda items discussed"],
+          "minutes": "# Meeting Title: ${title || "Untitled Meeting"}\\n\\n**Date/Time:** ${date || new Date().toLocaleString()}\\n\\n## Agenda\\n- [Item 1]\\n- [Item 2]\\n\\n## Participants\\n- [Infer or list participants if mentioned]\\n\\n## Minutes of Meeting\\n- [Detailed point 1]\\n- [Detailed point 2]\\n\\n## Action Items\\n. Task 1: [Task description]\\nAssigned to ([Assignee Name])\\n\\n. Task 2: [Task description]\\nAssigned to ([Assignee Name])\\n\\n## Next Steps\\n- [Follow-up action or next meeting]"
+        }
+
+        INSTRUCTIONS FOR "minutes" FIELD:
+        - Use exact markdown headings (## Agenda, ## Participants, ## Minutes of Meeting, ## Action Items, ## Next Steps).
+        - Use proper bullet points (-) for the lists under Agenda, Participants, Minutes of Meeting, and Next Steps.
+        - For Action Items, strictly use the format:
+          . Task [Number]: [Task description]
+          Assigned to ([Assignee Name])
+        - Ensure tone is highly formal and professional.
+>>>>>>> DevUzair
 
 TRANSCRIPT:
 ${fullText}`;
 
+<<<<<<< HEAD
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -73,6 +92,36 @@ ${fullText}`;
   } catch (error) {
     console.error("⚠️ OpenRouter API Error:", error.message);
     return "Summary generation failed. Please try again.";
+=======
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text().trim();
+
+    // Safety cleanup in case Gemini still wraps in Markdown
+    if (text.startsWith("\`\`\`json")) {
+      text = text.replace(/^\`\`\`json/i, "").replace(/\`\`\`$/i, "").trim();
+    }
+
+    // Parse string to JSON securely
+    try {
+      return JSON.parse(text);
+    } catch (parseErr) {
+      console.warn("Failed to parse Gemini JSON output. Raw output:", text);
+      return {
+        overview: "",
+        agenda: [],
+        minutes: text, // Fallback to raw text if parsing fails
+      };
+    }
+
+  } catch (error) {
+    console.error("⚠️ Gemini API Error:", error.message);
+    return {
+      overview: "",
+      agenda: [],
+      minutes: "Summary generation failed. Please try again."
+    };
+>>>>>>> DevUzair
   }
 }
 
@@ -175,11 +224,13 @@ export const startTranscription = async (req, res) => {
 
     (async () => {
       try {
-        const deepgram = createClient(DEEPGRAM_API_KEY);
+        const deepgram = createClient(process.env.DEEPGRAM_API_SECRET);
 
         const connection = deepgram.listen.live({
           model: 'nova-3',
           language: 'en',
+          smart_format: true,
+          diarize: true,
         });
 
         let fullTranscript = "";
@@ -228,14 +279,21 @@ export const startTranscription = async (req, res) => {
 
           try {
             console.log(`🧠 Generating Summary with Gemini...`);
-            const summaryText = await runGeminiSummary(fullTranscript);
+            const summaryData = await runGeminiSummary(fullTranscript, { title: filename, date: new Date().toLocaleString() });
             console.log("✅ Summary Generated.");
 
             const transcriptData = { deepgram: true, text: fullTranscript.trim() };
 
             artifact.transcriptionStatus = "COMPLETED";
             artifact.transcriptJson = transcriptData;
-            artifact.summary = summaryText;
+
+            // Extract the formatted minutes and the agenda separately
+            artifact.summary = summaryData.minutes || summaryData.overview || "No minutes generated.";
+            artifact.overview = summaryData.overview || "";
+            if (Array.isArray(summaryData.agenda)) {
+              artifact.agenda = summaryData.agenda;
+            }
+
             await artifact.save();
 
             console.log("💾 Database Updated Successfully.");
@@ -296,7 +354,7 @@ export const getArtifact = async (req, res) => {
 // 3. MANUAL SUMMARY (Updated to Fire-and-Forget)
 export const generateSummary = async (req, res) => {
   try {
-    const { meetingId } = req.body;
+    const { meetingId, meetingTitle, date } = req.body;
     console.log(`🧠 Manual Summary Trigger for: ${meetingId}`);
 
     // 1. Find the artifact
@@ -318,9 +376,14 @@ export const generateSummary = async (req, res) => {
     (async () => {
       try {
         const fullText = parseTranscriptToText(artifact.transcriptJson);
-        const summaryText = await runGeminiSummary(fullText);
+        const summaryData = await runGeminiSummary(fullText, { title: meetingTitle, date });
 
-        artifact.summary = summaryText;
+        artifact.summary = summaryData.minutes || summaryData.overview || "No minutes generated.";
+        artifact.overview = summaryData.overview || "";
+        if (Array.isArray(summaryData.agenda)) {
+          artifact.agenda = summaryData.agenda;
+        }
+
         await artifact.save();
         console.log("✅ Manual Summary Generated & Saved (Background).");
       } catch (bgError) {
@@ -336,5 +399,92 @@ export const generateSummary = async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ message: "Failed to init summary", error: error.message });
     }
+  }
+};
+
+// 4. UPDATE SUMMARY (Manual Edit by User)
+export const updateArtifactSummary = async (req, res) => {
+  try {
+    const { meetingId } = req.params;
+    const { minutes } = req.body; // The newly edited markdown text
+
+    if (!minutes) {
+      return res.status(400).json({ message: "Minutes content is required." });
+    }
+
+    const artifact = await Artifact.findOne({
+      $or: [
+        { meetingId: meetingId },
+        { meetingId: mongoose.isValidObjectId(meetingId) ? new mongoose.Types.ObjectId(meetingId) : null }
+      ]
+    });
+
+    if (!artifact) {
+      return res.status(404).json({ message: "Artifact not found." });
+    }
+
+    // Overwrite the summary string with the new manual edits
+    artifact.summary = minutes;
+    await artifact.save();
+
+    res.status(200).json({ message: "Minutes updated successfully", artifact });
+  } catch (error) {
+    console.error("Update Summary Error:", error);
+    res.status(500).json({ message: "Failed to update summary." });
+  }
+};
+
+// 5. ASK BOT (Chat with Transcript)
+export const askQuestion = async (req, res) => {
+  try {
+    const { meetingId } = req.params;
+    const { question } = req.body;
+
+    if (!question) {
+      return res.status(400).json({ message: "Question is required." });
+    }
+
+    const artifact = await Artifact.findOne({
+      $or: [
+        { meetingId: meetingId },
+        { meetingId: mongoose.isValidObjectId(meetingId) ? new mongoose.Types.ObjectId(meetingId) : null }
+      ]
+    });
+
+    if (!artifact || !artifact.transcriptJson) {
+      return res.status(404).json({ message: "Artifact or transcript not found." });
+    }
+
+    const fullText = parseTranscriptToText(artifact.transcriptJson);
+
+    // Initialize Gemini
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const prompt = `
+      You are a helpful, professional AI assistant assigned to answer questions about a specific meeting.
+      Your ONLY source of truth is the transcript provided below.
+      If the user's question cannot be answered using the transcript, politely inform them that it wasn't mentioned in the meeting.
+
+      TRANSCRIPT:
+      ${fullText}
+
+      USER QUESTION:
+      ${question}
+    `;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const answer = response.text().trim();
+
+    // Optionally save to history
+    artifact.chatHistory.push({ role: "user", content: question });
+    artifact.chatHistory.push({ role: "model", content: answer });
+    await artifact.save();
+
+    res.status(200).json({ answer, chatHistory: artifact.chatHistory });
+  } catch (error) {
+    console.error("Ask Bot Error:", error);
+    res.status(500).json({ message: "Failed to generate answer." });
   }
 };

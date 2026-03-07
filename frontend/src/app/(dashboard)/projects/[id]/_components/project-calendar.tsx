@@ -6,6 +6,7 @@ import {
   Flag,
   CheckSquare,
   Plus,
+  Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Task, Milestone, CalendarEvent } from "@/lib/types";
@@ -13,6 +14,7 @@ import type { Task, Milestone, CalendarEvent } from "@/lib/types";
 interface ProjectCalendarProps {
   tasks: Task[];
   milestones: Milestone[];
+  meetings?: any[];
 }
 
 const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -25,9 +27,10 @@ const statusColors: Record<string, string> = {
 const defaultColor = "bg-neutral-100 text-neutral-600 border-neutral-200";
 const milestoneColor = "bg-green-50 text-green-700 border-green-200";
 
-export function ProjectCalendar({ tasks, milestones }: ProjectCalendarProps) {
+export function ProjectCalendar({ tasks, milestones, meetings = [] }: ProjectCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [showAllEventsDate, setShowAllEventsDate] = useState<string | null>(
     null
   );
@@ -58,8 +61,18 @@ export function ProjectCalendar({ tasks, milestones }: ProjectCalendarProps) {
       projectId: m.projectId,
     }));
 
-    return [...taskEvents, ...milestoneEvents];
-  }, [tasks, milestones]);
+    const meetingEvents: CalendarEvent[] = meetings.map((m) => ({
+      id: m.id || m._id,
+      title: m.title,
+      type: "meeting" as any,
+      status: "in-progress" as any,
+      startDate: m.scheduledAt,
+      endDate: m.scheduledAt,
+      projectId: m.projectId,
+    }));
+
+    return [...taskEvents, ...milestoneEvents, ...meetingEvents];
+  }, [tasks, milestones, meetings]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -127,12 +140,18 @@ export function ProjectCalendar({ tasks, milestones }: ProjectCalendarProps) {
 
   const getEventColor = (event: CalendarEvent) => {
     if (event.type === "milestone") return milestoneColor;
+    if (event.type === "meeting" as any) return "bg-[#fbeaec] text-[#cc2233] border-[#fbeaec]";
     return statusColors[event.status] || defaultColor;
   };
 
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
   const jumpToToday = () => setCurrentDate(new Date());
+
+  const formatEventTime = (dateString: string) => {
+    const d = new Date(dateString);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   const isToday = (day: { date: number; month: string }) => {
     const today = new Date();
@@ -201,8 +220,9 @@ export function ProjectCalendar({ tasks, milestones }: ProjectCalendarProps) {
                   day.month === "current" && setHoveredDate(day.fullDate)
                 }
                 onMouseLeave={() => setHoveredDate(null)}
+                onClick={() => setSelectedDate(day.fullDate)}
                 className={cn(
-                  "min-h-[100px] p-2 border-r border-b border-neutral-200 transition-colors relative group",
+                  "min-h-[100px] p-2 border-r border-b border-neutral-200 transition-colors relative group cursor-pointer",
                   day.month !== "current"
                     ? "bg-neutral-50"
                     : "hover:bg-neutral-50/50"
@@ -234,12 +254,14 @@ export function ProjectCalendar({ tasks, milestones }: ProjectCalendarProps) {
                       <div
                         key={event.id}
                         className={cn(
-                          "text-xs px-2 py-1 truncate flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity border rounded-md",
+                          "text-xs px-2 py-1 truncate flex items-center gap-1 hover:opacity-80 transition-opacity border rounded-md m-0.5",
                           getEventColor(event)
                         )}
                       >
                         {event.type === "milestone" ? (
                           <Flag className="w-3 h-3" />
+                        ) : event.type === ("meeting" as any) ? (
+                          <Video className="w-3 h-3" />
                         ) : (
                           <CheckSquare className="w-3 h-3" />
                         )}
@@ -249,7 +271,10 @@ export function ProjectCalendar({ tasks, milestones }: ProjectCalendarProps) {
 
                   {dayEvents.length > 2 && !showingAllEvents && (
                     <button
-                      onClick={() => setShowAllEventsDate(day.fullDate)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowAllEventsDate(day.fullDate);
+                      }}
                       className="text-xs text-neutral-500 hover:text-neutral-700"
                     >
                       {dayEvents.length - 2} more
@@ -258,7 +283,10 @@ export function ProjectCalendar({ tasks, milestones }: ProjectCalendarProps) {
 
                   {showingAllEvents && dayEvents.length > 2 && (
                     <button
-                      onClick={() => setShowAllEventsDate(null)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowAllEventsDate(null);
+                      }}
                       className="text-xs text-neutral-500"
                     >
                       Show less
@@ -270,6 +298,83 @@ export function ProjectCalendar({ tasks, milestones }: ProjectCalendarProps) {
           })}
         </div>
       </div>
+
+      {/* Custom Popup Dialog for Selected Date */}
+      {selectedDate && (() => {
+        const dateEvents = getEventsForDate(selectedDate);
+        const meetingEvents = dateEvents.filter(e => e.type === "meeting");
+        const deadlineEvents = dateEvents.filter(e => e.type !== "meeting");
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedDate(null)}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+              <div className="px-5 py-4 border-b border-neutral-100 flex items-center justify-between bg-neutral-50/50">
+                <h3 className="font-semibold text-neutral-900">
+                  {new Date(selectedDate).toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric' })}
+                </h3>
+                <button onClick={() => setSelectedDate(null)} className="text-neutral-400 hover:text-neutral-600 font-bold p-1">
+                  ✕
+                </button>
+              </div>
+              <div className="p-5 overflow-y-auto space-y-6">
+
+                {/* Meetings Section */}
+                <div>
+                  <h4 className="text-sm font-semibold text-neutral-900 mb-3 flex items-center gap-2">
+                    <Video className="w-4 h-4 text-[#cc2233]" /> Meetings
+                  </h4>
+                  {meetingEvents.length === 0 ? (
+                    <p className="text-sm text-neutral-500 bg-neutral-50 rounded-lg p-3 border border-neutral-100 italic">No meetings for this day.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {meetingEvents.map((evt) => (
+                        <div key={evt.id} className={cn("p-3 rounded-lg border text-sm flex gap-3", getEventColor(evt))}>
+                          <div className="mt-0.5 shrink-0">
+                            <Video className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold truncate">{evt.title}</p>
+                            <p className="text-xs opacity-80 mt-1 uppercase tracking-wider font-medium">
+                              {evt.startDate ? formatEventTime(evt.startDate) : 'No time set'}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Deadlines Section */}
+                <div>
+                  <h4 className="text-sm font-semibold text-neutral-900 mb-3 flex items-center gap-2">
+                    <Flag className="w-4 h-4 text-emerald-600" /> Deadlines
+                  </h4>
+                  {deadlineEvents.length === 0 ? (
+                    <p className="text-sm text-neutral-500 bg-neutral-50 rounded-lg p-3 border border-neutral-100 italic">No deadlines for this day.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {deadlineEvents.map((evt) => (
+                        <div key={evt.id} className={cn("p-3 rounded-lg border text-sm flex gap-3", getEventColor(evt))}>
+                          <div className="mt-0.5 shrink-0">
+                            {evt.type === "milestone" ? <Flag className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold truncate">{evt.title}</p>
+                            <p className="text-xs opacity-80 mt-1 uppercase tracking-wider font-medium">
+                              {evt.type} • {evt.startDate ? formatEventTime(evt.startDate) : 'No time set'}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

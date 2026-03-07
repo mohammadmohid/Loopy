@@ -140,9 +140,9 @@ export const handleJaaSWebhook = async (req, res) => {
         await meeting.save();
         console.log("Database updated.");
 
-        const transcriptionServiceUrl = `${process.env.TRANSCRIPTION_SERVICE_URL}/transcribe`;
+        const transcriptionServiceUrl = `${process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:4002'}/transcribe`;
 
-        console.log("🚀 Triggering Transcription Service...");
+        console.log(`🚀 Triggering Transcription Service at: ${transcriptionServiceUrl}`);
 
         // 2. Timeout of 1000ms ensures we don't hang.
         axios.post(transcriptionServiceUrl, {

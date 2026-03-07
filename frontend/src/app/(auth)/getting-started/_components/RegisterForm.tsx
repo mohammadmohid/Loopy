@@ -24,10 +24,8 @@ const registerSchema = z.object({
 
 type FormData = z.infer<typeof registerSchema>;
 
-<<<<<<< HEAD
-export default function RegisterForm({ userType }: { userType: any }) {
-=======
 export default function RegisterForm({
+  userType,
   inviteToken,
   inviteEmail,
 }: {
@@ -35,7 +33,6 @@ export default function RegisterForm({
   inviteToken?: string;
   inviteEmail?: string;
 }) {
->>>>>>> 2000e39 (feat: Workspace added)
   const { login } = useAuth();
   const router = useRouter();
   const [showPass, setShowPass] = useState(false);
@@ -93,39 +90,30 @@ export default function RegisterForm({
       }
 
       // 2. Register User
-<<<<<<< HEAD
-
-      const response = await apiRequest<{ success: boolean; user: any }>(
-        "/auth/register",
-        {
-          method: "POST",
-          data: { ...data, userType, avatarKey },
-        }
-      );
-
-      if (response.success && response.user) {
-        login(response.user);
-        router.push("/home");
-=======
       const response = await apiRequest<{
         success: boolean;
-        needsOTP: boolean;
-        userId: string;
-        email: string;
+        needsOTP?: boolean;
+        user?: any;
+        userId?: string;
+        email?: string;
       }>("/auth/register", {
         method: "POST",
-        data: { ...data, avatarKey },
+        data: { ...data, userType, avatarKey },
       });
 
-      if (response.success && response.needsOTP) {
-        // Store invite token in session if present
-        if (inviteToken) {
-          sessionStorage.setItem("pendingInviteToken", inviteToken);
+      if (response.success) {
+        if (response.needsOTP && response.userId && response.email) {
+          // Store invite token in session if present
+          if (inviteToken) {
+            sessionStorage.setItem("pendingInviteToken", inviteToken);
+          }
+          router.push(
+            `/verify-otp?userId=${response.userId}&email=${encodeURIComponent(response.email)}`
+          );
+        } else if (response.user) {
+          login(response.user);
+          router.push("/home");
         }
-        router.push(
-          `/verify-otp?userId=${response.userId}&email=${encodeURIComponent(response.email)}`
-        );
->>>>>>> 2000e39 (feat: Workspace added)
       }
     } catch (err: any) {
       setServerError(err.message || "Registration failed");
@@ -231,26 +219,16 @@ export default function RegisterForm({
         {passwordValue.length > 0 && (
           <div className="p-3 bg-neutral-50 rounded-md text-xs space-y-1">
             <div
-<<<<<<< HEAD
               className={`flex items-center gap-2 ${
                 hasMinLength ? "text-emerald-600" : "text-neutral-500"
               }`}
-=======
-              className={`flex items-center gap-2 ${hasMinLength ? "text-emerald-600" : "text-neutral-500"
-                }`}
->>>>>>> 2000e39 (feat: Workspace added)
             >
               {hasMinLength ? <Check size={12} /> : <X size={12} />} 8+ chars
             </div>
             <div
-<<<<<<< HEAD
               className={`flex items-center gap-2 ${
                 hasDigit ? "text-emerald-600" : "text-neutral-500"
               }`}
-=======
-              className={`flex items-center gap-2 ${hasDigit ? "text-emerald-600" : "text-neutral-500"
-                }`}
->>>>>>> 2000e39 (feat: Workspace added)
             >
               {hasDigit ? <Check size={12} /> : <X size={12} />} Contains number
             </div>

@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 const BASE_URL = "/api";
-=======
- const BASE_URL = "/api";
->>>>>>> 2000e39 (feat: Workspace added)
 
 
 interface FetchOptions extends RequestInit {

@@ -36,20 +36,6 @@ export default function LoginForm() {
     setServerError(null);
 
     try {
-<<<<<<< HEAD
-      // Backend returns: { success: true, user: { ... } }
-      const response = await apiRequest<{ success: boolean; user: any }>(
-        "/auth/login",
-        {
-          method: "POST",
-          data: data,
-        }
-      );
-
-      if (response.success && response.user) {
-        login(response.user);
-        router.push("/home");
-=======
       const response = await apiRequest<{
         success: boolean;
         user: any;
@@ -76,7 +62,6 @@ export default function LoginForm() {
         } else {
           router.push("/home");
         }
->>>>>>> 2000e39 (feat: Workspace added)
       } else {
         throw new Error("Invalid response from server");
       }

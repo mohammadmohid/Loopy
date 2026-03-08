@@ -1,0 +1,10 @@
+﻿56b8627 Screen recording feature added
+df042dc Chat bot integrated with each meeting
+343f214 Munites Document exportable to pdf
+85624ab Metting Munites now editable and savable
+1f2dccb Transcription pipeline working and munites document format corrected
+8098dbd Made UI changes, Fixed Meeting joining issues, Fixed default name issue when joining meeting
+31c9789 Updated schedule meeting logic to add participants and show meetings to only specific users
+d953356 Scheduled meetings added to calenders
+a5ce141 Ui changes made to meeting page to match figma screens and some additional functionality added
+8c8359a Tanscript visibilty issue fixed

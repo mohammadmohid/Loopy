@@ -138,7 +138,7 @@ export default function MeetingsPage() {
               <span className="p-2 rounded bg-[#cc2233] text-white">
                 <Video className="w-5 h-5" />
               </span>
-              Capture Meeting
+              Host Meeting
             </Button>
           </div>
 

@@ -1,6 +1,9 @@
-import { Mona_Sans } from "next/font/google";
+import { Mona_Sans, Geist } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-provider";
+import { cn } from "@/lib/utils";
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 const mona = Mona_Sans({
   subsets: ["latin"],
@@ -17,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={cn("font-sans", geist.variable)}>
       <body className={`${mona.className} antialiased`}>
         <AuthProvider>{children}</AuthProvider>
       </body>

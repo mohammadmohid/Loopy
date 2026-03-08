@@ -56,14 +56,14 @@ export default function DashboardLayout({
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <div className="flex h-dvh bg-neutral-50">
-        <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+        <Sidebar collapsed={sidebarCollapsed} />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header onMenuClick={toggleSidebar} onOpenSearch={openSearch} />
           <ActiveMeetingBanner />
           <main className="flex-1 overflow-auto p-6">{children}</main>
-        </div>
-      </div>
+        </div >
+      </div >
       <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
-    </Suspense>
+    </Suspense >
   );
 }

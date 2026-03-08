@@ -7,6 +7,8 @@ import {
   deleteProject,
   updateProject,
   getProjectActivity,
+  deleteWorkspaceProjects,
+  getProjectById,
   generateScreenRecordingUploadUrl
 } from "../controllers/projectController";
 import {
@@ -26,15 +28,17 @@ import {
   updateMilestone,
   deleteMilestone,
 } from "../controllers/taskController";
+import {
+  createTeam,
+  getTeams,
+  updateTeam,
+  deleteTeam,
+} from "../controllers/teamController";
 
 const router = express.Router();
 
-// Projects
-router.post("/", protect, authorize("ADMIN"), createProject);
-router.patch("/:id", protect, authorize("ADMIN"), updateProject);
+router.post("/", protect, authorize("ADMIN", "PROJECT_MANAGER"), createProject);
 router.get("/", protect, getProjects);
-router.delete("/:id", protect, authorize("ADMIN"), deleteProject);
-router.put("/:id/assign-lead", protect, authorize("ADMIN"), assignTeamLead);
 router.post("/upload/screen-recording", protect, generateScreenRecordingUploadUrl);
 
 // Project Activity
@@ -57,7 +61,20 @@ router.get("/artifacts/:id", protect, getArtifactById);
 router.post("/artifacts/sign", protect, signUpload);
 router.post("/artifacts", protect, createArtifact);
 
+// Teams
+router.post("/teams", protect, authorize("ADMIN", "PROJECT_MANAGER"), createTeam);
+router.get("/teams", protect, getTeams);
+router.patch("/teams/:id", protect, updateTeam);
+router.delete("/teams/:id", protect, deleteTeam);
+
 // Webhooks
 router.post("/webhooks/transcription", handleTranscriptionWebhook);
+router.delete("/workspace-webhook/:workspaceId", deleteWorkspaceProjects); // Inter-service auth could be via API Key, skipping `protect` for simpilcity to trust internal network
+
+// ID-based Project Routes (Must be at the bottom to prevent swallowing /teams, /artifacts etc)
+router.get("/:id", protect, getProjectById);
+router.patch("/:id", protect, authorize("ADMIN", "PROJECT_MANAGER"), updateProject);
+router.delete("/:id", protect, authorize("ADMIN", "PROJECT_MANAGER"), deleteProject);
+router.put("/:id/assign-lead", protect, authorize("ADMIN", "PROJECT_MANAGER"), assignTeamLead);
 
 export default router;

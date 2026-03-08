@@ -9,11 +9,12 @@ export default function AuthLayout({
 }) {
   return (
     <div className=" relative flex min-h-screen items-center justify-between">
-      <div className="space-y-32 px-32 py-8 h-screen">
+      <div className="space-y-6 content-center mx-auto max-w-lg h-screen">
         <div>
           <Link href="/">
             <Image src={Logo} alt="Logo of Loopy" />
           </Link>
+
         </div>
 
         {children}

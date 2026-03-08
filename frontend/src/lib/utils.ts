@@ -1,30 +1,28 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  return twMerge(clsx(inputs))
 }
 
-// Variant Engine
+export function createVariants<
+  Variants extends Record<string, Record<string, string>>,
+  DefaultVariants extends { [K in keyof Variants]?: keyof Variants[K] }
+>(variants: Variants, defaultVariants: DefaultVariants) {
+  return function (opts?: {
+    [K in keyof Variants]?: keyof Exclude<Variants[K], undefined>;
+  }) {
+    const classNames: string[] = [];
 
-type VariantConfig = Record<string, Record<string, string>>;
-type VariantDefaults = Record<string, string>;
-
-export function createVariants(
-  config: VariantConfig,
-  defaults: VariantDefaults = {}
-) {
-  return (options: Record<string, string> = {}) => {
-    const classes: string[] = [];
-
-    for (const key in config) {
-      const value = options[key] ?? defaults[key];
-      if (!value) continue;
-
-      const variantClass = config[key][value];
-      if (variantClass) classes.push(variantClass);
+    for (const key in variants) {
+      if (Object.prototype.hasOwnProperty.call(variants, key)) {
+        const variantKey = opts?.[key] ?? defaultVariants[key];
+        if (variantKey) {
+          classNames.push(variants[key][variantKey as keyof (typeof variants)[typeof key]]);
+        }
+      }
     }
 
-    return classes.join(" ");
+    return classNames.join(" ");
   };
 }

@@ -24,7 +24,15 @@ const registerSchema = z.object({
 
 type FormData = z.infer<typeof registerSchema>;
 
-export default function RegisterForm({ userType }: { userType: any }) {
+export default function RegisterForm({
+  userType,
+  inviteToken,
+  inviteEmail,
+}: {
+  userType?: any;
+  inviteToken?: string;
+  inviteEmail?: string;
+}) {
   const { login } = useAuth();
   const router = useRouter();
   const [showPass, setShowPass] = useState(false);
@@ -82,18 +90,30 @@ export default function RegisterForm({ userType }: { userType: any }) {
       }
 
       // 2. Register User
+      const response = await apiRequest<{
+        success: boolean;
+        needsOTP?: boolean;
+        user?: any;
+        userId?: string;
+        email?: string;
+      }>("/auth/register", {
+        method: "POST",
+        data: { ...data, userType, avatarKey },
+      });
 
-      const response = await apiRequest<{ success: boolean; user: any }>(
-        "/auth/register",
-        {
-          method: "POST",
-          data: { ...data, userType, avatarKey },
+      if (response.success) {
+        if (response.needsOTP && response.userId && response.email) {
+          // Store invite token in session if present
+          if (inviteToken) {
+            sessionStorage.setItem("pendingInviteToken", inviteToken);
+          }
+          router.push(
+            `/verify-otp?userId=${response.userId}&email=${encodeURIComponent(response.email)}`
+          );
+        } else if (response.user) {
+          login(response.user);
+          router.push("/home");
         }
-      );
-
-      if (response.success && response.user) {
-        login(response.user);
-        router.push("/home");
       }
     } catch (err: any) {
       setServerError(err.message || "Registration failed");
@@ -199,16 +219,14 @@ export default function RegisterForm({ userType }: { userType: any }) {
         {passwordValue.length > 0 && (
           <div className="p-3 bg-neutral-50 rounded-md text-xs space-y-1">
             <div
-              className={`flex items-center gap-2 ${
-                hasMinLength ? "text-emerald-600" : "text-neutral-500"
-              }`}
+              className={`flex items-center gap-2 ${hasMinLength ? "text-emerald-600" : "text-neutral-500"
+                }`}
             >
               {hasMinLength ? <Check size={12} /> : <X size={12} />} 8+ chars
             </div>
             <div
-              className={`flex items-center gap-2 ${
-                hasDigit ? "text-emerald-600" : "text-neutral-500"
-              }`}
+              className={`flex items-center gap-2 ${hasDigit ? "text-emerald-600" : "text-neutral-500"
+                }`}
             >
               {hasDigit ? <Check size={12} /> : <X size={12} />} Contains number
             </div>

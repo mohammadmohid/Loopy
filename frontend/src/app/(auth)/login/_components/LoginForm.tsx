@@ -36,18 +36,32 @@ export default function LoginForm() {
     setServerError(null);
 
     try {
-      // Backend returns: { success: true, user: { ... } }
-      const response = await apiRequest<{ success: boolean; user: any }>(
-        "/auth/login",
-        {
-          method: "POST",
-          data: data,
-        }
-      );
+      const response = await apiRequest<{
+        success: boolean;
+        user: any;
+        needsOTP?: boolean;
+        needsWorkspace?: boolean;
+        userId?: string;
+        email?: string;
+      }>("/auth/login", {
+        method: "POST",
+        data: data,
+      });
+
+      if (response.needsOTP) {
+        router.push(
+          `/verify-otp?userId=${response.userId}&email=${encodeURIComponent(response.email || "")}`
+        );
+        return;
+      }
 
       if (response.success && response.user) {
         login(response.user);
-        router.push("/home");
+        if (response.needsWorkspace) {
+          router.push("/create-workspace");
+        } else {
+          router.push("/home");
+        }
       } else {
         throw new Error("Invalid response from server");
       }
@@ -109,6 +123,6 @@ export default function LoginForm() {
           Sign up
         </Link>
       </div>
-    </form>
+    </form >
   );
 }

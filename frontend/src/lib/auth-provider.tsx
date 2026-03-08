@@ -17,7 +17,11 @@ interface User {
   lastName: string;
   email: string;
   profile: UserProfile;
-  globalRole: "ADMIN" | "USER";
+  isEmailConfirmed?: boolean;
+  activeWorkspace?: string;
+  workspaceName?: string;
+  workspaceRole?: "ADMIN" | "PROJECT_MANAGER" | "MEMBER";
+  workspaceId?: string;
 }
 
 interface AuthContextType {
@@ -29,7 +33,15 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const PUBLIC_PATHS = ["/login", "/getting-started", "/"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/getting-started",
+  "/",
+  "/verify-otp",
+  "/create-workspace",
+  "/join",
+  "/confirm-email",
+];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -44,7 +56,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(user);
       } catch (error) {
         console.log("No active session found");
-        console.log(error);
         setUser(null);
       } finally {
         setIsLoading(false);
@@ -55,8 +66,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!isLoading && !user && !PUBLIC_PATHS.includes(pathname)) {
-      router.push("/login");
+    if (!isLoading) {
+      if (!user && !PUBLIC_PATHS.includes(pathname)) {
+        router.push("/login");
+      } else if (
+        user &&
+        !user.activeWorkspace &&
+        !PUBLIC_PATHS.includes(pathname)
+      ) {
+        router.push("/create-workspace");
+      }
     }
   }, [user, isLoading, router, pathname]);
 
@@ -74,6 +93,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       router.push("/login");
     }
   };
+
+  // Prevent rendering protected content if user has no workspace
+  const isPublicPath = PUBLIC_PATHS.includes(pathname);
+  if (!isLoading && user && !user.activeWorkspace && !isPublicPath) {
+    return null; // Block render while router.push happens
+  }
 
   return (
     <AuthContext.Provider value={{ user, login, logout, isLoading }}>

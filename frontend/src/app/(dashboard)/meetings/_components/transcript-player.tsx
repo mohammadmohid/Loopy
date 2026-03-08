@@ -47,10 +47,6 @@ export function TranscriptPlayer({ transcript }: TranscriptPlayerProps) {
   return (
     <div className="flex flex-col h-full bg-white rounded-xl border border-neutral-200 overflow-hidden shadow-sm">
 
-      {/* ❌ REMOVED: Audio Controls, Play Button, Scrubber, Time Display 
-          ❌ REMOVED: Hidden <audio> element
-      */}
-
       {/* Transcript Scroll Area */}
       <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
         <div className="max-w-3xl mx-auto space-y-8 pb-20">

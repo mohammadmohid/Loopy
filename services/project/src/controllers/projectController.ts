@@ -1,5 +1,6 @@
 import { Response } from "express";
 import mongoose from "mongoose";
+import axios from "axios";
 import { AuthRequest } from "../middleware/auth";
 import Project from "../models/Project";
 import Task from "../models/Task";
@@ -9,6 +10,7 @@ import "../models/User";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getR2Client } from "../config/r2.js";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 
 interface Member {
   user: mongoose.Types.ObjectId;
@@ -29,6 +31,11 @@ export const createProject = async (req: AuthRequest, res: Response) => {
       assignedTeams,
     } = req.body;
 
+    const workspaceId = req.user!.workspaceId;
+    if (!workspaceId) {
+      return res.status(400).json({ message: "No active workspace" });
+    }
+
     const initialMembers: Member[] = [];
 
     // 1. Add Owner as MANAGER
@@ -39,25 +46,20 @@ export const createProject = async (req: AuthRequest, res: Response) => {
 
     // 2. Add Team Lead as MANAGER (if provided and different from owner)
     if (teamLead && teamLead !== req.user!.id) {
-      // FIX: Removed reference to undefined 'm', used 'teamLead' directly
       initialMembers.push({
         user: new mongoose.Types.ObjectId(teamLead),
         role: "MANAGER",
       });
     }
 
-    // 3. Add other members (defaulting to VIEWER if no role specified)
+    // 3. Add other members
     if (members && Array.isArray(members)) {
       members.forEach((m: any) => {
-        // Handle input where m is just an ID string OR an object { user, role }
         const rawId = typeof m === "string" ? m : m.user;
         const memberRole = typeof m === "object" && m.role ? m.role : "VIEWER";
 
-        // Validate if it's a valid ObjectId string to prevent crashes
         if (mongoose.Types.ObjectId.isValid(rawId)) {
           const memberId = new mongoose.Types.ObjectId(rawId);
-
-          // Prevent duplicates (check against existing ObjectIds in the array)
           const exists = initialMembers.find((im) => im.user.equals(memberId));
 
           if (!exists) {
@@ -72,10 +74,25 @@ export const createProject = async (req: AuthRequest, res: Response) => {
       description,
       startDate,
       endDate,
+      workspaceId: new mongoose.Types.ObjectId(workspaceId),
       owner: new mongoose.Types.ObjectId(req.user!.id),
-      members: initialMembers, // Now strictly typed to match schema
+      members: initialMembers,
       assignedTeams: assignedTeams || [],
     });
+
+    // Auto-create a chat channel for this project (non-blocking)
+    try {
+      const chatServiceUrl = process.env.CHAT_SERVICE_URL || "http://localhost:5004";
+      await axios.post(`${chatServiceUrl}/api/chat/channels/project-webhook`, {
+        projectId: project._id,
+        projectName: project.name,
+        members: initialMembers.map((m) => m.user.toString()),
+        createdBy: req.user!.id,
+        workspaceId: workspaceId,
+      });
+    } catch (chatErr: any) {
+      console.error("Failed to create project chat channel:", chatErr.message);
+    }
 
     res.status(201).json(project);
   } catch (error: any) {
@@ -84,23 +101,27 @@ export const createProject = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// @desc    Get projects (Filtered by Role & Team Association)
+// @desc    Get projects (scoped to workspace)
 // @access  Private
 export const getProjects = async (req: AuthRequest, res: Response) => {
   try {
     const { id, role } = req.user!;
-    let query = {};
+    const workspaceId = req.user!.workspaceId;
 
-    // RBAC Logic:
-    // If NOT Admin, filter by ownership/membership/teams.
-    // If Admin, leave query as {} to find ALL projects.
-    if (role !== "ADMIN") {
-      // 1. Find all teams the user belongs to
+    if (!workspaceId) {
+      return res.status(200).json([]);
+    }
+
+    // Always filter by workspace — even ADMINs only see their workspace's projects
+    let query: any = { workspaceId };
+
+    // Non-ADMIN and non-PM users only see projects they're part of
+    if (role !== "ADMIN" && role !== "PROJECT_MANAGER") {
       const userTeams = await Team.find({ members: id }).select("_id");
       const userTeamIds = userTeams.map((t) => t._id);
 
-      // 2. Build Query
       query = {
+        workspaceId,
         $or: [
           { owner: id },
           { "members.user": id },
@@ -109,17 +130,15 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
       };
     }
 
-    // 3. Fetch & Populate
-    // Vital: We MUST populate owner, otherwise frontend receives an ID string and crashes accessing .profile
     const projects = await Project.find(query)
       .populate("owner", "profile.firstName profile.lastName profile.avatarKey")
+      .populate("members.user", "profile.firstName profile.lastName profile.avatarKey")
       .sort({ updatedAt: -1 })
       .lean();
 
-    // 4. Sign Avatars (Safely)
+    // Sign Avatars
     const projectsWithAvatars = await Promise.all(
       projects.map(async (project: any) => {
-        // Safe check chain: Ensure owner AND profile exist before accessing avatarKey
         if (
           project.owner &&
           project.owner.profile &&
@@ -134,18 +153,119 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
             const avatarUrl = await getSignedUrl(r2, command, {
               expiresIn: 86400,
             });
-
-            // Safe assignment
             project.owner.profile.avatarUrl = avatarUrl;
           } catch (error) {
             console.error("Failed to sign avatar for project", project._id);
           }
         }
+
+        // Sign member avatars
+        if (project.members && Array.isArray(project.members)) {
+          const r2 = getR2Client();
+          for (const m of project.members) {
+            const userObj = m.user as any;
+            if (userObj?.profile?.avatarKey) {
+              try {
+                const command = new GetObjectCommand({
+                  Bucket: process.env.R2_BUCKET_NAME,
+                  Key: userObj.profile.avatarKey,
+                });
+                userObj.profile.avatarUrl = await getSignedUrl(r2, command, { expiresIn: 86400 });
+              } catch (error) {
+                // ignore
+              }
+            }
+          }
+        }
+
         return project;
       })
     );
 
     res.status(200).json(projectsWithAvatars);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get project by ID
+// @route   GET /api/projects/:id
+// @access  Private
+export const getProjectById = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const workspaceId = req.user!.workspaceId;
+
+    const project = await Project.findOne({ _id: id, workspaceId })
+      .populate("owner", "profile.firstName profile.lastName profile.avatarKey")
+      .populate("members.user", "profile.firstName profile.lastName email profile.avatarKey")
+      .lean();
+
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    // Access control: if not admin/pm, check if member
+    if (userRole !== "ADMIN" && userRole !== "PROJECT_MANAGER") {
+      const isDirectMember = project.members?.some(
+        (m: any) => m.user?._id?.toString() === userId || m.user?.toString() === userId
+      );
+      const isOwner = project.owner?._id?.toString() === userId || project.owner?.toString() === userId;
+
+      let isTeamMember = false;
+      if (!isDirectMember && !isOwner && project.assignedTeams?.length > 0) {
+        const teamIds = project.assignedTeams.map((at: any) => at.team);
+        const userTeams = await Team.find({ _id: { $in: teamIds }, members: userId }).select("_id");
+        if (userTeams.length > 0) isTeamMember = true;
+      }
+
+      if (!isDirectMember && !isOwner && !isTeamMember) {
+        return res.status(403).json({ message: "Not authorized to view this project" });
+      }
+    }
+
+    // Sign owner avatar if exists
+    const ownerObj = project.owner as any;
+    if (ownerObj?.profile?.avatarKey) {
+      try {
+        const r2 = getR2Client();
+        const command = new GetObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: ownerObj.profile.avatarKey,
+        });
+        ownerObj.profile.avatarUrl = await getSignedUrl(r2, command, { expiresIn: 86400 });
+      } catch (error) {
+        // ignore
+      }
+    }
+
+    // Sign member avatars if exists
+    if (project.members && Array.isArray(project.members)) {
+      const r2 = getR2Client();
+      for (const m of project.members) {
+        const userObj = m.user as any;
+        if (userObj?.profile?.avatarKey) {
+          try {
+            const command = new GetObjectCommand({
+              Bucket: process.env.R2_BUCKET_NAME,
+              Key: userObj.profile.avatarKey,
+            });
+            userObj.profile.avatarUrl = await getSignedUrl(r2, command, { expiresIn: 86400 });
+          } catch (error) {
+            // ignore
+          }
+        }
+      }
+    }
+
+    res.status(200).json(project);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
@@ -173,24 +293,29 @@ export const deleteProject = async (req: AuthRequest, res: Response) => {
 
     await project.deleteOne();
 
+    try {
+      const chatServiceUrl = process.env.CHAT_SERVICE_URL;
+      await axios.delete(`${chatServiceUrl}/api/chat/channels/project-webhook/${project._id}`);
+    } catch (chatErr: any) {
+      console.error("Failed to delete project chat channel:", chatErr.message);
+    }
+
     res.status(200).json({ message: "Project removed" });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Update Project (e.g. Board Columns)
+// @desc    Update Project (e.g. Board Columns, Owner Transfer)
 // @route   PATCH /api/projects/:id
 export const updateProject = async (req: AuthRequest, res: Response) => {
   try {
     const project = await Project.findById(req.params.id);
     if (!project) return res.status(404).json({ message: "Project not found" });
 
-    // Auth Check: Only Owner or Admin can manage sensitive fields
     const isOwner = project.owner.toString() === req.user!.id;
     const isAdmin = req.user!.role === "ADMIN";
 
-    // Regular members can only update board columns (e.g. moving tasks)
     const isMember = project.members.some(
       (m) => m.user.toString() === req.user!.id
     );
@@ -199,23 +324,41 @@ export const updateProject = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    // 1. Update Board Columns (Allowed for all members)
+    // Board Columns (all members)
     if (req.body.boardColumns) project.boardColumns = req.body.boardColumns;
 
-    // 2. Update Details (Owner/Admin Only)
+    // Owner/Admin only updates
     if (isOwner || isAdmin) {
       if (req.body.name) project.name = req.body.name;
-      if (req.body.description) project.description = req.body.description;
+      if (req.body.description !== undefined) project.description = req.body.description;
+      if (req.body.startDate !== undefined) project.startDate = req.body.startDate;
+      if (req.body.endDate !== undefined) project.endDate = req.body.endDate ? req.body.endDate : null;
 
-      // Member Management Logic
-      if (req.body.members && Array.isArray(req.body.members)) {
-        // Transform input to match Schema { user: ObjectId, role: String }
-        const newMembers = req.body.members.map((m: any) => ({
+      // Owner Transfer (ADMIN only)
+      if (req.body.newOwner && isAdmin) {
+        project.owner = new mongoose.Types.ObjectId(req.body.newOwner);
+        // Ensure new owner is in members as MANAGER
+        const ownerInMembers = project.members.find(
+          (m) => m.user.toString() === req.body.newOwner
+        );
+        if (!ownerInMembers) {
+          project.members.push({
+            user: new mongoose.Types.ObjectId(req.body.newOwner),
+            role: "MANAGER",
+          });
+        } else {
+          ownerInMembers.role = "MANAGER";
+        }
+      }
+
+      // Member Management
+      if (req.body.members !== undefined) {
+        const membersList = Array.isArray(req.body.members) ? req.body.members : [];
+        const newMembers = membersList.map((m: any) => ({
           user: new mongoose.Types.ObjectId(m.user || m.id),
           role: m.role || "VIEWER",
         }));
 
-        // Force Owner to remain as MANAGER/Owner in the list
         const ownerExists = newMembers.find(
           (m: any) => m.user.toString() === project.owner.toString()
         );
@@ -225,11 +368,19 @@ export const updateProject = async (req: AuthRequest, res: Response) => {
 
         project.members = newMembers;
       }
+
+      // Team Management
+      if (req.body.assignedTeams !== undefined) {
+        const teamsList = Array.isArray(req.body.assignedTeams) ? req.body.assignedTeams : [];
+        project.assignedTeams = teamsList.map((t: any) => ({
+          team: new mongoose.Types.ObjectId(t.team || t.id),
+          role: t.role || "VIEWER",
+        }));
+      }
     }
 
     await project.save();
 
-    // Return populated data for frontend UI
     await project.populate(
       "members.user",
       "profile.firstName profile.lastName email"
@@ -345,7 +496,38 @@ export const getProjectActivity = async (req: AuthRequest, res: Response) => {
   }
 };
 
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+// @desc    Delete all projects for a workspace (Webhook)
+// @route   DELETE /api/projects/workspace-webhook/:workspaceId
+export const deleteWorkspaceProjects = async (req: AuthRequest, res: Response) => {
+  try {
+    const { workspaceId } = req.params;
+
+    // Find all projects in the workspace
+    const projects = await Project.find({ workspaceId });
+
+    if (projects.length > 0) {
+      // Delete all projects
+      await Project.deleteMany({ workspaceId });
+
+      // Attempt to delete associated chat channels for all these projects
+      try {
+        const chatServiceUrl = process.env.CHAT_SERVICE_URL || "http://localhost:5004";
+        await Promise.all(
+          projects.map(p =>
+            axios.delete(`${chatServiceUrl}/api/chat/channels/project-webhook/${p._id}`).catch(() => { })
+          )
+        );
+      } catch (err) {
+        console.error("Failed to delete project chat channels for workspace:", workspaceId);
+      }
+    }
+
+    res.status(200).json({ message: `Deleted ${projects.length} projects for workspace ${workspaceId}` });
+  } catch (error: any) {
+    console.error("deleteWorkspaceProjects Error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
 
 // @desc    Generate a Presigned URL for Screen Recording Upload
 // @route   POST /api/projects/upload/screen-recording

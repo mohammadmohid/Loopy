@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip";
+import { WorkspaceSwitcher } from "@/app/(dashboard)/_components/workspace-switcher";
 
 const navItems = [
   { label: "Home", href: "/home", icon: Home },
@@ -35,7 +36,6 @@ const navItems = [
 
 interface SidebarProps {
   collapsed: boolean;
-  onToggle: () => void;
 }
 
 const NavItemWrapper = ({
@@ -65,7 +65,7 @@ const NavItemWrapper = ({
   );
 };
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed }: SidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -75,22 +75,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         collapsed ? "w-16" : "w-56"
       )}
     >
+      <WorkspaceSwitcher collapsed={collapsed} />
+
       {/* Nav Items */}
       <nav className="flex-1 px-2 space-y-1">
-        <NavItemWrapper collapsed={collapsed} label="Collapse Sidebar">
-          <div
-            className={`pt-4 w-full flex justify-center ${
-              !collapsed && "justify-end"
-            }`}
-          >
-            <button
-              onClick={onToggle}
-              className="px-3 py-2.5 hover:bg-neutral-100 rounded-xl transition-colors"
-            >
-              <PanelLeftClose className="w-5 h-5 text-neutral-600" />
-            </button>
-          </div>
-        </NavItemWrapper>
 
         {navItems.map((item) => {
           const isActive =

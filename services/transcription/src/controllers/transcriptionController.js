@@ -1,9 +1,7 @@
 import axios from "axios";
 import Artifact from "../models/Artifact.js";
 import mongoose from "mongoose";
-import { GoogleGenerativeAI } from "@google/generative-ai"; // 👈 Replaces OpenAI
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
-
 
 //  Convert ElevenLabs or Deepgram JSON to plain text
 const parseTranscriptToText = (transcriptJson) => {
@@ -12,74 +10,67 @@ const parseTranscriptToText = (transcriptJson) => {
   return transcriptJson.words.map(w => w.text).join(" ");
 };
 
-//  Gemini Logic
+//  OpenRouter Summary Logic (replaces Gemini)
 async function runGeminiSummary(fullText, { title, date } = {}) {
   if (!fullText || fullText.length < 50) return "Transcript too short to summarize.";
 
   try {
-    // Initialize Gemini
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const prompt = `You are an expert professional meeting secretary. 
+Generate formal Meeting Minutes based on the transcript below.
 
+Metadata provided:
+- Meeting Title: ${title || "Untitled Meeting"}
+- Date: ${date || new Date().toLocaleString()}
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+Please strictly format the output using the following Markdown structure:
 
-    const prompt = `
-        You are an expert professional meeting secretary. 
-        Generate formal Meeting Minutes based on the transcript below.
-        
-        Metadata provided:
-        - Meeting Title: ${title || "Untitled Meeting"}
-        - Date: ${date || new Date().toLocaleString()}
+ ${title || "Meeting Minutes"}
 
-        Please strictly format the output as a valid JSON object matching the exact structure below. 
-        DO NOT wrap it in markdown code blocks (\`\`\`json). Return ONLY the raw JSON object.
-        
-        {
-          "overview": "A short 1-2 sentence general overview.",
-          "agenda": ["Infer the main agenda items discussed"],
-          "minutes": "# Meeting Title: ${title || "Untitled Meeting"}\\n\\n**Date/Time:** ${date || new Date().toLocaleString()}\\n\\n## Agenda\\n- [Item 1]\\n- [Item 2]\\n\\n## Participants\\n- [Infer or list participants if mentioned]\\n\\n## Minutes of Meeting\\n- [Detailed point 1]\\n- [Detailed point 2]\\n\\n## Action Items\\n. Task 1: [Task description]\\nAssigned to ([Assignee Name])\\n\\n. Task 2: [Task description]\\nAssigned to ([Assignee Name])\\n\\n## Next Steps\\n- [Follow-up action or next meeting]"
-        }
+Date and Time: ${date || "Not specified"}
 
-        INSTRUCTIONS FOR "minutes" FIELD:
-        - Use exact markdown headings (## Agenda, ## Participants, ## Minutes of Meeting, ## Action Items, ## Next Steps).
-        - Use proper bullet points (-) for the lists under Agenda, Participants, Minutes of Meeting, and Next Steps.
-        - For Action Items, strictly use the format:
-          . Task [Number]: [Task description]
-          Assigned to ([Assignee Name])
-        - Ensure tone is highly formal and professional.
+Participants: - [List participants identified from speech or context. If unknown, write "Unspecified"]
 
-        TRANSCRIPT:
-        ${fullText}
-        `;
+ Agenda
+- [Infer the main agenda items discussed]
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text().trim();
+ Meeting Minutes / Key Takeaways
+- [Bulleted list of key discussion points and decisions]
 
-    // Safety cleanup in case Gemini still wraps in Markdown
-    if (text.startsWith("\`\`\`json")) {
-      text = text.replace(/^\`\`\`json/i, "").replace(/\`\`\`$/i, "").trim();
+ Action Items
+- [ ] [Task 1] (Assignee)
+- [ ] [Task 2] (Assignee)
+
+TRANSCRIPT:
+${fullText}`;
+
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENROUTER_API}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "z-ai/glm-4.5-air:free",
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`OpenRouter Error ${response.status}: ${errText}`);
     }
 
-    // Parse string to JSON securely
-    try {
-      return JSON.parse(text);
-    } catch (parseErr) {
-      console.warn("Failed to parse Gemini JSON output. Raw output:", text);
-      return {
-        overview: "",
-        agenda: [],
-        minutes: text, // Fallback to raw text if parsing fails
-      };
-    }
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || "Summary generation returned empty.";
 
   } catch (error) {
-    console.error("⚠️ Gemini API Error:", error.message);
-    return {
-      overview: "",
-      agenda: [],
-      minutes: "Summary generation failed. Please try again."
-    };
+    console.error("⚠️ OpenRouter API Error:", error.message);
+    return "Summary generation failed. Please try again.";
   }
 }
 

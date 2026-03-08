@@ -14,6 +14,8 @@ export interface User {
   email: string;
   avatar: string;
   role: string;
+  workspaceId?: string;
+  workspaceRole?: string;
 }
 
 export interface Task {
@@ -88,3 +90,78 @@ export interface CalendarEvent {
   assignees?: User[];
   projectId: string;
 }
+
+// --- Chat Types ---
+
+export interface ChannelMember {
+  user: {
+    _id: string;
+    email: string;
+    profile: {
+      firstName: string;
+      lastName: string;
+      avatarKey?: string;
+      avatarUrl?: string;
+    };
+  };
+  role: "admin" | "member";
+  joinedAt: string;
+}
+
+export interface Channel {
+  _id: string;
+  name: string;
+  description?: string;
+  type: "project" | "team" | "private" | "direct" | "global";
+  projectId?: string;
+  teamId?: string;
+  workspaceId: string;
+  members: ChannelMember[];
+  createdBy?: string; // Optional for global channels
+  isArchived: boolean;
+  restrictedChat?: boolean;
+  lastMessageAt?: string;
+  lastMessagePreview?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Reaction {
+  emoji: string;
+  users: string[];
+}
+
+export interface Attachment {
+  name: string;
+  key: string;
+  size: number;
+  mimeType: string;
+  url?: string;
+}
+
+export interface ChatMessage {
+  _id: string;
+  channelId: string;
+  sender: {
+    _id: string;
+    email: string;
+    profile: {
+      firstName: string;
+      lastName: string;
+      avatarKey?: string;
+      avatarUrl?: string;
+    };
+  };
+  content: string;
+  type: "text" | "system" | "file";
+  threadParentId?: string;
+  replyCount: number;
+  mentions: string[];
+  reactions: Reaction[];
+  attachments: Attachment[];
+  isEdited: boolean;
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+

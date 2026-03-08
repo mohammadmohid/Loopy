@@ -73,6 +73,16 @@ app.use(
   })
 );
 
+// Route: Chat Service
+app.use(
+  "/api/chat",
+  createProxyMiddleware({
+    target: process.env.CHAT_SERVICE_URL || "http://localhost:5004",
+    changeOrigin: true,
+    pathRewrite: { "^": "/api/chat" },
+  })
+);
+
 app.listen(PORT, () => {
   console.log(`Gateway running on port ${PORT}`);
 });

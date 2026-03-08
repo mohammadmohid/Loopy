@@ -6,9 +6,8 @@ const nextConfig = {
         source: "/api/:path*",
         // In production, use your actual Backend URL env var.
         // Locally, fallback to localhost:8000
-        destination: `${
-          process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
-        }/api/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
+          }/api/:path*`,
       },
     ];
   },

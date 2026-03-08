@@ -313,8 +313,8 @@ export const getProjectActivity = async (req: AuthRequest, res: Response) => {
           t.status === "done"
             ? "completed"
             : t.createdAt.getTime() === t.updatedAt.getTime()
-            ? "created"
-            : "updated",
+              ? "created"
+              : "updated",
         targetName: t.title,
         timestamp: t.updatedAt,
         user: t.assignees?.[0]
@@ -342,5 +342,49 @@ export const getProjectActivity = async (req: AuthRequest, res: Response) => {
     res.json(activities);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+
+// @desc    Generate a Presigned URL for Screen Recording Upload
+// @route   POST /api/projects/upload/screen-recording
+// @access  Private
+export const generateScreenRecordingUploadUrl = async (req: AuthRequest, res: Response) => {
+  try {
+    const { filename, contentType } = req.body;
+    const userId = req.user!.id;
+
+    if (!filename || !contentType) {
+      return res.status(400).json({ message: "filename and contentType are required" });
+    }
+
+    // Secure the filename by stripping out weird path characters
+    const sanitizedFilename = filename.replace(/[^a-zA-Z0-9.-]/g, "_");
+
+    // Create the unique Key path in R2
+    const key = `UserRecordings/${userId}/${Date.now()}_${sanitizedFilename}`;
+
+    const r2 = getR2Client();
+
+    const command = new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+      ContentType: contentType, // e.g. "video/webm"
+    });
+
+    // Generate link valid for 30 minutes
+    const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 1800 });
+
+    // The final URL where the file can be publicly accessed (if bucket is public or via a CDN)
+    const publicUrl = `${process.env.R2_PUBLIC_DOMAIN}/${key}`;
+
+    // Requirement: Output success log in terminal
+    console.log(`✅ Started secure cloud upload for file: ${sanitizedFilename} by user: ${userId}`);
+
+    res.status(200).json({ presignedUrl, publicUrl, key });
+  } catch (error: any) {
+    console.error("Screen Recording Upload URL Error:", error);
+    res.status(500).json({ message: "Failed to generate upload URL" });
   }
 };

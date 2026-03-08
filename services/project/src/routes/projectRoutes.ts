@@ -7,6 +7,7 @@ import {
   deleteProject,
   updateProject,
   getProjectActivity,
+  generateScreenRecordingUploadUrl
 } from "../controllers/projectController";
 import {
   signUpload,
@@ -34,6 +35,7 @@ router.patch("/:id", protect, authorize("ADMIN"), updateProject);
 router.get("/", protect, getProjects);
 router.delete("/:id", protect, authorize("ADMIN"), deleteProject);
 router.put("/:id/assign-lead", protect, authorize("ADMIN"), assignTeamLead);
+router.post("/upload/screen-recording", protect, generateScreenRecordingUploadUrl);
 
 // Project Activity
 router.get("/:projectId/activity", protect, getProjectActivity);

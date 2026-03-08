@@ -8,6 +8,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getR2Client } from "../config/r2";
 import { v4 as uuidv4 } from "uuid";
 import "../models/User";
+import { createAvatarResolver } from "../utils/avatar";
 
 // @desc    Get paginated messages for a channel
 // @route   GET /api/chat/channels/:channelId/messages
@@ -23,7 +24,7 @@ export const getMessages = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ message: "Channel not found" });
         }
 
-        const isMember = channel.members.some(
+        const isMember = channel.type === "global" || channel.members.some(
             (m) => m.user.toString() === req.user!.id
         );
         if (!isMember) {
@@ -55,6 +56,17 @@ export const getMessages = async (req: AuthRequest, res: Response) => {
 
         // Reverse so messages are in chronological order for the client
         result.reverse();
+
+        // Populate S3 avatar URLs efficiently
+        const resolveAvatar = createAvatarResolver();
+        for (const msg of result) {
+            if (msg.sender && (msg.sender as any).profile) {
+                const key = (msg.sender as any).profile.avatarKey;
+                if (key) {
+                    (msg.sender as any).profile.avatarUrl = await resolveAvatar(key);
+                }
+            }
+        }
 
         res.json({
             messages: result,
@@ -90,7 +102,7 @@ export const getThreadMessages = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ message: "Channel not found" });
         }
 
-        const isMember = channel.members.some(
+        const isMember = channel.type === "global" || channel.members.some(
             (m) => m.user.toString() === req.user!.id
         );
         if (!isMember) {
@@ -102,6 +114,16 @@ export const getThreadMessages = async (req: AuthRequest, res: Response) => {
             .populate("mentions", "profile.firstName profile.lastName")
             .sort({ createdAt: 1 })
             .lean();
+
+        const resolveAvatar = createAvatarResolver();
+        for (const msg of replies) {
+            if (msg.sender && (msg.sender as any).profile) {
+                const key = (msg.sender as any).profile.avatarKey;
+                if (key) {
+                    (msg.sender as any).profile.avatarUrl = await resolveAvatar(key);
+                }
+            }
+        }
 
         res.json({ parent, replies });
     } catch (error: any) {
@@ -129,13 +151,17 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
             return res.status(404).json({ message: "Channel not found" });
         }
 
-        const isMember = channel.members.some(
+        const isMember = channel.type === "global" || channel.members.some(
             (m) => m.user.toString() === req.user!.id
         );
         if (!isMember) {
             return res
                 .status(403)
                 .json({ message: "Not a member of this channel" });
+        }
+
+        if (channel.restrictedChat && req.user!.role !== "ADMIN" && req.user!.role !== "MANAGER") {
+            return res.status(403).json({ message: "Only admins and managers can send messages in this channel" });
         }
 
         // Parse @mentions from content if not explicitly provided
@@ -382,9 +408,18 @@ export const searchMessages = async (req: AuthRequest, res: Response) => {
                 .json({ message: "Search query (q) or channelId is required" });
         }
 
-        // Get all channels the user belongs to
+        const workspaceId = req.user!.workspaceId;
+        if (!workspaceId) {
+            return res.status(400).json({ message: "No active workspace" });
+        }
+
+        // Get all channels the user belongs to (scoped to workspace)
         const userChannels = await Channel.find({
-            "members.user": req.user!.id,
+            workspaceId: new mongoose.Types.ObjectId(workspaceId),
+            $or: [
+                { "members.user": req.user!.id },
+                { type: "global" }
+            ],
             isArchived: false,
         }).select("_id name type");
 

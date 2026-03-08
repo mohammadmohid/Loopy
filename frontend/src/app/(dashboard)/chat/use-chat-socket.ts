@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import type { ChatMessage } from "@/lib/types";
-
+import type { ChatMessage, Channel } from "@/lib/types";
 interface UseChatSocketOptions {
     onNewMessage?: (message: ChatMessage) => void;
     onMessageDeleted?: (data: { messageId: string; channelId: string }) => void;
@@ -13,6 +12,12 @@ interface UseChatSocketOptions {
     onMemberLeft?: (data: { channelId: string; userId: string }) => void;
     onUserTyping?: (data: { channelId: string; userId: string }) => void;
     onUserStopTyping?: (data: { channelId: string; userId: string }) => void;
+    onThreadReply?: (data: { parentId: string; message: ChatMessage }) => void;
+    onChannelCreated?: (channel: Channel) => void;
+    onChannelUpdated?: (channel: Channel) => void;
+    onChannelDeleted?: (data: { channelId: string }) => void;
+    onChannelArchived?: (data: { channelId: string }) => void;
+    onChannelRemoved?: (data: { channelId: string }) => void;
 }
 
 export function useChatSocket(options: UseChatSocketOptions = {}) {
@@ -72,6 +77,24 @@ export function useChatSocket(options: UseChatSocketOptions = {}) {
         }
         if (options.onUserStopTyping) {
             socket.on("user-stop-typing", options.onUserStopTyping);
+        }
+        if (options.onThreadReply) {
+            socket.on("thread-reply", options.onThreadReply);
+        }
+        if (options.onChannelCreated) {
+            socket.on("channel-created", options.onChannelCreated);
+        }
+        if (options.onChannelUpdated) {
+            socket.on("channel-updated", options.onChannelUpdated);
+        }
+        if (options.onChannelDeleted) {
+            socket.on("channel-deleted", options.onChannelDeleted);
+        }
+        if (options.onChannelArchived) {
+            socket.on("channel-archived", options.onChannelArchived);
+        }
+        if (options.onChannelRemoved) {
+            socket.on("channel-removed", options.onChannelRemoved);
         }
 
         return () => {

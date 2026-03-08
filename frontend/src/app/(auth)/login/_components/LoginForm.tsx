@@ -123,6 +123,6 @@ export default function LoginForm() {
           Sign up
         </Link>
       </div>
-    </form>
+    </form >
   );
 }

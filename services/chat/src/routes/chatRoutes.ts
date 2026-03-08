@@ -5,11 +5,15 @@ import {
     getChannelById,
     createChannel,
     createProjectChannel,
+    deleteProjectChannel,
     updateChannel,
     archiveChannel,
     addMembers,
     removeMember,
     getChannelMembers,
+    syncTeamChannel,
+    deleteTeamChannel,
+    syncWorkspaceMember,
 } from "../controllers/channelController";
 import {
     getMessages,
@@ -32,6 +36,10 @@ router.post("/upload/sign", protect, signUpload);
 
 // --- Channel Routes ---
 router.post("/channels/project-webhook", createProjectChannel);
+router.delete("/channels/project-webhook/:projectId", deleteProjectChannel);
+router.post("/channels/team-webhook", syncTeamChannel);
+router.delete("/channels/team-webhook/:teamId", deleteTeamChannel);
+router.post("/channels/member-webhook", syncWorkspaceMember);
 router.post("/channels", protect, createChannel);
 router.get("/channels", protect, getUserChannels);
 router.get("/channels/:id", protect, getChannelById);

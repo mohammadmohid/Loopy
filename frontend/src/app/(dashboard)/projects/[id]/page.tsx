@@ -30,7 +30,7 @@ const mapUser = (u: any): User => ({
     : u.name || "Unknown",
   email: u.email || "",
   avatar: u.profile ? u.profile.firstName[0] + u.profile.lastName[0] : "U",
-  role: u.globalRole || "member",
+  role: u.role || "member", // Usually sent as part of the members array from the backend
 });
 
 export default function ProjectDetailPage() {
@@ -324,7 +324,7 @@ export default function ProjectDetailPage() {
   if (!project) return <div>Project not found</div>;
 
   const canEdit =
-    user?.globalRole === "ADMIN" || project.owner.id === user?.id || true;
+    user?.workspaceRole === "ADMIN" || project.owner.id === user?.id || true;
 
   const handleActivityClick = (activity: Activity) => {
     if (activity.type === "task") {

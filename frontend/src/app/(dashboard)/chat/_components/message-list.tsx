@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState } from "react";
 import type { ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import {
     MessageSquare,
@@ -151,10 +152,19 @@ export function MessageList({
                             >
                                 {/* Avatar */}
                                 {!grouped ? (
-                                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                                        <span className="text-xs font-semibold text-primary">
-                                            {msg.sender?.profile?.firstName?.[0]?.toUpperCase() || "?"}
-                                        </span>
+                                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5 overflow-hidden relative border border-transparent">
+                                        {msg.sender?.profile?.avatarUrl && /^https?:\/\//.test(msg.sender.profile.avatarUrl) ? (
+                                            <Image
+                                                src={msg.sender.profile.avatarUrl}
+                                                alt={senderName}
+                                                fill
+                                                className="object-cover"
+                                            />
+                                        ) : (
+                                            <span className="text-xs font-semibold text-primary">
+                                                {msg.sender?.profile?.firstName?.[0]?.toUpperCase() || "?"}
+                                            </span>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="w-8 shrink-0" />
@@ -211,7 +221,7 @@ export function MessageList({
                                             </button>
                                         </div>
                                     ) : (
-                                        <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+                                        <p className="text-sm text-foreground whitespace-pre-wrap wrap-break-word">
                                             {msg.content}
                                             {msg.isEdited && (
                                                 <span className="text-[10px] text-neutral-400 ml-1">

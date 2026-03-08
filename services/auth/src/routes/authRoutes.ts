@@ -16,8 +16,15 @@ import {
   acceptInvite,
   joinWorkspace,
   getMembers,
+  getWorkspaceMembersById,
   updateMemberRole,
   switchWorkspace,
+  getMyWorkspaces,
+  leaveWorkspace,
+  transferOwnership,
+  deleteWorkspace,
+  removeMember,
+  resendInvite,
 } from "../controllers/workspaceController.js";
 import { signAvatarUpload } from "../controllers/uploadController.js";
 import { protect } from "../middleware/auth.js";
@@ -47,6 +54,13 @@ router.post("/workspaces/invite", protect, inviteMember);
 router.post("/workspaces/accept-invite", acceptInvite);
 router.post("/workspaces/join", protect, joinWorkspace);
 router.patch("/workspaces/members/:memberId", protect, updateMemberRole);
+router.get("/workspaces/:id/members", protect, getWorkspaceMembersById);
 router.post("/workspaces/switch", protect, switchWorkspace);
+router.get("/workspaces/me", protect, getMyWorkspaces);
+router.post("/workspaces/:id/leave", protect, leaveWorkspace);
+router.post("/workspaces/:id/transfer-ownership", protect, transferOwnership);
+router.delete("/workspaces/:id", protect, deleteWorkspace);
+router.delete("/workspaces/members/:memberId", protect, removeMember);
+router.post("/workspaces/invites/resend", protect, resendInvite);
 
 export default router;

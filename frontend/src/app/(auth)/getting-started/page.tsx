@@ -5,11 +5,11 @@ import { Suspense } from "react";
 
 function GettingStartedContent() {
   return (
-    <div className="space-y-8">
-      <header>
+    <div className="space-y-8 flex flex-col items-center">
+      <header className="text-center">
         <h1 className="font-medium text-2xl">Create your account</h1>
-        <p className="text-neutral-600">
-          Get started with Loopy — manage projects, meetings, and team collaboration.
+        <p className="w-[48ch] text-neutral-600">
+          Manage projects, meetings, and team collaboration.
         </p>
       </header>
 

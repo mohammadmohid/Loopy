@@ -15,6 +15,8 @@ interface MessageInputProps {
     ) => Promise<void>;
     onTyping: () => void;
     onStopTyping: () => void;
+    disabled?: boolean;
+    disabledReason?: string;
 }
 
 export function MessageInput({
@@ -23,6 +25,8 @@ export function MessageInput({
     onSend,
     onTyping,
     onStopTyping,
+    disabled,
+    disabledReason,
 }: MessageInputProps) {
     const [content, setContent] = useState("");
     const [sending, setSending] = useState(false);
@@ -155,7 +159,13 @@ export function MessageInput({
 
     return (
         <div className="border-t border-neutral-200 p-3 relative">
-            {/* Mention Autocomplete */}
+            {disabled ? (
+                <div className="flex items-center justify-center p-3 py-4 text-sm text-neutral-500 bg-neutral-50 rounded-lg border border-neutral-200">
+                    {disabledReason || "You cannot send messages in this channel."}
+                </div>
+            ) : (
+                <>
+                    {/* Mention Autocomplete */}
             {showMentions && filteredMembers.length > 0 && (
                 <div className="absolute bottom-full left-3 right-3 mb-1 bg-white border border-neutral-200 rounded-lg shadow-lg max-h-40 overflow-y-auto z-20">
                     {filteredMembers.map((m) => (
@@ -254,6 +264,8 @@ export function MessageInput({
                     )}
                 </button>
             </div>
+                </>
+            )}
         </div>
     );
 }

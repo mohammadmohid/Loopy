@@ -65,7 +65,7 @@ export default function CreateWorkspacePage() {
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            className="w-full !pl-10 !pr-4 !py-2.5 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                            className="w-full pl-10! pr-4! py-2.5! border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                             placeholder="e.g. Acme Corp"
                             autoFocus
                         />
@@ -79,9 +79,8 @@ export default function CreateWorkspacePage() {
                     type="submit"
                     className="w-full"
                     disabled={!name.trim() || isCreating}
-                    loading={isCreating}
                 >
-                    Create Workspace
+                    {isCreating ? "Creating..." : "Create Workspace"}
                 </Button>
             </form>
         </div>

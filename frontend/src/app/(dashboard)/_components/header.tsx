@@ -65,7 +65,7 @@ export function Header({
       <div className="flex items-center gap-3">
         <button
           onClick={onMenuClick}
-          className="p-2 hover:bg-neutral-100 rounded-lg lg:hidden text-neutral-500"
+          className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-500"
         >
           <Menu className="w-5 h-5" />
         </button>

@@ -17,11 +17,11 @@ interface User {
   lastName: string;
   email: string;
   profile: UserProfile;
-  globalRole: "ADMIN" | "USER";
   isEmailConfirmed?: boolean;
   activeWorkspace?: string;
   workspaceName?: string;
   workspaceRole?: "ADMIN" | "PROJECT_MANAGER" | "MEMBER";
+  workspaceId?: string;
 }
 
 interface AuthContextType {
@@ -54,16 +54,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { user } = await apiRequest<{ user: User }>("/auth/me");
         setUser(user);
-
-        // If user has no workspace and is not on workspace creation page, redirect
-        if (
-          user &&
-          user.isEmailConfirmed &&
-          !user.activeWorkspace &&
-          !PUBLIC_PATHS.includes(pathname)
-        ) {
-          router.push("/create-workspace");
-        }
       } catch (error) {
         console.log("No active session found");
         setUser(null);
@@ -76,8 +66,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!isLoading && !user && !PUBLIC_PATHS.includes(pathname)) {
-      router.push("/login");
+    if (!isLoading) {
+      if (!user && !PUBLIC_PATHS.includes(pathname)) {
+        router.push("/login");
+      } else if (
+        user &&
+        !user.activeWorkspace &&
+        !PUBLIC_PATHS.includes(pathname)
+      ) {
+        router.push("/create-workspace");
+      }
     }
   }, [user, isLoading, router, pathname]);
 
@@ -95,6 +93,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       router.push("/login");
     }
   };
+
+  // Prevent rendering protected content if user has no workspace
+  const isPublicPath = PUBLIC_PATHS.includes(pathname);
+  if (!isLoading && user && !user.activeWorkspace && !isPublicPath) {
+    return null; // Block render while router.push happens
+  }
 
   return (
     <AuthContext.Provider value={{ user, login, logout, isLoading }}>

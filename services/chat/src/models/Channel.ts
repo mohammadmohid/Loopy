@@ -9,11 +9,14 @@ export interface IChannelMember {
 export interface IChannel extends Document {
     name: string;
     description?: string;
-    type: "project" | "team" | "private" | "direct";
+    type: "project" | "team" | "private" | "direct" | "global";
     projectId?: mongoose.Types.ObjectId;
+    teamId?: mongoose.Types.ObjectId;
+    workspaceId: mongoose.Types.ObjectId;
     members: IChannelMember[];
-    createdBy: mongoose.Types.ObjectId;
+    createdBy?: mongoose.Types.ObjectId; // Make it optional for global channel auto-creation
     isArchived: boolean;
+    restrictedChat?: boolean; // Restrict to admin/PMs
     lastMessageAt?: Date;
     lastMessagePreview?: string;
     createdAt: Date;
@@ -26,11 +29,13 @@ const ChannelSchema: Schema = new Schema(
         description: { type: String, trim: true },
         type: {
             type: String,
-            enum: ["project", "team", "private", "direct"],
+            enum: ["project", "team", "private", "direct", "global"],
             required: true,
             default: "team",
         },
         projectId: { type: Schema.Types.ObjectId, ref: "Project", index: true },
+        teamId: { type: Schema.Types.ObjectId, index: true },
+        workspaceId: { type: Schema.Types.ObjectId, ref: "Workspace", required: true, index: true },
         members: [
             {
                 user: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -42,8 +47,9 @@ const ChannelSchema: Schema = new Schema(
                 joinedAt: { type: Date, default: Date.now },
             },
         ],
-        createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+        createdBy: { type: Schema.Types.ObjectId, ref: "User" },
         isArchived: { type: Boolean, default: false },
+        restrictedChat: { type: Boolean, default: false },
         lastMessageAt: { type: Date },
         lastMessagePreview: { type: String },
     },
@@ -53,6 +59,9 @@ const ChannelSchema: Schema = new Schema(
 // Indexes for fast queries
 ChannelSchema.index({ "members.user": 1 });
 ChannelSchema.index({ type: 1 });
+ChannelSchema.index({ workspaceId: 1, type: 1 });
+ChannelSchema.index({ workspaceId: 1, teamId: 1 });
+ChannelSchema.index({ workspaceId: 1, type: 1, "members.user": 1 });
 ChannelSchema.index({ lastMessageAt: -1 });
 
 export default mongoose.model<IChannel>("Channel", ChannelSchema);

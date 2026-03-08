@@ -44,23 +44,7 @@ const sendTokenResponse = async (
   res: Response,
   extra?: Record<string, any>
 ) => {
-  const token = generateToken(
-    user._id.toString(),
-    user.globalRole,
-    user.activeWorkspace?.toString()
-  );
-  const avatarUrl = await getAvatarUrl(user.profile.avatarKey);
-
-  const isProduction = process.env.NODE_ENV === "production";
-
-  const options = {
-    expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
-  };
-
-  // Get workspace name if available
+  // Get workspace name and role if available
   let workspaceName: string | null = null;
   let workspaceRole: string | null = null;
   if (user.activeWorkspace) {
@@ -74,6 +58,26 @@ const sendTokenResponse = async (
     }
   }
 
+  const tokenRole = workspaceRole || "USER";
+
+  const token = generateToken(
+    user._id.toString(),
+    tokenRole,
+    user.activeWorkspace?.toString()
+  );
+  const avatarUrl = await getAvatarUrl(user.profile.avatarKey);
+
+  const isProduction = process.env.NODE_ENV === "production";
+
+  const options = {
+    expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
+  };
+
+  // We already fetched workspace details above
+
   res
     .status(statusCode)
     .cookie("token", token, options)
@@ -83,7 +87,7 @@ const sendTokenResponse = async (
         id: user._id,
         email: user.email,
         profile: { ...user.profile, avatarUrl },
-        globalRole: user.globalRole,
+
         activeWorkspace: user.activeWorkspace || null,
         workspaceName,
         workspaceRole,
@@ -113,7 +117,6 @@ export const findUserById = async (
         id: user._id,
         email: user.email,
         profile: { ...user.profile, avatarUrl },
-        globalRole: user.globalRole,
       },
     });
   } catch (error) {
@@ -131,6 +134,21 @@ export const getMe = async (req: Request & { user?: any }, res: Response) => {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Auto-set active workspace if none exists but user has workspaces
+    let tokenUpdated = false;
+    if (!user.activeWorkspace && user.workspaces && user.workspaces.length > 0) {
+      // Find the first workspace that ACTUALLY exists in the DB
+      const validWorkspace = await Workspace.findOne({ _id: { $in: user.workspaces } });
+      if (validWorkspace) {
+        user.activeWorkspace = validWorkspace._id;
+        tokenUpdated = true;
+      } else {
+        // Clean up stale IDs if no valid workspaces exist
+        user.workspaces = [];
+      }
+      await user.save();
+    }
+
     const avatarUrl = await getAvatarUrl(user.profile.avatarKey);
 
     let workspaceName: string | null = null;
@@ -146,13 +164,28 @@ export const getMe = async (req: Request & { user?: any }, res: Response) => {
       }
     }
 
+    if (tokenUpdated) {
+      const tokenRole = workspaceRole || "USER";
+      const token = generateToken(
+        user._id.toString(),
+        tokenRole,
+        user.activeWorkspace?.toString()
+      );
+      const isProduction = process.env.NODE_ENV === "production";
+      res.cookie("token", token, {
+        expires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
+      });
+    }
+
     res.json({
       success: true,
       user: {
         id: user._id,
         email: user.email,
         profile: { ...user.profile, avatarUrl },
-        globalRole: user.globalRole,
         isEmailConfirmed: user.isEmailConfirmed,
         activeWorkspace: user.activeWorkspace || null,
         workspaceName,
@@ -179,7 +212,6 @@ export const register = async (req: Request, res: Response) => {
       email,
       password,
       profile: { firstName, lastName, avatarKey },
-      globalRole: "USER",
       isEmailConfirmed: false,
     });
 
@@ -343,7 +375,6 @@ export const updateProfile = async (
         id: user._id,
         email: user.email,
         profile: { ...user.profile, avatarUrl },
-        globalRole: user.globalRole,
       },
     });
   } catch (error) {

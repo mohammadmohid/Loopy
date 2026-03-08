@@ -36,10 +36,10 @@ export function ThreadPanel({
         const fetchReplies = async () => {
             try {
                 setLoading(true);
-                const data = await apiRequest<ChatMessage[]>(
+                const data = await apiRequest<{ parent: ChatMessage; replies: ChatMessage[] }>(
                     `/chat/messages/${parentMessage._id}/thread`
                 );
-                setReplies(data);
+                setReplies(data.replies);
             } catch (err) {
                 console.error("Failed to fetch thread:", err);
             } finally {
@@ -146,7 +146,7 @@ export function ThreadPanel({
                                                 {format(new Date(reply.createdAt), "h:mm a")}
                                             </span>
                                         </div>
-                                        <p className="text-sm text-foreground whitespace-pre-wrap break-words">
+                                        <p className="text-sm text-foreground whitespace-pre-wrap [word-break:break-word]">
                                             {reply.isDeleted ? (
                                                 <span className="text-neutral-400 italic">
                                                     This message was deleted

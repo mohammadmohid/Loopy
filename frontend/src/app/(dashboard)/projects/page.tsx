@@ -3,9 +3,16 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Filter, Loader2, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CreateProjectModal } from "./_components/create-project-modal";
+import { ProjectModal } from "./_components/project-modal";
 import { ProjectCard } from "./_components/project-card";
 import { apiRequest } from "@/lib/api";
+
+interface ProjectMember {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  initials: string;
+}
 
 interface Project {
   _id: string;
@@ -22,6 +29,7 @@ interface Project {
 
 export default function ProjectsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -59,6 +67,19 @@ export default function ProjectsPage() {
               })
             : "No Date",
           isPinned: false,
+          members: Array.isArray(p.members)
+            ? p.members
+                .filter((m: any) => m.user && m.user.profile)
+                .map((m: any) => {
+                  const prof = m.user.profile;
+                  return {
+                    id: m.user._id,
+                    name: `${prof.firstName || ""} ${prof.lastName || ""}`.trim(),
+                    avatarUrl: prof.avatarUrl,
+                    initials: prof.firstName ? (prof.firstName[0] + (prof.lastName ? prof.lastName[0] : "")).toUpperCase() : "NA",
+                  };
+                })
+            : [],
         };
       });
 
@@ -74,9 +95,10 @@ export default function ProjectsPage() {
     fetchProjects();
   }, []);
 
-  const handleCreateProject = (newProject: any) => {
-    fetchProjects(); // Refresh list to get the generated ID and backend format
+  const handleProjectSuccess = (projectData: any) => {
+    fetchProjects(); 
     setIsCreateOpen(false);
+    setEditingProjectId(null);
   };
 
   const handleTogglePin = (projectId: string) => {
@@ -88,8 +110,6 @@ export default function ProjectsPage() {
   };
 
   const handleDeleteProject = async (projectId: string) => {
-    if (!confirm("Are you sure you want to delete this project?")) return;
-
     try {
       await apiRequest(`/projects/${projectId}`, { method: "DELETE" });
       setProjects((prev) => prev.filter((p) => p.id !== projectId));
@@ -155,6 +175,7 @@ export default function ProjectsPage() {
               key={project.id}
               project={project}
               onTogglePin={handleTogglePin}
+              onEdit={(pId) => setEditingProjectId(pId)}
               onDelete={handleDeleteProject}
             />
           ))}
@@ -172,10 +193,12 @@ export default function ProjectsPage() {
       )}
 
       {/* Modals */}
-      <CreateProjectModal
-        isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
-        onCreateProject={handleCreateProject}
+      <ProjectModal
+        isOpen={isCreateOpen || !!editingProjectId}
+        onClose={() => { setIsCreateOpen(false); setEditingProjectId(null); }}
+        onSuccess={handleProjectSuccess}
+        onDelete={handleDeleteProject}
+        projectIdToEdit={editingProjectId || undefined}
       />
     </div>
   );

@@ -5,7 +5,6 @@ import bcrypt from "bcryptjs";
 export interface IUser extends Document {
   email: string;
   password?: string;
-  globalRole: "ADMIN" | "USER";
   isEmailConfirmed: boolean;
   workspaces: mongoose.Types.ObjectId[];
   activeWorkspace?: mongoose.Types.ObjectId;
@@ -29,11 +28,6 @@ const userSchema = new Schema<IUser>(
       index: true,
     },
     password: { type: String, minLength: 8, required: true, select: false },
-    globalRole: {
-      type: String,
-      enum: ["ADMIN", "USER", "PROJECT_MANAGER", "TEAM_MEMBER", "TEAM_LEAD"],
-      default: "USER",
-    },
     isEmailConfirmed: { type: Boolean, default: false },
     workspaces: [{ type: Schema.Types.ObjectId, ref: "Workspace" }],
     activeWorkspace: { type: Schema.Types.ObjectId, ref: "Workspace" },

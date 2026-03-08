@@ -56,7 +56,7 @@ export default function DashboardLayout({
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <div className="flex h-dvh bg-neutral-50">
-        <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+        <Sidebar collapsed={sidebarCollapsed} />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header onMenuClick={toggleSidebar} onOpenSearch={openSearch} />
           <ActiveMeetingBanner />

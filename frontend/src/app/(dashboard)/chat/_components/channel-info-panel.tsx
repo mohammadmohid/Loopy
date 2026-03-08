@@ -22,19 +22,22 @@ export function ChannelInfoPanel({
     const [editName, setEditName] = useState(false);
     const [name, setName] = useState(channel.name);
     const [description, setDescription] = useState(channel.description || "");
+    const [restrictedChat, setRestrictedChat] = useState(channel.restrictedChat || false);
     const [saving, setSaving] = useState(false);
 
     const currentMember = channel.members.find(
         (m) => m.user._id === currentUserId
     );
     const isAdmin = currentMember?.role === "admin";
+    const isDirectOrTeam = channel.type === "direct" || channel.type === "team";
+    const canLeave = channel.type !== "direct" && channel.type !== "team" && channel.type !== "global";
 
     const handleSave = async () => {
         try {
             setSaving(true);
             await apiRequest(`/chat/channels/${channel._id}`, {
                 method: "PATCH",
-                data: { name, description },
+                data: { name, description, restrictedChat },
             });
             onUpdated();
             setEditName(false);
@@ -102,6 +105,18 @@ export function ChannelInfoPanel({
                                 rows={2}
                                 placeholder="Description"
                             />
+                            <div className="flex items-center gap-2 py-1">
+                                <input
+                                    type="checkbox"
+                                    id="editRestrictedChat"
+                                    checked={restrictedChat}
+                                    onChange={(e) => setRestrictedChat(e.target.checked)}
+                                    className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary"
+                                />
+                                <label htmlFor="editRestrictedChat" className="text-xs text-neutral-600">
+                                    Restrict messaging to Admins/PMs
+                                </label>
+                            </div>
                             <div className="flex gap-2">
                                 <button
                                     onClick={handleSave}
@@ -115,6 +130,7 @@ export function ChannelInfoPanel({
                                         setEditName(false);
                                         setName(channel.name);
                                         setDescription(channel.description || "");
+                                        setRestrictedChat(channel.restrictedChat || false);
                                     }}
                                     className="text-xs text-neutral-500 hover:text-foreground px-3 py-1.5"
                                 >
@@ -129,7 +145,7 @@ export function ChannelInfoPanel({
                                 <h3 className="font-semibold text-foreground">
                                     {channel.name}
                                 </h3>
-                                {isAdmin && (
+                                {isAdmin && !isDirectOrTeam && (
                                     <button
                                         onClick={() => setEditName(true)}
                                         className="p-1 hover:bg-neutral-100 rounded transition-colors ml-auto"
@@ -147,6 +163,12 @@ export function ChannelInfoPanel({
                                 <span className="capitalize">{channel.type} channel</span>
                                 <span>·</span>
                                 <span>{channel.members.length} members</span>
+                                {channel.restrictedChat && (
+                                    <>
+                                        <span>·</span>
+                                        <span className="text-amber-500 font-medium">Restricted Chat</span>
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}
@@ -198,15 +220,17 @@ export function ChannelInfoPanel({
             </div>
 
             {/* Leave Channel */}
-            <div className="border-t border-neutral-200 p-3">
-                <button
-                    onClick={handleLeave}
-                    className="w-full flex items-center justify-center gap-1.5 text-sm text-red-500 hover:bg-red-50 py-2 rounded-lg transition-colors"
-                >
-                    <LogOut className="w-3.5 h-3.5" />
-                    Leave Channel
-                </button>
-            </div>
+            {canLeave && (
+                <div className="border-t border-neutral-200 p-3">
+                    <button
+                        onClick={handleLeave}
+                        className="w-full flex items-center justify-center gap-1.5 text-sm text-red-500 hover:bg-red-50 py-2 rounded-lg transition-colors"
+                    >
+                        <LogOut className="w-3.5 h-3.5" />
+                        Leave Channel
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

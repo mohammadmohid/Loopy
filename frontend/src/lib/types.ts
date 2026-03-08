@@ -14,6 +14,8 @@ export interface User {
   email: string;
   avatar: string;
   role: string;
+  workspaceId?: string;
+  workspaceRole?: string;
 }
 
 export interface Task {
@@ -110,11 +112,14 @@ export interface Channel {
   _id: string;
   name: string;
   description?: string;
-  type: "project" | "team" | "private" | "direct";
+  type: "project" | "team" | "private" | "direct" | "global";
   projectId?: string;
+  teamId?: string;
+  workspaceId: string;
   members: ChannelMember[];
-  createdBy: string;
+  createdBy?: string; // Optional for global channels
   isArchived: boolean;
+  restrictedChat?: boolean;
   lastMessageAt?: string;
   lastMessagePreview?: string;
   createdAt: string;

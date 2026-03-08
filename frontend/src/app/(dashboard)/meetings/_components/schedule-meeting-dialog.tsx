@@ -135,6 +135,9 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
       if (onScheduleComplete) {
         onScheduleComplete();
       }
+
+      // Dispatch global event so the Header icon can refresh
+      window.dispatchEvent(new Event("meetingsUpdated"));
     } catch (error) {
       console.error("Failed to schedule meeting:", error);
       alert("Failed to schedule meeting. Please try again.");

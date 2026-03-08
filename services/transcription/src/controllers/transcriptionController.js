@@ -173,94 +173,44 @@ export const startTranscription = async (req, res) => {
 
     (async () => {
       try {
+        console.log(`Sending URL to Deepgram: ${recordingUrl}`);
         const deepgram = createClient(process.env.DEEPGRAM_API_SECRET);
 
-        const connection = deepgram.listen.live({
-          model: 'nova-3',
-          language: 'en',
-          smart_format: true,
-          diarize: true,
-        });
+        const { result, error } = await deepgram.listen.prerecorded.transcribeUrl(
+          { url: recordingUrl },
+          { model: 'nova-3', smart_format: true, diarize: true, language: 'en' }
+        );
+
+        if (error) {
+          throw new Error(error.message || "Deepgram returned an error");
+        }
 
         let fullTranscript = "";
-        let isClosed = false;
+        if (result?.results?.channels?.[0]?.alternatives?.[0]?.transcript) {
+          fullTranscript = result.results.channels[0].alternatives[0].transcript;
+        }
 
-        connection.on(LiveTranscriptionEvents.Open, async () => {
-          console.log(`Transcribing ${recordingUrl}...`);
+        console.log("✅ Transcription Success! Generated text length:", fullTranscript.length);
 
-          const response = await fetch(recordingUrl, { redirect: 'follow' });
-          const reader = response.body.getReader();
+        console.log(`🧠 Generating Summary with Gemini...`);
+        const summaryData = await runGeminiSummary(fullTranscript, { title: filename, date: new Date().toLocaleString() });
+        console.log("✅ Summary Generated.");
 
-          const pump = async () => {
-            const { done, value } = await reader.read();
-            if (done) {
-              connection.finish();
-              return;
-            }
-            connection.send(value);
-            pump();
-          };
-          pump();
-        });
+        const transcriptData = { deepgram: true, text: fullTranscript.trim() };
 
-        connection.on(LiveTranscriptionEvents.Transcript, (data) => {
-          if (data.channel?.alternatives?.[0]) {
-            const transcript = data.channel.alternatives[0].transcript;
-            if (transcript) {
-              fullTranscript += transcript + " ";
-              console.log(transcript);
-            }
-          }
-        });
+        artifact.transcriptionStatus = "COMPLETED";
+        artifact.transcriptJson = transcriptData;
 
-        connection.on(LiveTranscriptionEvents.SpeechStarted, (data) => {
-          // Handle speech started event
-        });
+        // Extract the formatted minutes and the agenda separately
+        artifact.summary = summaryData.minutes || summaryData.overview || "No minutes generated.";
+        artifact.overview = summaryData.overview || "";
+        if (Array.isArray(summaryData.agenda)) {
+          artifact.agenda = summaryData.agenda;
+        }
 
-        connection.on(LiveTranscriptionEvents.UtteranceEnd, (data) => {
-          // Handle utterance end event
-        });
+        await artifact.save();
 
-        connection.on(LiveTranscriptionEvents.Close, async () => {
-          console.log('Connection closed.');
-          if (isClosed) return;
-          isClosed = true;
-
-          try {
-            console.log(`🧠 Generating Summary with Gemini...`);
-            const summaryData = await runGeminiSummary(fullTranscript, { title: filename, date: new Date().toLocaleString() });
-            console.log("✅ Summary Generated.");
-
-            const transcriptData = { deepgram: true, text: fullTranscript.trim() };
-
-            artifact.transcriptionStatus = "COMPLETED";
-            artifact.transcriptJson = transcriptData;
-
-            // Extract the formatted minutes and the agenda separately
-            artifact.summary = summaryData.minutes || summaryData.overview || "No minutes generated.";
-            artifact.overview = summaryData.overview || "";
-            if (Array.isArray(summaryData.agenda)) {
-              artifact.agenda = summaryData.agenda;
-            }
-
-            await artifact.save();
-
-            console.log("💾 Database Updated Successfully.");
-          } catch (err) {
-            artifact.transcriptionStatus = "FAILED";
-            artifact.error = err.message;
-            await artifact.save();
-          }
-        });
-
-        connection.on(LiveTranscriptionEvents.Error, async (err) => {
-          console.error(err);
-          if (isClosed) return;
-          isClosed = true;
-          artifact.transcriptionStatus = "FAILED";
-          artifact.error = err.message || "Deepgram Error";
-          await artifact.save();
-        });
+        console.log("💾 Database Updated Successfully.");
       } catch (err) {
         console.error(`Pipeline setup failed:`, err);
         artifact.transcriptionStatus = "FAILED";

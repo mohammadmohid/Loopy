@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import {
   Bell,
   Search,
@@ -15,6 +16,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
+import { useScreenRecorder } from "@/hooks/useScreenRecorder";
+import { ScreenRecordModal } from "@/components/modals/ScreenRecordModal";
+import { ScreenRecordingPreviewModal } from "@/components/modals/ScreenRecordingPreviewModal";
 
 export function Header({
   onMenuClick,
@@ -27,6 +31,30 @@ export function Header({
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [upcomingCount, setUpcomingCount] = useState(0);
+  const pathname = usePathname();
+
+  // Screen Recording State
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+
+  // Post-Recording Preview State
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [recordingFilename, setRecordingFilename] = useState("");
+
+  const recorder = useScreenRecorder({
+    onStop: (blobUrl, blob) => {
+      // Retrieve the filename set by the modal before recording started
+      const filename = sessionStorage.getItem("next_recording_filename") || "Screen-Recording";
+      sessionStorage.removeItem("next_recording_filename");
+
+      // Stage data for the Trimming Editor Modal instead of auto-downloading
+      setPreviewUrl(blobUrl);
+      setPreviewBlob(blob);
+      setRecordingFilename(filename);
+      setIsPreviewModalOpen(true);
+    }
+  });
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -43,14 +71,18 @@ export function Header({
     const fetchUpcomingCount = async () => {
       try {
         const meetings = await apiRequest<any[]>("/meetings");
-        const scheduled = meetings.filter(m => m.status === "scheduled");
+        const scheduled = meetings.filter((m: any) => m.status === "scheduled");
         setUpcomingCount(scheduled.length);
       } catch (error) {
         console.error("Failed to fetch meetings for header count");
       }
     };
     fetchUpcomingCount();
-  }, []);
+
+    // Listen for custom event to refetch when meetings are modified
+    window.addEventListener("meetingsUpdated", fetchUpcomingCount);
+    return () => window.removeEventListener("meetingsUpdated", fetchUpcomingCount);
+  }, [pathname]);
 
   const getInitials = () => {
     if (!user?.profile) return "U";
@@ -121,15 +153,30 @@ export function Header({
 
         {/* Capture/Create Button */}
         <div className="hidden sm:flex items-center">
-          <Button className="rounded-r-none gap-2 h-9 px-3 bg-[#cc2233] hover:bg-[#b01d2c] text-white">
-            <Video className="w-4 h-4" />
-            Capture
-          </Button>
-          <Button
-            className="rounded-l-none border-l border-[#b01d2c] h-9 px-2 bg-[#cc2233] hover:bg-[#b01d2c] text-white rounded-r-md"
-          >
-            <ChevronDown className="w-4 h-4" />
-          </Button>
+          {recorder.isRecording ? (
+            <Button
+              className="gap-2 h-9 px-4 bg-transparent border border-red-500 hover:bg-red-50 text-red-600 transition shadow-sm rounded-lg animate-pulse"
+              onClick={recorder.stopRecording}
+            >
+              <div className="w-2.5 h-2.5 rounded-full bg-red-600" />
+              Recording ({recorder.recordingTime}) - Stop
+            </Button>
+          ) : (
+            <>
+              <Button
+                onClick={() => setIsRecordModalOpen(true)}
+                className="rounded-r-none gap-2 h-9 px-3 bg-[#cc2233] hover:bg-[#b01d2c] text-white"
+              >
+                <Video className="w-4 h-4" />
+                Capture
+              </Button>
+              <Button
+                className="rounded-l-none border-l border-[#b01d2c] h-9 px-2 bg-[#cc2233] hover:bg-[#b01d2c] text-white rounded-r-md"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </Button>
+            </>
+          )}
         </div>
 
         <button className="p-2 hover:bg-neutral-100 rounded-full text-neutral-500 relative transition-colors">
@@ -182,6 +229,30 @@ export function Header({
           )}
         </div>
       </div>
+
+      {/* Screen Recording Modal */}
+      <ScreenRecordModal
+        isOpen={isRecordModalOpen}
+        onClose={() => setIsRecordModalOpen(false)}
+        onRecordingStart={(started) => {
+          if (!started) console.log("Recording cancelled or failed to start");
+        }}
+        useRecorder={recorder}
+      />
+
+      {/* Post-Recording Trimming & Preview Modal */}
+      <ScreenRecordingPreviewModal
+        isOpen={isPreviewModalOpen}
+        videoUrl={previewUrl}
+        videoBlob={previewBlob}
+        filename={recordingFilename}
+        onClose={() => {
+          setIsPreviewModalOpen(false);
+          if (previewUrl) URL.revokeObjectURL(previewUrl);
+          setPreviewUrl(null);
+          setPreviewBlob(null);
+        }}
+      />
     </header>
   );
 }

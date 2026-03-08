@@ -9,6 +9,7 @@ import {
   getProjectActivity,
   deleteWorkspaceProjects,
   getProjectById,
+  generateScreenRecordingUploadUrl
 } from "../controllers/projectController";
 import {
   signUpload,
@@ -38,6 +39,7 @@ const router = express.Router();
 
 router.post("/", protect, authorize("ADMIN", "PROJECT_MANAGER"), createProject);
 router.get("/", protect, getProjects);
+router.post("/upload/screen-recording", protect, generateScreenRecordingUploadUrl);
 
 // Project Activity
 router.get("/:projectId/activity", protect, getProjectActivity);

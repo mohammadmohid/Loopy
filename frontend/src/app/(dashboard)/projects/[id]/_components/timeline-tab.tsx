@@ -12,7 +12,11 @@ import {
   Lightbulb,
   BookOpen,
   Calendar,
+  Users,
+  Search,
+  User,
 } from "lucide-react";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import type { Task, Milestone, TaskStatus, User } from "@/lib/types";
 
@@ -84,6 +88,19 @@ export function TimelineTab({
   // Filters
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [filterAssigneeOpen, setFilterAssigneeOpen] = useState(false);
+  const [assigneeSearch, setAssigneeSearch] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const looksLikeUrl = (s: string) => /^https?:\/\//.test(s) || s.startsWith("/");
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setFilterAssigneeOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // --- Date Logic based on ViewMode ---
   // If Weekly: Show 4-5 weeks. If Monthly: Show 3-4 months. If Yearly: Show 12 months.
@@ -230,48 +247,98 @@ export function TimelineTab({
       <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-neutral-200">
         <div className="flex items-center gap-3">
           {/* Assignee Filter */}
-          <div className="relative">
+          <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setFilterAssigneeOpen(!filterAssigneeOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 border border-neutral-200 rounded-lg text-sm hover:bg-neutral-50"
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 border rounded-lg text-sm transition-colors",
+                filterAssigneeOpen ? "border-primary ring-2 ring-primary/20 bg-white" : "border-neutral-200 hover:bg-neutral-50 bg-white"
+              )}
             >
-              Assignee <ChevronDown className="w-3 h-3" />
+              Assignee
+              {selectedAssignees.length > 0 && (
+                <span className="bg-primary text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center -ml-1">
+                  {selectedAssignees.length}
+                </span>
+              )}
+              <ChevronDown className="w-3 h-3" />
             </button>
             {filterAssigneeOpen && (
-              <div className="absolute top-full left-0 mt-2 w-56 bg-white border border-neutral-200 rounded-xl shadow-lg z-30 p-2">
-                {projectMembers.map((m: any) => {
-                  const u = m.user || m; // Handle populated
-                  const isSel = selectedAssignees.includes(u._id || u.id);
-                  return (
-                    <div
-                      key={u._id || u.id}
-                      onClick={() => {
-                        setSelectedAssignees((prev) =>
-                          isSel
-                            ? prev.filter((x) => x !== (u._id || u.id))
-                            : [...prev, u._id || u.id]
-                        );
-                      }}
-                      className="flex items-center gap-2 p-2 hover:bg-neutral-50 rounded cursor-pointer"
-                    >
+              <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-neutral-200 rounded-xl shadow-lg z-30 overflow-hidden flex flex-col">
+                <div className="p-2 border-b border-neutral-100 bg-white z-10">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Search members..."
+                      className="w-full pl-9 pr-3 py-2 text-sm bg-neutral-50 border border-transparent rounded-lg focus:outline-none focus:bg-white focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-all"
+                      value={assigneeSearch}
+                      onChange={(e) => setAssigneeSearch(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="max-h-60 overflow-y-auto p-2">
+                  <div className="px-2 py-1.5 text-xs font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5" /> Project Members
+                  </div>
+                  {projectMembers.filter((m: any) => 
+                    (m.name || m.user?.name || "").toLowerCase().includes(assigneeSearch.toLowerCase())
+                  ).map((m: any) => {
+                    const u = m.user || m; // Handle populated
+                    const isSel = selectedAssignees.includes(u._id || u.id);
+                    return (
                       <div
-                        className={`w-4 h-4 border rounded flex items-center justify-center ${
-                          isSel
-                            ? "bg-primary border-primary text-white"
-                            : "border-neutral-300"
-                        }`}
+                        key={u._id || u.id}
+                        onClick={() => {
+                          setSelectedAssignees((prev) =>
+                            isSel
+                              ? prev.filter((x) => x !== (u._id || u.id))
+                              : [...prev, u._id || u.id]
+                          );
+                        }}
+                        className="flex items-center justify-between gap-3 px-2 py-2 hover:bg-neutral-50 rounded-lg cursor-pointer transition-colors"
                       >
-                        {isSel && <CheckSquare className="w-3 h-3" />}
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={cn("w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
+                              isSel ? "bg-primary border-primary text-white" : "border-neutral-300"
+                            )}
+                          >
+                            {isSel && <CheckSquare className="w-3 h-3 border-none p-0 bg-transparent text-white fill-current" />}
+                          </div>
+                          <div className="w-6 h-6 rounded-full bg-neutral-200 border border-white flex items-center justify-center text-[10px] text-neutral-600 font-medium overflow-hidden shrink-0">
+                            {u.avatarUrl && looksLikeUrl(u.avatarUrl) ? (
+                              <Image
+                                src={u.avatarUrl}
+                                alt={u.name}
+                                width={24}
+                                height={24}
+                                className="object-cover w-full h-full"
+                              />
+                            ) : u.avatar && looksLikeUrl(u.avatar) ? (
+                              <Image
+                                src={u.avatar}
+                                alt={u.name}
+                                width={24}
+                                height={24}
+                                className="object-cover w-full h-full"
+                              />
+                            ) : (
+                              <span>{u.avatar || u.name?.[0]}</span>
+                            )}
+                          </div>
+                          <span className="text-sm text-neutral-900 truncate">
+                            {u.name}
+                          </span>
+                        </div>
                       </div>
-                      <div className="w-6 h-6 bg-neutral-200 rounded-full flex items-center justify-center text-[10px]">
-                        {u.profile?.firstName?.[0]}
-                      </div>
-                      <span className="text-sm truncate">
-                        {u.profile?.firstName}
-                      </span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                  {projectMembers.length === 0 && (
+                     <div className="text-center py-4 text-xs text-neutral-500">No project members</div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -458,17 +525,22 @@ export function TimelineTab({
                             {t.status}
                           </span>
 
-                          <div className="flex -space-x-1">
+                          <div className="flex -space-x-1 ml-2">
                             {t.assignees.slice(0, 2).map((u, i) => (
                               <div
                                 key={i}
-                                className="w-5 h-5 rounded-full bg-neutral-200 flex items-center justify-center text-[8px] font-bold border border-white ring-1 ring-neutral-100"
+                                title={u.name}
+                                className="w-5 h-5 rounded-full overflow-hidden bg-neutral-200 flex items-center justify-center text-[8px] font-bold border border-white ring-1 ring-neutral-100"
                               >
-                                {u.name?.[0]}
+                                {looksLikeUrl(u.avatar || "") ? (
+                                  <img src={u.avatar!} alt={u.name} width={20} height={20} className="object-cover w-full h-full" />
+                                ) : (
+                                  u.avatar || u.name?.[0] || "U"
+                                )}
                               </div>
                             ))}
                             {t.assignees.length > 2 && (
-                              <div className="w-5 h-5 rounded-full bg-neutral-100 flex items-center justify-center text-[8px] border border-white">
+                              <div className="w-5 h-5 rounded-full bg-neutral-100 flex items-center justify-center text-[8px] border border-white" title={`${t.assignees.length - 2} more`}>
                                 +{t.assignees.length - 2}
                               </div>
                             )}
@@ -478,10 +550,19 @@ export function TimelineTab({
                         <div className="flex-1 relative py-2">
                           {t.dueDate && (
                             <div
-                              className={`absolute top-1/2 -translate-y-1/2 h-4 rounded-sm flex items-center px-1 ${styles.bg} border ${styles.border}`}
+                              className={`absolute top-1/2 -translate-y-1/2 h-4 rounded-sm flex items-center px-1 ${styles.bg} border ${styles.border} shadow-sm group-hover:brightness-95 transition-all`}
                               style={tStyle}
                             >
-                              {/* Connectors/Lines could go here */}
+                               {/* Deadline Marker */}
+                               {t.status !== "done" && (
+                                 <div 
+                                   className={cn(
+                                     "absolute right-0 top-1/2 -translate-y-1/2 -mr-[5px] w-2.5 h-2.5 rounded-full border-[1.5px] border-white shadow-sm z-10",
+                                     (new Date(t.dueDate) < new Date()) ? "bg-red-500" : "bg-neutral-400"
+                                   )}
+                                   title={`Deadline: ${new Date(t.dueDate).toLocaleDateString()}`}
+                                 />
+                               )}
                             </div>
                           )}
                         </div>

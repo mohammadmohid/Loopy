@@ -9,6 +9,7 @@ import { Header } from "./_components/header";
 import { ActiveMeetingBanner } from "./_components/active-meeting-banner";
 import { SearchDialog } from "./_components/search-dialog";
 import { useAuth } from "@/lib/auth-provider";
+import { ChatProvider } from "@/contexts/chat-context";
 import { Loader2 } from "lucide-react";
 
 export default function DashboardLayout({
@@ -55,15 +56,17 @@ export default function DashboardLayout({
 
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <div className="flex h-dvh bg-neutral-50">
-        <Sidebar collapsed={sidebarCollapsed} />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Header onMenuClick={toggleSidebar} onOpenSearch={openSearch} />
-          <ActiveMeetingBanner />
-          <main className="flex-1 overflow-auto p-6">{children}</main>
+      <ChatProvider>
+        <div className="flex h-dvh bg-neutral-50">
+          <Sidebar collapsed={sidebarCollapsed} />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header onMenuClick={toggleSidebar} onOpenSearch={openSearch} />
+            <ActiveMeetingBanner />
+            <main className="flex-1 overflow-auto p-6">{children}</main>
+          </div >
         </div >
-      </div >
-      <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
+        <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
+      </ChatProvider>
     </Suspense >
   );
 }

@@ -59,6 +59,21 @@ export function ProjectCard({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Combine owner and members
+  const allMembers = [...(project.members || [])];
+  const ownerInMembers = allMembers.some(
+    (m) => m.name === project.owner.name || (m.avatarUrl && m.avatarUrl === project.owner.avatar)
+  );
+
+  if (!ownerInMembers) {
+    allMembers.unshift({
+      id: "owner",
+      name: project.owner.name,
+      avatarUrl: looksLikeUrl(project.owner.avatar) ? project.owner.avatar : undefined,
+      initials: !looksLikeUrl(project.owner.avatar) ? project.owner.avatar : (project.owner.name?.[0] || 'U')
+    });
+  }
+
   return (
     <div className="bg-white border border-neutral-200 rounded-2xl p-4 hover:shadow-md transition-all duration-200 group">
       <div className="flex items-start justify-between mb-3">
@@ -138,21 +153,6 @@ export function ProjectCard({
       <div className="mb-3">
         <p className="text-xs text-neutral-500 mb-1">Owner</p>
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-neutral-200 rounded-full flex items-center justify-center text-[10px] font-medium text-neutral-600">
-            {project.owner.avatar && (
-              looksLikeUrl(project.owner.avatar) ? (
-                <Image
-                  src={project.owner.avatar}
-                  alt={`${project.owner.name}'s avatar`}
-                  width={24}
-                  height={24}
-                  className="rounded-full"
-                />
-              ) : (
-                <span className="select-none">{project.owner.avatar}</span>
-              )
-            )}
-          </div>
           <span className="text-sm text-neutral-700">{project.owner.name}</span>
         </div>
       </div>
@@ -166,9 +166,9 @@ export function ProjectCard({
         </div>
 
         {/* Member Avatars */}
-        {project.members && project.members.length > 0 && (
+        {allMembers.length > 0 && (
           <div className="flex items-center -space-x-2">
-            {project.members.slice(0, 3).map((member, i) => (
+            {allMembers.slice(0, 3).map((member, i) => (
               <div
                 key={member.id}
                 className="w-7 h-7 rounded-full border-2 border-white bg-neutral-200 flex items-center justify-center text-[10px] font-medium text-neutral-600 relative overflow-hidden"
@@ -187,12 +187,12 @@ export function ProjectCard({
                 )}
               </div>
             ))}
-            {project.members.length > 3 && (
+            {allMembers.length > 3 && (
               <div
                 className="w-7 h-7 rounded-full border-2 border-white bg-neutral-100 flex items-center justify-center text-[10px] font-medium text-neutral-600 relative z-0"
-                title={`${project.members.length - 3} more members`}
+                title={`${allMembers.length - 3} more members`}
               >
-                +{project.members.length - 3}
+                +{allMembers.length - 3}
               </div>
             )}
           </div>

@@ -222,7 +222,7 @@ export default function TeamPage() {
             activeTab === "teams" ? "border-brand text-brand" : "border-transparent text-neutral-500 hover:text-neutral-700"
           )}
         >
-          Functional Teams ({teams.length})
+          Teams ({teams.length})
         </button>
       </div>
 
@@ -322,7 +322,7 @@ export default function TeamPage() {
       {activeTab === "teams" && (
         <div className="space-y-6 animate-in fade-in duration-300">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium text-neutral-900">Functional Teams</h2>
+            <h2 className="text-lg font-medium text-neutral-900">Teams</h2>
             {canManageTeams && (
               <Button onClick={() => setCreateTeamDialog(true)} variant="secondary" size="sm" className="gap-2">
                 <Plus className="w-4 h-4" />
@@ -418,7 +418,7 @@ export default function TeamPage() {
       <Dialog open={createTeamDialog} onOpenChange={setCreateTeamDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Functional Team</DialogTitle>
+            <DialogTitle>Create Team</DialogTitle>
             <DialogDescription>Group members into a team for easier project assignment.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">

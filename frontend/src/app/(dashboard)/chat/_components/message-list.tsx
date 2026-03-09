@@ -13,6 +13,7 @@ import {
     Loader2,
     FileText,
     Paperclip,
+    Download,
 } from "lucide-react";
 import { ReactionPicker } from "./reaction-picker";
 
@@ -235,22 +236,27 @@ export function MessageList({
                                     {msg.attachments && msg.attachments.length > 0 && (
                                         <div className="mt-1.5 space-y-1">
                                             {msg.attachments.map((att, i) => (
-                                                <div
+                                                <a
                                                     key={i}
-                                                    className="inline-flex items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-md px-2.5 py-1.5 text-xs"
+                                                    href={att.url || "#"}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    download
+                                                    className="inline-flex items-center gap-2 bg-neutral-50 border border-neutral-200 hover:bg-neutral-100 hover:border-neutral-300 transition-colors rounded-md px-2.5 py-1.5 text-xs group cursor-pointer"
                                                 >
                                                     {att.mimeType?.startsWith("image/") ? (
-                                                        <FileText className="w-3.5 h-3.5 text-neutral-400" />
+                                                        <FileText className="w-3.5 h-3.5 text-neutral-400 group-hover:text-primary transition-colors" />
                                                     ) : (
-                                                        <Paperclip className="w-3.5 h-3.5 text-neutral-400" />
+                                                        <Paperclip className="w-3.5 h-3.5 text-neutral-400 group-hover:text-primary transition-colors" />
                                                     )}
-                                                    <span className="text-foreground truncate max-w-[200px]">
+                                                    <span className="text-foreground truncate max-w-[200px] group-hover:text-primary transition-colors">
                                                         {att.name}
                                                     </span>
                                                     <span className="text-neutral-400">
                                                         {(att.size / 1024).toFixed(0)}KB
                                                     </span>
-                                                </div>
+                                                    <Download className="w-3.5 h-3.5 text-neutral-400 opacity-0 group-hover:opacity-100 group-hover:text-primary transition-all ml-1" />
+                                                </a>
                                             ))}
                                         </div>
                                     )}

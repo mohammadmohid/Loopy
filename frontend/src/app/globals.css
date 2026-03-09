@@ -320,8 +320,6 @@ html {
 input {
   font-size: 14px;
   font-weight: 500;
-  padding-inline: 12px;
-  padding-block: 8px;
   border: 1px solid var(--color-border);
   border-radius: 6px;
   background-color: var(--color-input);

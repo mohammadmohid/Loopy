@@ -13,7 +13,6 @@ import {
   Users,
   BarChart3,
   Settings,
-  PanelLeftClose,
 } from "lucide-react";
 import {
   Tooltip,
@@ -22,12 +21,13 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
 import { WorkspaceSwitcher } from "@/app/(dashboard)/_components/workspace-switcher";
+import { useChat } from "@/contexts/chat-context";
 
 const navItems = [
   { label: "Home", href: "/home", icon: Home },
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "Meetings", href: "/meetings", icon: Video },
-  { label: "Chat", href: "/chat", icon: MessageCircle, badge: 3 },
+  { label: "Chat", href: "/chat", icon: MessageCircle },
   { label: "Files", href: "/files", icon: Folder },
   { label: "Meeting Status", href: "/meeting-status", icon: Activity },
   { label: "Team", href: "/team", icon: Users },
@@ -67,6 +67,7 @@ const NavItemWrapper = ({
 
 export function Sidebar({ collapsed }: SidebarProps) {
   const pathname = usePathname();
+  const { totalUnread } = useChat();
 
   return (
     <aside
@@ -84,6 +85,7 @@ export function Sidebar({ collapsed }: SidebarProps) {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
+          const badge = item.label === "Chat" ? (totalUnread > 0 ? totalUnread : undefined) : (item as any).badge;
 
           return (
             <NavItemWrapper
@@ -107,16 +109,16 @@ export function Sidebar({ collapsed }: SidebarProps) {
                 {!collapsed && (
                   <>
                     <span className="flex-1">{item.label}</span>
-                    {item.badge && (
+                    {badge && (
                       <span className="bg-primary text-white text-xs font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                        {item.badge}
+                        {badge}
                       </span>
                     )}
                   </>
                 )}
-                {collapsed && item.badge && (
+                {collapsed && badge && (
                   <span className="absolute left-10 bg-primary text-white text-xs font-semibold px-1 py-0.5 rounded-full min-w-[14px] text-center">
-                    {item.badge}
+                    {badge}
                   </span>
                 )}
               </Link>

@@ -52,7 +52,7 @@ app.get("/health", (req, res) => {
     res.json({ status: "ok", service: "chat" });
 });
 
-const PORT = process.env.PORT || 5004;
+const PORT = process.env.PORT || 5005;
 httpServer.listen(PORT, () =>
     console.log(`Chat Service running on port ${PORT}`)
 );

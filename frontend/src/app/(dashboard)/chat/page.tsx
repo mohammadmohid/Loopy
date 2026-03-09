@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useAuth } from "@/lib/auth-provider";
 import { apiRequest } from "@/lib/api";
 import type { Channel, ChatMessage } from "@/lib/types";
-import { useChatSocket } from "./use-chat-socket";
+import { useChat } from "@/contexts/chat-context";
 import { ChannelList } from "./_components/channel-list";
 import { MessageList } from "./_components/message-list";
 import { MessageInput } from "./_components/message-input";
@@ -26,7 +26,7 @@ export default function ChatPage() {
     const [loadingChannels, setLoadingChannels] = useState(true);
     const [loadingMessages, setLoadingMessages] = useState(false);
     const [workspaceMembers, setWorkspaceMembers] = useState<any[]>([]);
-    const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+    const { socket, unreadCounts, clearUnread, joinChannel, leaveChannel, emitTyping, emitStopTyping, setCurrentChannelId } = useChat();
     const [typingUsers, setTypingUsers] = useState<Record<string, Set<string>>>({});
     const typingTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
     const selectedChannelIdRef = useRef<string | null>(null);
@@ -75,107 +75,145 @@ export default function ChatPage() {
     }, [channels, workspaceMembers, user?.id, user?.workspaceId]);
 
     // --- Socket.IO ---
-    const { isConnected, joinChannel, leaveChannel, emitTyping, emitStopTyping } =
-        useChatSocket({
-            onNewMessage: (message) => {
-                const currentSelectedId = selectedChannelIdRef.current;
-                setMessages((prev) => {
-                    if (prev.some((m) => m._id === message._id)) return prev;
-                    if (message.channelId === currentSelectedId) {
-                        return [...prev, message];
-                    }
-                    return prev;
-                });
-                
-                if (message.channelId !== currentSelectedId) {
-                    setUnreadCounts(prev => ({ ...prev, [message.channelId]: (prev[message.channelId] || 0) + 1 }));
-                }
+    useEffect(() => {
+        if (!socket) return;
 
-                // Update channel's last message preview and sort
-                setChannels((prev) => {
-                    const updated = prev.map((ch) =>
-                        ch._id === message.channelId
-                            ? {
-                                ...ch,
-                                lastMessageAt: message.createdAt,
-                                lastMessagePreview: message.content.slice(0, 80),
-                            }
-                            : ch
-                    );
-                    return updated.sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime());
-                });
-            },
-            onMessageDeleted: ({ messageId }) => {
-                setMessages((prev) =>
-                    prev.map((m) =>
-                        m._id === messageId ? { ...m, isDeleted: true, content: "" } : m
-                    )
+        const onNewMessage = (message: ChatMessage) => {
+            const currentSelectedId = selectedChannelIdRef.current;
+            setMessages((prev) => {
+                if (prev.some((m) => m._id === message._id)) return prev;
+                if (message.channelId === currentSelectedId) {
+                    return [...prev, message];
+                }
+                return prev;
+            });
+            
+            // Update channel's last message preview and sort
+            setChannels((prev) => {
+                const updated = prev.map((ch) =>
+                    ch._id === message.channelId
+                        ? {
+                            ...ch,
+                            lastMessageAt: message.createdAt,
+                            lastMessagePreview: message.type === 'file' ? 'Sent a file' : message.content.slice(0, 80),
+                        }
+                        : ch
                 );
-            },
-            onMessageEdited: (updated) => {
-                setMessages((prev) =>
-                    prev.map((m) => (m._id === updated._id ? updated : m))
-                );
-            },
-            onReactionUpdated: (updated) => {
-                setMessages((prev) =>
-                    prev.map((m) => (m._id === updated._id ? updated : m))
-                );
-            },
-            onUserTyping: ({ channelId, userId }) => {
-                if (userId === user?.id) return;
-                setTypingUsers((prev) => {
-                    const set = new Set(prev[channelId] || []);
-                    set.add(userId);
-                    return { ...prev, [channelId]: set };
-                });
-                // Auto-clear after 3s
-                const key = `${channelId}:${userId}`;
-                clearTimeout(typingTimersRef.current[key]);
-                typingTimersRef.current[key] = setTimeout(() => {
-                    setTypingUsers((prev) => {
-                        const set = new Set(prev[channelId] || []);
-                        set.delete(userId);
-                        return { ...prev, [channelId]: set };
-                    });
-                }, 3000);
-            },
-            onUserStopTyping: ({ channelId, userId }) => {
+                return updated.sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime());
+            });
+        };
+
+        const onMessageDeleted = ({ messageId, channelId }: { messageId: string, channelId: string }) => {
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m._id === messageId ? { ...m, isDeleted: true, content: "This message was deleted." } : m
+                )
+            );
+            
+            // Optimistically update preview if it might have been the last message
+            setChannels((prev) => prev.map(ch => 
+                ch._id === channelId 
+                    ? { ...ch, lastMessagePreview: "This message was deleted." }
+                    : ch
+            ));
+        };
+
+        const onMessageEdited = (updated: ChatMessage) => {
+            setMessages((prev) =>
+                prev.map((m) => (m._id === updated._id ? updated : m))
+            );
+        };
+
+        const onReactionUpdated = (updated: ChatMessage) => {
+            setMessages((prev) =>
+                prev.map((m) => (m._id === updated._id ? updated : m))
+            );
+        };
+
+        const onUserTyping = ({ channelId, userId }: { channelId: string, userId: string }) => {
+            if (userId === user?.id) return;
+            setTypingUsers((prev) => {
+                const set = new Set(prev[channelId] || []);
+                set.add(userId);
+                return { ...prev, [channelId]: set };
+            });
+            // Auto-clear after 3s
+            const key = `${channelId}:${userId}`;
+            clearTimeout(typingTimersRef.current[key]);
+            typingTimersRef.current[key] = setTimeout(() => {
                 setTypingUsers((prev) => {
                     const set = new Set(prev[channelId] || []);
                     set.delete(userId);
                     return { ...prev, [channelId]: set };
                 });
-            },
-            onThreadReply: ({ parentId, message }) => {
-                setMessages((prev) => 
-                    prev.map((m) => m._id === parentId ? { ...m, replyCount: (m.replyCount || 0) + 1 } : m)
-                );
-            },
-            onChannelCreated: (channel) => {
-                setChannels((prev) => {
-                    if (prev.some((c) => c._id === channel._id)) return prev;
-                    return [channel, ...prev];
-                });
-            },
-            onChannelUpdated: (channel) => {
-                setChannels((prev) => prev.map((c) => c._id === channel._id ? channel : c));
-            },
-            onChannelDeleted: ({ channelId }) => {
-                setChannels((prev) => prev.filter((c) => c._id !== channelId));
-                if (selectedChannelIdRef.current === channelId) {
-                    setSelectedChannel(null); // Wait, how to change selectedChannel from a closure?
-                    // Safe approach: we can't reliably call setSelectedChannel here if we don't know the full state. 
-                    // Let's use functional update for selectedChannel but since it's a direct setter, we'll let useEffect handle cleanup if needed.
-                }
-            },
-            onChannelArchived: ({ channelId }) => {
-                setChannels((prev) => prev.filter((c) => c._id !== channelId));
-            },
-            onChannelRemoved: ({ channelId }) => {
-                setChannels((prev) => prev.filter((c) => c._id !== channelId));
-            },
-        });
+            }, 3000);
+        };
+
+        const onUserStopTyping = ({ channelId, userId }: { channelId: string, userId: string }) => {
+            setTypingUsers((prev) => {
+                const set = new Set(prev[channelId] || []);
+                set.delete(userId);
+                return { ...prev, [channelId]: set };
+            });
+        };
+
+        const onThreadReply = ({ parentId, message }: { parentId: string, message: ChatMessage }) => {
+            setMessages((prev) => 
+                prev.map((m) => m._id === parentId ? { ...m, replyCount: (m.replyCount || 0) + 1 } : m)
+            );
+        };
+
+        const onChannelCreated = (channel: Channel) => {
+            setChannels((prev) => {
+                if (prev.some((c) => c._id === channel._id)) return prev;
+                return [channel, ...prev];
+            });
+        };
+
+        const onChannelUpdated = (channel: Channel) => {
+            setChannels((prev) => prev.map((c) => c._id === channel._id ? channel : c));
+        };
+
+        const onChannelDeleted = ({ channelId }: { channelId: string }) => {
+            setChannels((prev) => prev.filter((c) => c._id !== channelId));
+        };
+
+        const onChannelArchived = ({ channelId }: { channelId: string }) => {
+            setChannels((prev) => prev.filter((c) => c._id !== channelId));
+        };
+
+        const onChannelRemoved = ({ channelId }: { channelId: string }) => {
+            setChannels((prev) => prev.filter((c) => c._id !== channelId));
+        };
+
+        socket.on("new-message", onNewMessage);
+        socket.on("message-deleted", onMessageDeleted);
+        socket.on("message-edited", onMessageEdited);
+        socket.on("reaction-updated", onReactionUpdated);
+        socket.on("user-typing", onUserTyping);
+        socket.on("user-stop-typing", onUserStopTyping);
+        socket.on("thread-reply", onThreadReply);
+        socket.on("channel-created", onChannelCreated);
+        socket.on("channel-updated", onChannelUpdated);
+        socket.on("channel-deleted", onChannelDeleted);
+        socket.on("channel-archived", onChannelArchived);
+        socket.on("channel-removed", onChannelRemoved);
+
+        return () => {
+            socket.off("new-message", onNewMessage);
+            socket.off("message-deleted", onMessageDeleted);
+            socket.off("message-edited", onMessageEdited);
+            socket.off("reaction-updated", onReactionUpdated);
+            socket.off("user-typing", onUserTyping);
+            socket.off("user-stop-typing", onUserStopTyping);
+            socket.off("thread-reply", onThreadReply);
+            socket.off("channel-created", onChannelCreated);
+            socket.off("channel-updated", onChannelUpdated);
+            socket.off("channel-deleted", onChannelDeleted);
+            socket.off("channel-archived", onChannelArchived);
+            socket.off("channel-removed", onChannelRemoved);
+        };
+    }, [socket, user?.id]);
 
     // --- Fetch channels ---
     const fetchChannels = useCallback(async () => {
@@ -218,17 +256,21 @@ export default function ChatPage() {
 
     useEffect(() => {
         if (selectedChannel) {
+            clearUnread(selectedChannel._id);
+            setCurrentChannelId(selectedChannel._id);
             fetchMessages(selectedChannel._id);
             joinChannel(selectedChannel._id);
             setThreadParent(null);
             setShowChannelInfo(false);
+        } else {
+            setCurrentChannelId(null);
         }
         return () => {
             if (selectedChannel) {
                 leaveChannel(selectedChannel._id);
             }
         };
-    }, [selectedChannel, fetchMessages, joinChannel, leaveChannel]);
+    }, [selectedChannel, fetchMessages, joinChannel, leaveChannel, clearUnread, setCurrentChannelId]);
 
     // --- Message actions ---
     const handleSendMessage = async (
@@ -349,12 +391,7 @@ export default function ChatPage() {
         }
 
         setSelectedChannel(channel);
-        setUnreadCounts(prev => {
-            if (!prev[channel._id]) return prev;
-            const updated = { ...prev };
-            delete updated[channel._id];
-            return updated;
-        });
+        clearUnread(channel._id);
     };
 
     const currentTyping = selectedChannel

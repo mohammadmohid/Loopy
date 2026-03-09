@@ -10,7 +10,8 @@ import { TimelineTab } from "./_components/timeline-tab";
 import { BoardTab } from "./_components/board-tab";
 import { TaskDetailPanel } from "./_components/task-detail-panel";
 import { UploadDialog } from "@/components/upload-dialog";
-import { MoreVertical, Folder, UploadCloud, Loader2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { MoreVertical, Folder, UploadCloud, Loader2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/api";
 import { useAuth } from "@/lib/auth-provider";
@@ -188,11 +189,20 @@ export default function ProjectDetailPage() {
   // --- CRUD Handlers ---
   const handleTaskCreate = async (newTask: Partial<Task>) => {
     try {
+      const apiPayload = {
+        ...newTask,
+        assignees: newTask.assignees?.map((a: any) => a.id) || [],
+      };
+
       const created = await apiRequest<any>(`/projects/${id}/tasks`, {
         method: "POST",
-        data: newTask,
+        data: apiPayload,
       });
-      const task: Task = { ...created, id: created._id };
+      const task: Task = { 
+        ...created, 
+        id: created._id,
+        assignees: newTask.assignees || [],
+      };
       setTasks((prev) => [...prev, task]);
 
       // Refresh milestones to update task counts if assigned
@@ -286,6 +296,59 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleMilestoneComplete = async (milestoneId: string) => {
+    const milestoneTasks = tasks.filter((t) => t.milestoneId === milestoneId && t.status !== "done");
+    if (milestoneTasks.length === 0) return;
+    
+    // Optimistic update
+    setTasks((prev) => prev.map((t) => t.milestoneId === milestoneId ? { ...t, status: "done" } : t));
+    
+    try {
+      await Promise.all(
+        milestoneTasks.map((t) =>
+          apiRequest(`/projects/${id}/tasks/${t.id}`, {
+            method: "PATCH",
+            data: { status: "done" },
+          })
+        )
+      );
+    } catch (e) {
+      console.error("Failed to complete milestone tasks", e);
+    }
+  };
+
+  const handleGroupUnassigned = async () => {
+    const unassigned = tasks.filter((t) => !t.milestoneId);
+    if (!unassigned.length) return;
+    try {
+      const ms = await apiRequest<any>(`/projects/${id}/milestones`, {
+        method: "POST",
+        data: {
+          title: "New Grouped Milestone",
+          status: "pending",
+          startDate: new Date().toISOString(),
+          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          description: "Auto-grouped milestone from unassigned tasks."
+        }
+      });
+      const newMs: Milestone = { ...ms, id: ms._id };
+      setMilestones((prev) => [...prev, newMs]);
+      
+      setTasks((prev) => prev.map((t) => !t.milestoneId ? { ...t, milestoneId: newMs.id } : t));
+      
+      await Promise.all(
+        unassigned.map((t) =>
+          apiRequest(`/projects/${id}/tasks/${t.id}`, {
+            method: "PATCH",
+            data: { milestoneId: newMs.id },
+          })
+        )
+      );
+    } catch (e) {
+      console.error("Failed to group unassigned", e);
+    }
+  };
+
   const handleMilestoneDelete = async (mId: string) => {
     try {
       await apiRequest(`/projects/milestones/${mId}`, { method: "DELETE" });
@@ -324,7 +387,7 @@ export default function ProjectDetailPage() {
   if (!project) return <div>Project not found</div>;
 
   const canEdit =
-    user?.workspaceRole === "ADMIN" || project.owner.id === user?.id || true;
+    user?.workspaceRole === "ADMIN" || project.owner.id === user?.id || user?.workspaceRole === "PROJECT_MANAGER";
 
   const handleActivityClick = (activity: Activity) => {
     if (activity.type === "task") {
@@ -354,9 +417,46 @@ export default function ProjectDetailPage() {
           <h1 className="text-2xl font-semibold text-neutral-900">
             {project.name}
           </h1>
-          <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors">
-            <MoreVertical className="w-5 h-5 text-neutral-500" />
-          </button>
+          <div className="flex items-center gap-1">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button 
+                  className="p-2 hover:bg-neutral-100 rounded-lg transition-colors text-neutral-500 hover:text-primary"
+                  title="View Team Members"
+                >
+                  <Users className="w-5 h-5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-64 p-3 shadow-lg border border-neutral-200" sideOffset={8}>
+                <h4 className="text-sm font-semibold mb-3 text-neutral-900 border-b border-neutral-100 pb-2">Project Team</h4>
+                <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+                  {project.members && project.members.length > 0 ? (
+                    project.members.map((m: any) => (
+                      <div key={m.id} className="flex items-center gap-3 p-1.5 hover:bg-neutral-50 rounded-md transition-colors">
+                        <div className="w-7 h-7 rounded-full bg-neutral-200 border border-neutral-300 flex items-center justify-center text-xs font-semibold overflow-hidden shrink-0 text-neutral-600">
+                          {m.avatar?.startsWith('http') ? (
+                            <img src={m.avatar} alt={m.name} className="object-cover w-full h-full" />
+                          ) : (
+                            m.avatar || m.name?.[0]?.toUpperCase() || 'U'
+                          )}
+                        </div>
+                        <div className="flex flex-col flex-1 min-w-0">
+                          <span className="text-sm font-medium text-neutral-700 truncate">{m.name}</span>
+                          {m.role && <span className="text-[10px] text-neutral-400 capitalize">{m.role.replace("_", " ")}</span>}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-sm text-neutral-500 text-center py-4">No members assigned</div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors">
+              <MoreVertical className="w-5 h-5 text-neutral-500" />
+            </button>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button
@@ -429,6 +529,7 @@ export default function ProjectDetailPage() {
             <TasksMilestonesTab
               tasks={tasks}
               milestones={milestones}
+              projectMembers={project.members}
               onTaskClick={(t) => {
                 setSelectedTask(t);
                 setIsTaskPanelOpen(true);
@@ -439,6 +540,8 @@ export default function ProjectDetailPage() {
               onMilestoneCreate={handleMilestoneCreate}
               onMilestoneUpdate={handleMilestoneUpdate}
               onMilestoneDelete={handleMilestoneDelete}
+              onMilestoneComplete={handleMilestoneComplete}
+              onGroupUnassigned={handleGroupUnassigned}
               canEdit={canEdit}
               canDelete={canEdit}
             />
@@ -477,6 +580,8 @@ export default function ProjectDetailPage() {
         onDelete={handleTaskDelete}
         canEdit={canEdit}
         canDelete={canEdit}
+        projectMembers={project.members}
+        boardColumns={project.boardColumns}
       />
     </div>
   );

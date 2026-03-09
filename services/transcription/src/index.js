@@ -20,7 +20,7 @@ mongoose
   .then(() => console.log("✅ Transcription DB Connected"))
   .catch((err) => console.error("❌ DB Error:", err));
 
-const PORT = process.env.PORT || 4002;
+const PORT = process.env.PORT;
 app.listen(PORT, () => {
   console.log(`🚀 Transcription Service running on port ${PORT}`);
 });

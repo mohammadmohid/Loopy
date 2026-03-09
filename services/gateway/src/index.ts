@@ -41,6 +41,7 @@ app.use(
   createProxyMiddleware({
     target: process.env.AUTH_SERVICE_URL,
     changeOrigin: true,
+    pathRewrite: { "^": "/api/auth" },
   })
 );
 
@@ -50,6 +51,7 @@ app.use(
   createProxyMiddleware({
     target: process.env.PROJECT_SERVICE_URL,
     changeOrigin: true,
+    pathRewrite: { "^": "/api/projects" },
   })
 );
 
@@ -59,6 +61,7 @@ app.use(
   createProxyMiddleware({
     target: process.env.MEETING_SERVICE_URL,
     changeOrigin: true,
+    pathRewrite: { "^": "/api/meetings" },
   })
 );
 
@@ -76,6 +79,7 @@ app.use(
   createProxyMiddleware({
     target: process.env.CHAT_SERVICE_URL || "http://localhost:5004",
     changeOrigin: true,
+    pathRewrite: { "^": "/api/chat" },
   })
 );
 

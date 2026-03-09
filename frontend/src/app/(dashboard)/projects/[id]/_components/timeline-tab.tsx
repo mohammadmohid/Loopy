@@ -14,7 +14,7 @@ import {
   Calendar,
   Users,
   Search,
-  User,
+  User as UserIcon,
 } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -280,9 +280,9 @@ export function TimelineTab({
                 </div>
                 <div className="max-h-60 overflow-y-auto p-2">
                   <div className="px-2 py-1.5 text-xs font-semibold text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5" /> Project Members
+                    <UserIcon className="w-3.5 h-3.5" /> Project Members
                   </div>
-                  {projectMembers.filter((m: any) => 
+                  {projectMembers.filter((m: any) =>
                     (m.name || m.user?.name || "").toLowerCase().includes(assigneeSearch.toLowerCase())
                   ).map((m: any) => {
                     const u = m.user || m; // Handle populated
@@ -336,7 +336,7 @@ export function TimelineTab({
                     );
                   })}
                   {projectMembers.length === 0 && (
-                     <div className="text-center py-4 text-xs text-neutral-500">No project members</div>
+                    <div className="text-center py-4 text-xs text-neutral-500">No project members</div>
                   )}
                 </div>
               </div>
@@ -516,11 +516,10 @@ export function TimelineTab({
 
                           {/* Status Pill */}
                           <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded-full capitalize ${
-                              styles.bg
-                            } ${styles.bar
-                              .replace("bg-", "text-")
-                              .replace("500", "700")}`}
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full capitalize ${styles.bg
+                              } ${styles.bar
+                                .replace("bg-", "text-")
+                                .replace("500", "700")}`}
                           >
                             {t.status}
                           </span>
@@ -553,16 +552,16 @@ export function TimelineTab({
                               className={`absolute top-1/2 -translate-y-1/2 h-4 rounded-sm flex items-center px-1 ${styles.bg} border ${styles.border} shadow-sm group-hover:brightness-95 transition-all`}
                               style={tStyle}
                             >
-                               {/* Deadline Marker */}
-                               {t.status !== "done" && (
-                                 <div 
-                                   className={cn(
-                                     "absolute right-0 top-1/2 -translate-y-1/2 -mr-[5px] w-2.5 h-2.5 rounded-full border-[1.5px] border-white shadow-sm z-10",
-                                     (new Date(t.dueDate) < new Date()) ? "bg-red-500" : "bg-neutral-400"
-                                   )}
-                                   title={`Deadline: ${new Date(t.dueDate).toLocaleDateString()}`}
-                                 />
-                               )}
+                              {/* Deadline Marker */}
+                              {t.status !== "done" && (
+                                <div
+                                  className={cn(
+                                    "absolute right-0 top-1/2 -translate-y-1/2 -mr-[5px] w-2.5 h-2.5 rounded-full border-[1.5px] border-white shadow-sm z-10",
+                                    (new Date(t.dueDate) < new Date()) ? "bg-red-500" : "bg-neutral-400"
+                                  )}
+                                  title={`Deadline: ${new Date(t.dueDate).toLocaleDateString()}`}
+                                />
+                              )}
                             </div>
                           )}
                         </div>

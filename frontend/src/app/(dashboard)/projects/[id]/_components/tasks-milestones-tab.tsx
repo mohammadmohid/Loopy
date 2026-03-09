@@ -159,7 +159,7 @@ export function TasksMilestonesTab({
   };
 
   const handleCreateMilestone = () => {
-    // Logic: Start = today, End = max of unassigned tasks (mock logic for now)
+    // Logic: Start = today, End = max of unassigned tasks
     const today = new Date();
     const nextMonth = new Date();
     nextMonth.setMonth(today.getMonth() + 1);
@@ -339,6 +339,14 @@ export function TasksMilestonesTab({
             >
               <Upload className="w-4 h-4" /> Import JSON
             </Button>
+            {canEdit && (
+              <button
+                onClick={handleCreateMilestone}
+                className="px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium hover:bg-neutral-800 transition-colors"
+              >
+                Create Milestone
+              </button>
+            )}
           </div>
         </div>
 
@@ -356,8 +364,8 @@ export function TasksMilestonesTab({
                 >
                   <div
                     className={`p-1 rounded-md transition-transform duration-200 ${!expandedMilestones.includes(milestone.id)
-                        ? "-rotate-90"
-                        : ""
+                      ? "-rotate-90"
+                      : ""
                       }`}
                   >
                     <ChevronDown className="w-4 h-4 text-neutral-500" />

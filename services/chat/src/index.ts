@@ -4,8 +4,8 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import cookieParser from "cookie-parser";
 import { createServer } from "http";
-import chatRoutes from "./routes/chatRoutes";
-import { initializeSocket } from "./socket";
+import chatRoutes from "./routes/chatRoutes.js";
+import { initializeSocket } from "./socket.js";
 
 dotenv.config();
 

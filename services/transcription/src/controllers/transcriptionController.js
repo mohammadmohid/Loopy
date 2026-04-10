@@ -2,6 +2,7 @@ import axios from "axios";
 import Artifact from "../models/Artifact.js";
 import mongoose from "mongoose";
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 //  Convert ElevenLabs or Deepgram JSON to plain text
 const parseTranscriptToText = (transcriptJson) => {

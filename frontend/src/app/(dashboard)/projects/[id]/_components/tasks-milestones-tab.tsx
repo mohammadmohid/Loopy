@@ -475,12 +475,6 @@ export function TasksMilestonesTab({
               <span className="font-semibold text-neutral-900">
                 Unassigned Tasks
               </span>
-              {canEdit && unassignedTasks.length > 0 && onGroupUnassigned && (
-                <Button variant="outline" size="sm" onClick={onGroupUnassigned} className="h-7 text-xs shadow-sm bg-white">
-                  <Plus className="w-3.5 h-3.5 mr-1" />
-                  Milestone
-                </Button>
-              )}
             </div>
             <div
               className="divide-y divide-neutral-100 min-h-[50px]"

@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import useSWR from "swr";
+import dynamic from "next/dynamic";
+import { fetcher } from "@/lib/fetcher";
 import { Plus, Search, Filter, Loader2, Folder, Calendar, Users, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,11 +11,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ProjectModal } from "./_components/project-modal";
 import { ProjectCard } from "./_components/project-card";
 import { apiRequest } from "@/lib/api";
 import { useAuth } from "@/lib/auth-provider";
 import { useRouter } from "next/navigation";
+
+const ProjectModal = dynamic(() => import("./_components/project-modal").then((mod) => mod.ProjectModal), { ssr: false });
+
 
 interface ProjectMember {
   id: string;
@@ -42,8 +47,7 @@ export default function ProjectsPage() {
   const router = useRouter();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [pinnedProjectIds, setPinnedProjectIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
@@ -52,87 +56,65 @@ export default function ProjectsPage() {
 
   const role = user?.workspaceRole;
 
-  const fetchProjects = async () => {
-    try {
-      setIsLoading(true);
-      const data = await apiRequest<any[]>("/projects");
+  const { data: rawProjects, error, isLoading, mutate } = useSWR("/projects", fetcher);
 
-      const mappedProjects: Project[] = data.map((p) => {
-        // SAFETY: Handle missing owner or missing profile
-        // If owner is populated it's an object, if not it's an ID string (or null)
-        const ownerObj =
-          typeof p.owner === "object" && p.owner !== null ? p.owner : null;
-        const profile = ownerObj?.profile;
+  const projects: Project[] = ((rawProjects as any[]) || []).map((p: any) => {
+    // SAFETY: Handle missing owner or missing profile
+    // If owner is populated it's an object, if not it's an ID string (or null)
+    const ownerObj = typeof p.owner === "object" && p.owner !== null ? p.owner : null;
+    const profile = ownerObj?.profile;
 
-        return {
-          _id: p._id,
-          id: p._id,
-          name: p.name,
-          description: p.description,
-          owner: {
-            name: profile
-              ? `${profile.firstName} ${profile.lastName}`
-              : "Unknown User",
-            avatar: profile
-              ? (profile.firstName[0] + profile.lastName[0]).toUpperCase()
-              : "NA",
-          },
-          startDate: p.startDate,
-          rawEndDate: p.endDate,
-          dueDate: p.endDate
-            ? new Date(p.endDate).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
+    return {
+      _id: p._id,
+      id: p._id,
+      name: p.name,
+      description: p.description,
+      owner: {
+        name: profile ? `${profile.firstName} ${profile.lastName}` : "Unknown User",
+        avatar: profile ? (profile.firstName[0] + profile.lastName[0]).toUpperCase() : "NA",
+      },
+      startDate: p.startDate,
+      rawEndDate: p.endDate,
+      dueDate: p.endDate
+        ? new Date(p.endDate).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })
+        : "No Date",
+      isPinned: pinnedProjectIds.includes(p._id),
+      members: Array.isArray(p.members)
+        ? p.members
+            .filter((m: any) => m.user && m.user.profile)
+            .map((m: any) => {
+              const prof = m.user.profile;
+              return {
+                id: m.user._id,
+                name: `${prof.firstName || ""} ${prof.lastName || ""}`.trim(),
+                avatarUrl: prof.avatarUrl,
+                initials: prof.firstName ? (prof.firstName[0] + (prof.lastName ? prof.lastName[0] : "")).toUpperCase() : "NA",
+              };
             })
-            : "No Date",
-          isPinned: false,
-          members: Array.isArray(p.members)
-            ? p.members
-              .filter((m: any) => m.user && m.user.profile)
-              .map((m: any) => {
-                const prof = m.user.profile;
-                return {
-                  id: m.user._id,
-                  name: `${prof.firstName || ""} ${prof.lastName || ""}`.trim(),
-                  avatarUrl: prof.avatarUrl,
-                  initials: prof.firstName ? (prof.firstName[0] + (prof.lastName ? prof.lastName[0] : "")).toUpperCase() : "NA",
-                };
-              })
-            : [],
-        };
-      });
-
-      setProjects(mappedProjects);
-    } catch (error) {
-      console.error("Failed to fetch projects:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchProjects();
-  }, []);
+        : [],
+    };
+  });
 
   const handleProjectSuccess = (projectData: any) => {
-    fetchProjects();
+    mutate();
     setIsCreateOpen(false);
     setEditingProjectId(null);
   };
 
   const handleTogglePin = (projectId: string) => {
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.id === projectId ? { ...p, isPinned: !p.isPinned } : p
-      )
+    setPinnedProjectIds((prev) => 
+      prev.includes(projectId) ? prev.filter(id => id !== projectId) : [...prev, projectId]
     );
   };
 
   const handleDeleteProject = async (projectId: string) => {
     try {
       await apiRequest(`/projects/${projectId}`, { method: "DELETE" });
-      setProjects((prev) => prev.filter((p) => p.id !== projectId));
+      mutate();
     } catch (error) {
       console.error("Failed to delete project:", error);
       alert("Failed to delete project");

@@ -2,7 +2,9 @@
 
 import { useAuth } from "@/lib/auth-provider";
 import { apiRequest } from "@/lib/api";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect } from "react";
+import useSWR from "swr";
+import { fetcher } from "@/lib/fetcher";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -383,32 +385,13 @@ function EmptyState({
 export default function HomePage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchDashboard = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const result = await apiRequest<DashboardData>(
-        "/projects/dashboard"
-      );
-      setData(result);
-    } catch (error) {
-      console.error("Failed to fetch dashboard:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const { data, error, isLoading } = useSWR<DashboardData>("/projects/dashboard", fetcher as any);
 
   useEffect(() => {
     if (!authLoading && !user) {
       router.push("/login");
-      return;
     }
-    if (user) {
-      fetchDashboard();
-    }
-  }, [user, authLoading, router, fetchDashboard]);
+  }, [user, authLoading, router]);
 
   if (authLoading || isLoading) {
     return (

@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
+import useSWR from "swr";
+import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/lib/auth-provider";
 import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,7 @@ import Image from "next/image";
 
 interface Member {
   id: string;
+  _id?: string;
   email: string;
   firstName: string;
   lastName: string;
@@ -53,11 +56,6 @@ export default function TeamPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"members" | "teams">("members");
 
-  const [members, setMembers] = useState<Member[]>([]);
-  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
   // Dialogs
   const [inviteDialog, setInviteDialog] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -67,28 +65,18 @@ export default function TeamPage() {
   const [newTeamName, setNewTeamName] = useState("");
   const [selectedTeamMembers, setSelectedTeamMembers] = useState<string[]>([]);
 
-  const fetchData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const [membersData, teamsData] = await Promise.all([
-        apiRequest<{ members: Member[]; pendingInvites: PendingInvite[] }>("/auth/workspaces/members"),
-        apiRequest<Team[]>("/projects/teams").catch(() => []) // Graceful fail if no active workspace
-      ]);
+  const { data: membersData, isLoading: isMembersLoading, mutate: mutateMembers } = useSWR<{ members: Member[]; pendingInvites: PendingInvite[] }>("/auth/workspaces/members", fetcher as any);
+  const { data: teamsData, isLoading: isTeamsLoading, mutate: mutateTeams } = useSWR<Team[]>("/projects/teams", fetcher as any);
 
-      setMembers(membersData.members);
-      setPendingInvites(membersData.pendingInvites);
-      setTeams(teamsData);
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to load team data");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const isLoading = isMembersLoading || isTeamsLoading;
+  const members = membersData?.members || [];
+  const pendingInvites = membersData?.pendingInvites || [];
+  const teams = teamsData || [];
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const refetchAll = () => {
+    mutateMembers();
+    mutateTeams();
+  };
 
   const handleInvite = async () => {
     try {
@@ -99,7 +87,7 @@ export default function TeamPage() {
       toast.success("Invitation sent");
       setInviteDialog(false);
       setInviteEmail("");
-      fetchData();
+      refetchAll();
     } catch (e: any) {
       toast.error(e.response?.data?.message || "Failed to send invite");
     }
@@ -112,7 +100,7 @@ export default function TeamPage() {
         data: { email },
       });
       toast.success("Invitation resent");
-      fetchData();
+      refetchAll();
     } catch (e: any) {
       toast.error(e.response?.data?.message || "Failed to resend invite");
     }
@@ -125,7 +113,7 @@ export default function TeamPage() {
         data: { role: newRole },
       });
       toast.success("Role updated");
-      fetchData();
+      refetchAll();
     } catch (e: any) {
       toast.error(e.response?.data?.message || "Failed to update role");
     }
@@ -137,7 +125,7 @@ export default function TeamPage() {
         method: "DELETE",
       });
       toast.success("Member removed");
-      fetchData();
+      refetchAll();
     } catch (e: any) {
       toast.error(e.response?.data?.message || "Failed to remove member");
     }
@@ -154,7 +142,7 @@ export default function TeamPage() {
       setCreateTeamDialog(false);
       setNewTeamName("");
       setSelectedTeamMembers([]);
-      fetchData();
+      refetchAll();
     } catch (e: any) {
       toast.error(e.response?.data?.message || "Failed to create team");
     }
@@ -166,7 +154,7 @@ export default function TeamPage() {
         method: "DELETE",
       });
       toast.success("Team deleted");
-      fetchData();
+      refetchAll();
     } catch (e: any) {
       toast.error(e.response?.data?.message || "Failed to delete team");
     }
@@ -266,7 +254,7 @@ export default function TeamPage() {
                   </h3>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {roleGroup.map((member) => (
-                      <div key={member.id} className="bg-white border border-neutral-200 rounded-xl p-4 flex items-center justify-between shadow-sm hover:border-neutral-300 transition-colors">
+                      <div key={member.id || member._id} className="bg-white border border-neutral-200 rounded-xl p-4 flex items-center justify-between shadow-sm hover:border-neutral-300 transition-colors">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-brand/10 text-brand flex items-center justify-center font-bold relative overflow-hidden">
                             {member.avatarUrl ? (
@@ -364,12 +352,16 @@ export default function TeamPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    {team.members.map((m) => (
-                      <div key={m.id} className="flex items-center gap-2 px-2.5 py-1.5 bg-neutral-100 rounded-lg text-xs font-medium text-neutral-700">
-                        {m.firstName} {m.lastName}
-                        {m.id === team.leader.id && <Shield className="w-3 h-3 text-brand ml-1" />}
-                      </div>
-                    ))}
+                    {team.members.map((m) => {
+                      const memberId = m.id || m._id;
+                      const leaderId = team.leader.id || team.leader._id;
+                      return (
+                        <div key={memberId} className="flex items-center gap-2 px-2.5 py-1.5 bg-neutral-100 rounded-lg text-xs font-medium text-neutral-700">
+                          {m.firstName} {m.lastName}
+                          {memberId === leaderId && <Shield className="w-3 h-3 text-brand ml-1" />}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -434,7 +426,7 @@ export default function TeamPage() {
               <label className="block text-sm font-medium text-neutral-700 mb-2">Select Members</label>
               <div className="max-h-60 overflow-y-auto border border-neutral-200 rounded-md divide-y divide-neutral-100">
                 {members.map(m => (
-                  <label key={m.id} className="flex items-center gap-3 p-3 hover:bg-neutral-50 cursor-pointer">
+                  <label key={m.id || m._id} className="flex items-center gap-3 p-3 hover:bg-neutral-50 cursor-pointer">
                     <input
                       type="checkbox"
                       className="rounded border-neutral-300 text-brand focus:ring-brand"

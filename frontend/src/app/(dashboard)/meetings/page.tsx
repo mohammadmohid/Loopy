@@ -3,14 +3,18 @@
 import { useState, useEffect } from "react";
 import { UploadCloud, Search, Video, Calendar, ChevronRight, Hash, Users, MessageSquare, Files, Activity, Settings, LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { UploadDialog } from "@/components/upload-dialog";
 import { MeetingList, type Artifact } from "./_components/meeting-list";
-import { HostMeetingDialog } from "./_components/host-meeting-dialog";
-import { ScheduleMeetingDialog } from "./_components/schedule-meeting-dialog";
 import { LiveMeetingList } from "./_components/live-meeting-list";
 import { MeetingHistoryList, type Meeting } from "./_components/meeting-history-list";
 import { apiRequest } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import useSWR from "swr";
+import { fetcher } from "@/lib/fetcher";
+import dynamic from "next/dynamic";
+
+const UploadDialog = dynamic(() => import("@/components/upload-dialog").then(mod => mod.UploadDialog), { ssr: false });
+const HostMeetingDialog = dynamic(() => import("./_components/host-meeting-dialog").then(mod => mod.HostMeetingDialog), { ssr: false });
+const ScheduleMeetingDialog = dynamic(() => import("./_components/schedule-meeting-dialog").then(mod => mod.ScheduleMeetingDialog), { ssr: false });
 
 export default function MeetingsPage() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -18,44 +22,19 @@ export default function MeetingsPage() {
   const [isScheduleMeetingOpen, setIsScheduleMeetingOpen] = useState(false);
 
   // Data State
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [allMeetings, setAllMeetings] = useState<Meeting[]>([]); // Store ALL meetings here
-  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   // Local Sidebar State
   const [activeTab, setActiveTab] = useState("my-meetings");
 
-  const fetchData = async () => {
-    try {
-      setIsLoading(true);
-      // Fetch Artifacts and Meetings with individual catch to avoid total failure on 504
-      const [artifactsRes, meetingsRes] = await Promise.allSettled([
-        apiRequest<Artifact[]>("/projects/artifacts"),
-        apiRequest<Meeting[]>("/meetings"),
-      ]);
+  const { data: artifactsData, mutate: mutateArtifacts } = useSWR("/projects/artifacts", fetcher);
+  const artifacts: Artifact[] = (artifactsData as Artifact[]) || [];
+  const { data: allMeetingsData, isLoading, mutate: mutateMeetings } = useSWR("/meetings", fetcher);
+  const allMeetings: Meeting[] = (allMeetingsData as Meeting[]) || [];
 
-      if (artifactsRes.status === "fulfilled") {
-        setArtifacts(artifactsRes.value);
-      } else {
-        console.error("Failed to fetch artifacts:", artifactsRes.reason);
-      }
-
-      if (meetingsRes.status === "fulfilled") {
-        setAllMeetings(meetingsRes.value);
-      } else {
-        console.error("Failed to fetch meetings:", meetingsRes.reason);
-      }
-
-    } catch (error) {
-      console.error("Unknown error in fetchData:", error);
-    } finally {
-      setIsLoading(false);
-    }
+  const refetchAll = () => {
+    mutateArtifacts();
+    mutateMeetings();
   };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
   // Filter Data
   const filteredArtifacts = artifacts.filter((a) =>
@@ -122,7 +101,7 @@ export default function MeetingsPage() {
             <Button
               onClick={() => setIsScheduleMeetingOpen(true)}
               variant="outline"
-              className="h-14 flex items-center justify-start gap-4 px-5 border-[#e2e4e9] shadow-sm hover:border-[#cc2233] hover:text-[#cc2233] bg-gradient-to-r from-white to-[#fdfafb] text-neutral-700 font-semibold"
+              className="h-14 flex items-center justify-start gap-4 px-5 border-[#e2e4e9] shadow-sm hover:border-[#cc2233] hover:text-[#cc2233] bg-linear-to-r from-white to-[#fdfafb] text-neutral-700 font-semibold"
             >
               <span className="p-2 rounded bg-[#cc2233] text-white">
                 <Calendar className="w-5 h-5" />
@@ -133,7 +112,7 @@ export default function MeetingsPage() {
             <Button
               onClick={() => setIsHostMeetingOpen(true)}
               variant="outline"
-              className="h-14 flex items-center justify-start gap-4 px-5 border-[#e2e4e9] shadow-sm hover:border-[#cc2233] hover:text-[#cc2233] bg-gradient-to-r from-white to-[#fdfafb] text-neutral-700 font-semibold"
+              className="h-14 flex items-center justify-start gap-4 px-5 border-[#e2e4e9] shadow-sm hover:border-[#cc2233] hover:text-[#cc2233] bg-linear-to-r from-white to-[#fdfafb] text-neutral-700 font-semibold"
             >
               <span className="p-2 rounded bg-[#cc2233] text-white">
                 <Video className="w-5 h-5" />
@@ -158,7 +137,7 @@ export default function MeetingsPage() {
       <UploadDialog
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
-        onUploadComplete={() => fetchData()}
+        onUploadComplete={refetchAll}
       />
 
       <HostMeetingDialog
@@ -169,7 +148,7 @@ export default function MeetingsPage() {
       <ScheduleMeetingDialog
         isOpen={isScheduleMeetingOpen}
         onClose={() => setIsScheduleMeetingOpen(false)}
-        onScheduleComplete={() => fetchData()}
+        onScheduleComplete={refetchAll}
       />
     </div>
   );

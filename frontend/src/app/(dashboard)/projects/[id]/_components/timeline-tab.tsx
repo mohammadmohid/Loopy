@@ -477,13 +477,28 @@ export function TimelineTab({
 
                   {/* Gantt Bar Area */}
                   <div className="flex-1 relative py-3 px-2">
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 h-6 bg-green-100 border border-green-200 rounded-md flex items-center shadow-sm"
-                      style={barStyle}
-                    >
-                      <div className="w-1.5 h-full bg-green-500 rounded-l-md" />
-                      <div className="w-1.5 h-full bg-green-500 rounded-r-md absolute right-0" />
-                    </div>
+                    {(() => {
+                      const isCompleted = m.status === "completed";
+                      const allTasksDone = m.tasks.length > 0 && m.tasks.every(t => t.status === "done");
+                      const barBg = isCompleted
+                        ? allTasksDone ? "bg-emerald-100 border-emerald-200" : "bg-neutral-200 border-neutral-300"
+                        : "bg-green-100 border-green-200";
+                      const edgeBg = isCompleted
+                        ? allTasksDone ? "bg-emerald-500" : "bg-neutral-500"
+                        : "bg-green-500";
+                      return (
+                        <div
+                          className={cn("absolute top-1/2 -translate-y-1/2 h-6 border rounded-md flex items-center shadow-sm", barBg)}
+                          style={barStyle}
+                        >
+                          <div className={cn("w-1.5 h-full rounded-l-md", edgeBg)} />
+                          <div className={cn("w-1.5 h-full rounded-r-md absolute right-0", edgeBg)} />
+                          {isCompleted && (
+                            <span className="text-[8px] font-bold uppercase px-1 text-neutral-500 mx-auto select-none">Done</span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 

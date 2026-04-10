@@ -13,7 +13,8 @@ export const getProjectTasks = async (req: AuthRequest, res: Response) => {
       .populate(
         "assignees",
         "profile.firstName profile.lastName profile.avatarKey email"
-      );
+      )
+      .populate("assignedTeams", "name");
     res.json(tasks);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -35,10 +36,10 @@ export const createTask = async (req: AuthRequest, res: Response) => {
       projectId: req.params.projectId,
     });
 
-    await task.populate(
-      "assignees",
-      "profile.firstName profile.lastName profile.avatarKey email"
-    );
+    await task.populate([
+      { path: "assignees", select: "profile.firstName profile.lastName profile.avatarKey email" },
+      { path: "assignedTeams", select: "name" }
+    ]);
     res.status(201).json(task);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -49,10 +50,10 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
   try {
     const task = await Task.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
-    }).populate(
-      "assignees",
-      "profile.firstName profile.lastName profile.avatarKey email"
-    );
+    }).populate([
+      { path: "assignees", select: "profile.firstName profile.lastName profile.avatarKey email" },
+      { path: "assignedTeams", select: "name" }
+    ]);
 
     if (!task) return res.status(404).json({ message: "Task not found" });
     res.json(task);
@@ -80,7 +81,8 @@ export const getProjectMilestones = async (req: AuthRequest, res: Response) => {
       .populate(
         "assignees",
         "profile.firstName profile.lastName profile.avatarKey email"
-      );
+      )
+      .populate("assignedTeams", "name");
     res.json(milestones);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -96,10 +98,12 @@ export const createMilestone = async (req: AuthRequest, res: Response) => {
       projectId: req.params.projectId,
     });
 
-    // Auto-populate assignees from tasks if tasks provided?
-    // The requirement says "Milestones by default tasks all the tasks assigned members".
-    // This is best handled on the frontend or a specific service logic when linking tasks.
-    // For now, we return the created milestone.
+    if (req.body.taskIds && Array.isArray(req.body.taskIds) && req.body.taskIds.length > 0) {
+      await Task.updateMany(
+        { _id: { $in: req.body.taskIds } },
+        { milestoneId: milestone._id }
+      );
+    }
 
     res.status(201).json(milestone);
   } catch (error: any) {
@@ -113,13 +117,19 @@ export const updateMilestone = async (req: AuthRequest, res: Response) => {
       req.params.id,
       req.body,
       { new: true }
-    ).populate(
-      "assignees",
-      "profile.firstName profile.lastName profile.avatarKey email"
-    );
+    ).populate([
+      { path: "assignees", select: "profile.firstName profile.lastName profile.avatarKey email" },
+      { path: "assignedTeams", select: "name" }
+    ]);
 
-    if (!milestone)
-      return res.status(404).json({ message: "Milestone not found" });
+    if (!milestone) return res.status(404).json({ message: "Milestone not found" });
+
+    if (req.body.status === "completed") {
+      await Task.updateMany(
+        { milestoneId: req.params.id, status: { $ne: "done" } },
+        { status: "done" }
+      );
+    }
     res.json(milestone);
   } catch (error: any) {
     res.status(500).json({ message: error.message });

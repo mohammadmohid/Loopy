@@ -19,6 +19,8 @@ import {
   Info,
   Filter,
   X,
+  Users,
+  Milestone as MilestoneIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MilestoneOverlay } from "./milestone-overlay";
@@ -44,7 +46,7 @@ interface TasksMilestonesTabProps {
   onTaskCreate: (task: Partial<Task>) => void;
   onTaskUpdate: (task: Task) => void;
   onTaskDelete: (taskId: string) => void;
-  onMilestoneCreate: (milestone: Partial<Milestone>) => void;
+  onMilestoneCreate: (milestone: Partial<Milestone> & { taskIds?: string[] }) => void;
   onMilestoneUpdate: (milestone: Milestone) => void;
   onMilestoneDelete: (milestoneId: string) => void;
   onMilestoneComplete?: (milestoneId: string) => void;
@@ -52,6 +54,7 @@ interface TasksMilestonesTabProps {
   canEdit: boolean;
   canDelete: boolean;
   projectMembers?: UserType[];
+  availableTeams?: any[];
 }
 
 const typeIcons: Record<string, any> = {
@@ -59,6 +62,13 @@ const typeIcons: Record<string, any> = {
   bug: Bug,
   feature: Lightbulb,
   story: BookOpen,
+};
+
+const typeColors: Record<string, string> = {
+  task: "text-blue-600 bg-blue-50 border-blue-200",
+  bug: "text-red-600 bg-red-50 border-red-200",
+  feature: "text-amber-600 bg-amber-50 border-amber-200",
+  story: "text-purple-600 bg-purple-50 border-purple-200",
 };
 
 // ... JSON Import Helper ...
@@ -89,6 +99,7 @@ export function TasksMilestonesTab({
   onGroupUnassigned,
   canEdit,
   projectMembers = [],
+  availableTeams = [],
 }: TasksMilestonesTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedMilestones, setExpandedMilestones] = useState<string[]>(
@@ -113,6 +124,7 @@ export function TasksMilestonesTab({
   );
   const [isMilestoneOverlayOpen, setIsMilestoneOverlayOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [backlogExpanded, setBacklogExpanded] = useState(true);
 
   // Filter helper
   const matchesFilters = (t: Task) => {
@@ -158,16 +170,31 @@ export function TasksMilestonesTab({
     reader.readAsText(file);
   };
 
-  const handleCreateMilestone = () => {
-    // Logic: Start = today, End = max of unassigned tasks
+  const handleCreateMilestoneFromBacklog = () => {
+    if (unassignedTasks.length === 0) return;
+
+    // Calculate dates from unassigned tasks
     const today = new Date();
-    const nextMonth = new Date();
-    nextMonth.setMonth(today.getMonth() + 1);
+    const dueDates = unassignedTasks
+      .map((t) => (t.dueDate ? new Date(t.dueDate).getTime() : 0))
+      .filter((d) => d > 0);
+
+    const earliestDue = dueDates.length > 0 ? new Date(Math.min(...dueDates)) : today;
+    const latestDue = dueDates.length > 0 ? new Date(Math.max(...dueDates)) : null;
+
+    // SE best practice: milestone should start today and end at least
+    // 2 weeks (sprint) after or at latest task due date + 2-day buffer, whichever is later
+    const sprintEnd = new Date(today);
+    sprintEnd.setDate(sprintEnd.getDate() + 14);
+    const bufferEnd = latestDue ? new Date(latestDue.getTime() + 2 * 24 * 60 * 60 * 1000) : sprintEnd;
+    const milestoneEnd = new Date(Math.max(sprintEnd.getTime(), bufferEnd.getTime()));
 
     onMilestoneCreate({
-      name: "New Milestone",
+      name: `Sprint ${milestones.length + 1}`,
+      description: `Auto-created sprint from ${unassignedTasks.length} backlog tasks.`,
       startDate: today.toISOString(),
-      dueDate: nextMonth.toISOString(),
+      dueDate: milestoneEnd.toISOString(),
+      taskIds: unassignedTasks.map((t) => t.id),
     });
   };
 
@@ -186,6 +213,7 @@ export function TasksMilestonesTab({
       assignees: newTaskAssignees,
     });
     setNewTaskTitle("");
+    setNewTaskType("task");
     setNewTaskDueDate("");
     setNewTaskAssignees([]);
     setCreatingTaskIn(null); // Reset
@@ -211,6 +239,8 @@ export function TasksMilestonesTab({
 
     onTaskUpdate({ ...task, milestoneId: targetMilestoneId });
   };
+
+  const looksLikeUrl = (s: string) => /^https?:\/\//.test(s) || s.startsWith("/");
 
   return (
     <>
@@ -339,182 +369,261 @@ export function TasksMilestonesTab({
             >
               <Upload className="w-4 h-4" /> Import JSON
             </Button>
-            {canEdit && (
-              <button
-                onClick={handleCreateMilestone}
-                className="px-4 py-2 bg-neutral-900 text-white rounded-lg text-sm font-medium hover:bg-neutral-800 transition-colors"
-              >
-                Create Milestone
-              </button>
-            )}
           </div>
         </div>
 
         <div className="space-y-6">
           {/* Milestones Sections */}
-          {milestones.map((milestone) => (
-            <div
-              key={milestone.id}
-              className="border border-neutral-200 rounded-xl overflow-hidden bg-white shadow-sm"
-            >
-              <div className="flex items-center justify-between p-4 bg-neutral-50 border-b border-neutral-200">
-                <div
-                  className="flex items-center gap-3 cursor-pointer select-none"
-                  onClick={() => toggleMilestone(milestone.id)}
-                >
+          {milestones.map((milestone) => {
+            const isCompleted = milestone.status === "completed";
+            return (
+              <div
+                key={milestone.id}
+                className={cn(
+                  "border rounded-xl overflow-hidden bg-white shadow-sm",
+                  isCompleted
+                    ? "border-emerald-200 bg-emerald-50/30"
+                    : "border-neutral-200"
+                )}
+              >
+                <div className={cn(
+                  "flex items-center justify-between p-4 border-b",
+                  isCompleted
+                    ? "bg-emerald-50 border-emerald-200"
+                    : "bg-neutral-50 border-neutral-200"
+                )}>
                   <div
-                    className={`p-1 rounded-md transition-transform duration-200 ${!expandedMilestones.includes(milestone.id)
-                      ? "-rotate-90"
-                      : ""
-                      }`}
+                    className="flex items-center gap-3 cursor-pointer select-none flex-1 min-w-0"
+                    onClick={() => toggleMilestone(milestone.id)}
                   >
-                    <ChevronDown className="w-4 h-4 text-neutral-500" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-neutral-900">
-                        {milestone.name}
-                      </span>
-                      <span className="text-xs text-neutral-500">
-                        ({milestone.tasks?.length})
-                      </span>
+                    <div
+                      className={`p-1 rounded-md transition-transform duration-200 ${!expandedMilestones.includes(milestone.id)
+                        ? "-rotate-90"
+                        : ""
+                        }`}
+                    >
+                      <ChevronDown className="w-4 h-4 text-neutral-500" />
                     </div>
-                    <div className="text-xs text-neutral-400 mt-0.5">
-                      {(() => {
-                        const validStarts = (milestone.tasks || []).map((t: any) => new Date(t.createdAt || t.dueDate || 0).getTime()).filter((t: any) => t > 0);
-                        const dynamicStart = validStarts.length ? new Date(Math.min(...validStarts)).toISOString() : milestone.startDate;
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={cn(
+                          "font-semibold",
+                          isCompleted ? "text-emerald-800" : "text-neutral-900"
+                        )}>
+                          {milestone.name}
+                        </span>
+                        <span className="text-xs text-neutral-500">
+                          ({milestone.tasks?.length || 0})
+                        </span>
+                        {isCompleted && (
+                          <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full uppercase">
+                            Done
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-neutral-400 mt-0.5">
+                        {(() => {
+                          const validStarts = (milestone.tasks || []).map((t: any) => new Date(t.createdAt || t.dueDate || 0).getTime()).filter((t: any) => t > 0);
+                          const dynamicStart = validStarts.length ? new Date(Math.min(...validStarts)).toISOString() : milestone.startDate;
 
-                        const validEnds = (milestone.tasks || []).map((t: any) => new Date(t.dueDate || 0).getTime()).filter((t: any) => t > 0);
-                        const dynamicEnd = validEnds.length ? new Date(Math.max(...validEnds)).toISOString() : milestone.dueDate;
-                        return (
-                          <>
-                            {new Date(dynamicStart).toLocaleDateString()} -{" "}
-                            {new Date(dynamicEnd).toLocaleDateString()}
-                          </>
-                        );
-                      })()}
+                          const validEnds = (milestone.tasks || []).map((t: any) => new Date(t.dueDate || 0).getTime()).filter((t: any) => t > 0);
+                          const dynamicEnd = validEnds.length ? new Date(Math.max(...validEnds)).toISOString() : milestone.dueDate;
+                          return (
+                            <>
+                              {new Date(dynamicStart).toLocaleDateString()} -{" "}
+                              {new Date(dynamicEnd).toLocaleDateString()}
+                            </>
+                          );
+                        })()}
+                      </div>
+                      {/* Show assigned teams/members as small badges */}
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        {milestone.assignedTeams && milestone.assignedTeams.map((t: any) => (
+                          <span key={t._id || t.id} className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md border border-blue-100">
+                            <Users className="w-2.5 h-2.5" />
+                            {t.name}
+                          </span>
+                        ))}
+                        {milestone.assignees && milestone.assignees.length > 0 && (
+                          <div className="flex items-center -space-x-1">
+                            {milestone.assignees.slice(0, 3).map((a) => (
+                              <div
+                                key={a.id}
+                                className="w-5 h-5 rounded-full bg-neutral-200 border border-white flex items-center justify-center text-[8px] font-medium overflow-hidden"
+                                title={a.name}
+                              >
+                                {a.avatar && looksLikeUrl(a.avatar) ? (
+                                  <img src={a.avatar} alt={a.name} className="object-cover w-full h-full" />
+                                ) : (
+                                  a.avatar || a.name?.[0]?.toUpperCase() || "U"
+                                )}
+                              </div>
+                            ))}
+                            {milestone.assignees.length > 3 && (
+                              <span className="text-[9px] text-neutral-500 ml-1">
+                                +{milestone.assignees.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  {/* Actions */}
-                  {canEdit && onMilestoneComplete && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Actions */}
+                    {canEdit && onMilestoneComplete && !isCompleted && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onMilestoneComplete(milestone.id);
+                        }}
+                        className="p-1 hover:bg-green-100/50 rounded-lg text-green-600 transition-colors"
+                        title="Complete Milestone"
+                      >
+                        <Check className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onMilestoneComplete(milestone.id);
+                        setSelectedMilestone(milestone);
+                        setIsMilestoneOverlayOpen(true);
                       }}
-                      className="p-1 hover:bg-green-100/50 rounded-lg text-green-600 transition-colors"
-                      title="Complete Milestone"
+                      className="p-1 hover:bg-neutral-200 rounded-lg text-neutral-500"
                     >
-                      <Check className="w-4 h-4" />
+                      <MoreVertical className="w-4 h-4" />
                     </button>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedMilestone(milestone);
-                      setIsMilestoneOverlayOpen(true);
-                    }}
-                    className="p-1 hover:bg-neutral-200 rounded-lg text-neutral-500"
+                  </div>
+                </div>
+
+                {expandedMilestones.includes(milestone.id) && (
+                  <div
+                    className="divide-y divide-neutral-100 min-h-[40px]"
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                    onDrop={(e) => handleDrop(e, milestone.id)}
                   >
-                    <MoreVertical className="w-4 h-4" />
+                    {milestone.tasks?.filter(matchesFilters).map((task) => (
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        canEdit={canEdit}
+                        onClick={() => onTaskClick(task)}
+                        onUpdate={onTaskUpdate}
+                        onDelete={onTaskDelete}
+                      />
+                    ))}
+
+                    {/* Inline Creation */}
+                    {creatingTaskIn === milestone.id ? (
+                      <InlineCreateRow
+                        title={newTaskTitle}
+                        setTitle={setNewTaskTitle}
+                        type={newTaskType}
+                        setType={setNewTaskType}
+                        dueDate={newTaskDueDate}
+                        setDueDate={setNewTaskDueDate}
+                        assignees={newTaskAssignees}
+                        setAssignees={setNewTaskAssignees}
+                        projectMembers={projectMembers}
+                        availableTeams={availableTeams}
+                        onCancel={() => setCreatingTaskIn(null)}
+                        onSubmit={() => submitCreateTask(milestone.id)}
+                      />
+                    ) : (
+                      canEdit && (
+                        <div
+                          onClick={() => setCreatingTaskIn(milestone.id)}
+                          className="flex items-center gap-3 p-3 pl-12 text-sm text-neutral-500 hover:bg-neutral-50 cursor-pointer transition-colors"
+                        >
+                          <Plus className="w-4 h-4" /> Create
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Backlog Section */}
+          <div className="border border-neutral-200 rounded-xl overflow-hidden bg-white shadow-sm">
+            <div
+              className="p-4 bg-neutral-50 border-b border-neutral-200 flex items-center justify-between cursor-pointer select-none"
+              onClick={() => setBacklogExpanded(!backlogExpanded)}
+            >
+              <div className="flex items-center gap-3">
+                <div className={cn(
+                  "p-1 rounded-md transition-transform duration-200",
+                  !backlogExpanded && "-rotate-90"
+                )}>
+                  <ChevronDown className="w-4 h-4 text-neutral-500" />
+                </div>
+                <span className="font-semibold text-neutral-900">
+                  Backlog
+                </span>
+                <span className="text-xs text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded-full">
+                  {unassignedTasks.length}
+                </span>
+              </div>
+              {/* Create Milestone */}
+              {canEdit && unassignedTasks.length > 0 && (
+                <div className="border-t border-dashed border-neutral-200 bg-neutral-50/50">
+                  <button
+                    onClick={handleCreateMilestoneFromBacklog}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg border-2 border-dashed border-neutral-300 text-sm font-medium text-neutral-500 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Create Milestone
                   </button>
                 </div>
-              </div>
+              )}
+            </div>
 
-              {expandedMilestones.includes(milestone.id) && (
-                <div
-                  className="divide-y divide-neutral-100 min-h-[40px]"
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
-                  onDrop={(e) => handleDrop(e, milestone.id)}
-                >
-                  {milestone.tasks?.filter(matchesFilters).map((task) => (
-                    <TaskRow
-                      key={task.id}
-                      task={task}
-                      canEdit={canEdit}
-                      onClick={() => onTaskClick(task)}
-                      onUpdate={onTaskUpdate}
-                      onDelete={onTaskDelete}
-                    />
-                  ))}
+            {backlogExpanded && (
+              <div
+                className="divide-y divide-neutral-100 min-h-[50px]"
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                onDrop={(e) => handleDrop(e, undefined)}
+              >
+                {unassignedTasks.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    canEdit={canEdit}
+                    onClick={() => onTaskClick(task)}
+                    onUpdate={onTaskUpdate}
+                    onDelete={onTaskDelete}
+                  />
+                ))}
 
-                  {/* Inline Creation */}
-                  {creatingTaskIn === milestone.id ? (
-                    <InlineCreateRow
-                      title={newTaskTitle}
-                      setTitle={setNewTaskTitle}
-                      type={newTaskType}
-                      setType={setNewTaskType}
-                      dueDate={newTaskDueDate}
-                      setDueDate={setNewTaskDueDate}
-                      assignees={newTaskAssignees}
-                      setAssignees={setNewTaskAssignees}
-                      projectMembers={projectMembers}
-                      onCancel={() => setCreatingTaskIn(null)}
-                      onSubmit={() => submitCreateTask(milestone.id)}
-                    />
-                  ) : (
+                {creatingTaskIn === "unassigned" ? (
+                  <InlineCreateRow
+                    title={newTaskTitle}
+                    setTitle={setNewTaskTitle}
+                    type={newTaskType}
+                    setType={setNewTaskType}
+                    dueDate={newTaskDueDate}
+                    setDueDate={setNewTaskDueDate}
+                    assignees={newTaskAssignees}
+                    setAssignees={setNewTaskAssignees}
+                    projectMembers={projectMembers}
+                    availableTeams={availableTeams}
+                    onCancel={() => setCreatingTaskIn(null)}
+                    onSubmit={() => submitCreateTask()}
+                  />
+                ) : (
+                  canEdit && (
                     <div
-                      onClick={() => setCreatingTaskIn(milestone.id)}
+                      onClick={() => setCreatingTaskIn("unassigned")}
                       className="flex items-center gap-3 p-3 pl-12 text-sm text-neutral-500 hover:bg-neutral-50 cursor-pointer transition-colors"
                     >
-                      <Plus className="w-4 h-4" /> Create
+                      <Plus className="w-4 h-4" /> Create Task
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* Unassigned Tasks Section */}
-          <div className="border border-neutral-200 rounded-xl overflow-hidden bg-white shadow-sm">
-            <div className="p-4 bg-neutral-50 border-b border-neutral-200 flex items-center justify-between">
-              <span className="font-semibold text-neutral-900">
-                Unassigned Tasks
-              </span>
-            </div>
-            <div
-              className="divide-y divide-neutral-100 min-h-[50px]"
-              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
-              onDrop={(e) => handleDrop(e, undefined)}
-            >
-              {unassignedTasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  canEdit={canEdit}
-                  onClick={() => onTaskClick(task)}
-                  onUpdate={onTaskUpdate}
-                  onDelete={onTaskDelete}
-                />
-              ))}
-
-              {creatingTaskIn === "unassigned" ? (
-                <InlineCreateRow
-                  title={newTaskTitle}
-                  setTitle={setNewTaskTitle}
-                  type={newTaskType}
-                  setType={setNewTaskType}
-                  dueDate={newTaskDueDate}
-                  setDueDate={setNewTaskDueDate}
-                  assignees={newTaskAssignees}
-                  setAssignees={setNewTaskAssignees}
-                  projectMembers={projectMembers}
-                  onCancel={() => setCreatingTaskIn(null)}
-                  onSubmit={() => submitCreateTask()}
-                />
-              ) : (
-                <div
-                  onClick={() => setCreatingTaskIn("unassigned")}
-                  className="flex items-center gap-3 p-3 pl-12 text-sm text-neutral-500 hover:bg-neutral-50 cursor-pointer transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Create
-                </div>
-              )}
-            </div>
+                  )
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -531,6 +640,8 @@ export function TasksMilestonesTab({
         }}
         canEdit={canEdit}
         canDelete={true} // Allow deletion for milestones
+        projectMembers={projectMembers}
+        availableTeams={availableTeams}
       />
     </>
   );
@@ -548,18 +659,44 @@ function InlineCreateRow({
   assignees,
   setAssignees,
   projectMembers,
+  availableTeams,
   onCancel,
   onSubmit,
 }: any) {
   const TypeIcon = typeIcons[type] || CheckSquare;
+  const [typeOpen, setTypeOpen] = useState(false);
+
+  const looksLikeUrl = (s: string) => /^https?:\/\//.test(s) || s.startsWith("/");
 
   return (
     <div className="flex items-center gap-3 p-3 pl-4 animate-in fade-in bg-blue-50/50">
-      <div className="relative">
-        <button className="p-1 hover:bg-neutral-200 rounded">
-          <TypeIcon className="w-4 h-4 text-neutral-600" />
-        </button>
-      </div>
+      {/* Type Selector */}
+      <Popover open={typeOpen} onOpenChange={setTypeOpen}>
+        <PopoverTrigger asChild>
+          <button className="p-1 hover:bg-neutral-200 rounded">
+            <TypeIcon className="w-4 h-4 text-neutral-600" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-36 p-1" align="start">
+          {(["task", "bug", "feature", "story"] as TaskType[]).map((t) => {
+            const Icon = typeIcons[t];
+            return (
+              <button
+                key={t}
+                onClick={() => { setType(t); setTypeOpen(false); }}
+                className={cn(
+                  "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm capitalize",
+                  type === t ? "bg-neutral-100 font-medium" : "hover:bg-neutral-50"
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {t}
+              </button>
+            );
+          })}
+        </PopoverContent>
+      </Popover>
+
       <input
         autoFocus
         className="flex-1 bg-transparent text-sm outline-none placeholder:text-neutral-400"
@@ -592,7 +729,7 @@ function InlineCreateRow({
               {assignees.length === 0 ? "Assign" : `${assignees.length} assigned`}
             </button>
           </PopoverTrigger>
-          <PopoverContent className="w-56 p-2" align="end">
+          <PopoverContent className="w-60 p-2" align="end">
             <div className="text-xs font-semibold text-neutral-500 mb-2 px-1">Assign Members</div>
             <div className="max-h-48 overflow-y-auto space-y-1">
               {projectMembers?.map((m: UserType) => {
@@ -610,8 +747,12 @@ function InlineCreateRow({
                     <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${isSelected ? 'bg-primary border-primary text-white' : 'border-neutral-300'}`}>
                       {isSelected && <Check className="w-2.5 h-2.5" />}
                     </div>
-                    <div className="w-5 h-5 bg-neutral-200 rounded-full flex items-center justify-center text-[9px] font-medium text-neutral-600">
-                      {m.avatar || m.name[0]}
+                    <div className="w-5 h-5 bg-neutral-200 rounded-full flex items-center justify-center text-[9px] font-medium text-neutral-600 overflow-hidden">
+                      {m.avatar && looksLikeUrl(m.avatar) ? (
+                        <img src={m.avatar} alt={m.name} className="object-cover w-full h-full" />
+                      ) : (
+                        m.avatar || m.name?.[0]?.toUpperCase() || "U"
+                      )}
                     </div>
                     <span className="text-xs text-neutral-700 truncate">{m.name}</span>
                   </div>
@@ -645,6 +786,8 @@ function TaskRow({
 }) {
   const Icon = typeIcons[task.type] || CheckSquare;
   const isDone = task.status === "done";
+
+  const looksLikeUrl = (s: string) => /^https?:\/\//.test(s) || s.startsWith("/");
 
   // Status Colors
   const statusColors: any = {
@@ -692,6 +835,11 @@ function TaskRow({
           }}
           className="w-4 h-4 rounded border-neutral-300 text-primary focus:ring-primary"
         />
+      </div>
+
+      {/* Type icon with color badge */}
+      <div className={cn("p-1 rounded border mr-2", typeColors[task.type] || "text-neutral-600 bg-neutral-50 border-neutral-200")}>
+        <Icon className="w-3.5 h-3.5" />
       </div>
 
       <div className="w-20 text-xs text-neutral-400 font-mono">
@@ -777,10 +925,14 @@ function TaskRow({
           {task.assignees && task.assignees.length > 0 ? (
             <>
               <div
-                className="w-7 h-7 rounded-full bg-neutral-200 flex items-center justify-center text-[10px] font-bold border-2 border-white shadow-sm"
+                className="w-7 h-7 rounded-full bg-neutral-200 flex items-center justify-center text-[10px] font-bold border-2 border-white shadow-sm overflow-hidden"
                 title={task.assignees[0].name}
               >
-                {task.assignees[0].avatar || "U"}
+                {task.assignees[0].avatar && looksLikeUrl(task.assignees[0].avatar) ? (
+                  <img src={task.assignees[0].avatar} alt={task.assignees[0].name} className="object-cover w-full h-full" />
+                ) : (
+                  task.assignees[0].avatar || "U"
+                )}
               </div>
               {task.assignees.length > 1 && (
                 <div className="w-7 h-7 rounded-full bg-neutral-800 text-white flex items-center justify-center text-[9px] font-bold border-2 border-white shadow-sm">

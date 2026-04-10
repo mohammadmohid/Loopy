@@ -8,9 +8,11 @@ import { ProjectOverviewTab } from "./_components/project-overview-tab";
 import { TasksMilestonesTab } from "./_components/tasks-milestones-tab";
 import { TimelineTab } from "./_components/timeline-tab";
 import { BoardTab } from "./_components/board-tab";
-import { TaskDetailPanel } from "./_components/task-detail-panel";
-import { UploadDialog } from "@/components/upload-dialog";
+import dynamic from "next/dynamic";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+const TaskDetailPanel = dynamic(() => import("./_components/task-detail-panel").then(mod => mod.TaskDetailPanel), { ssr: false });
+const UploadDialog = dynamic(() => import("@/components/upload-dialog").then(mod => mod.UploadDialog), { ssr: false });
 import { MoreVertical, Folder, UploadCloud, Loader2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/api";
@@ -50,6 +52,7 @@ export default function ProjectDetailPage() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]); // New state for meetings
+  const [availableTeams, setAvailableTeams] = useState<any[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -59,6 +62,7 @@ export default function ProjectDetailPage() {
         apiRequest<any[]>(`/projects/${id}/milestones`),
         apiRequest<Activity[]>(`/projects/${id}/activity`),
         apiRequest<any[]>("/meetings"),
+        apiRequest<any[]>("/projects/teams").catch(() => []),
       ]);
 
       const projectData = results[0].status === "fulfilled" ? results[0].value : [];
@@ -66,6 +70,7 @@ export default function ProjectDetailPage() {
       const milestonesData = results[2].status === "fulfilled" ? results[2].value : [];
       const activityData = results[3].status === "fulfilled" ? results[3].value : [];
       const allMeetings = results[4].status === "fulfilled" ? results[4].value : [];
+      const teamsData = results[5].status === "fulfilled" ? results[5].value : [];
 
       const currentProjectRaw = Array.isArray(projectData)
         ? projectData.find((p: any) => p._id === id)
@@ -107,11 +112,16 @@ export default function ProjectDetailPage() {
       };
 
       const mappedTasks: Task[] = tasksData.map((t) => {
-        const { _id, assignees, ...rest } = t;
+        const { _id, assignees, assignedTeams: taskTeams, ...rest } = t;
         return {
           ...rest,
           id: _id,
           assignees: assignees ? assignees.map(mapUser) : [],
+          assignedTeams: (taskTeams || []).map((tm: any) => ({
+            id: tm._id || tm.id,
+            _id: tm._id || tm.id,
+            name: tm.name || "Team",
+          })),
           status: mappedProject.boardColumns.some((c) => c.id === t.status)
             ? t.status
             : mappedProject.boardColumns[0].id,
@@ -119,7 +129,7 @@ export default function ProjectDetailPage() {
       });
 
       const mappedMilestones: Milestone[] = milestonesData.map((m) => {
-        const { _id, assignees, ...rest } = m;
+        const { _id, assignees, assignedTeams, ...rest } = m;
         const milestoneTasks = mappedTasks.filter((t) => t.milestoneId === _id);
 
         // If no explicit assignees on milestone, aggregate from tasks
@@ -135,10 +145,19 @@ export default function ProjectDetailPage() {
           finalAssignees = Array.from(uniqueUsers.values());
         }
 
+        // Map assigned teams
+        const mappedTeams = (assignedTeams || []).map((t: any) => ({
+          id: t._id || t.id,
+          _id: t._id || t.id,
+          name: t.name || "Team",
+        }));
+
         return {
           ...rest,
           id: _id,
+          status: rest.status || "open",
           assignees: finalAssignees,
+          assignedTeams: mappedTeams,
           tasks: milestoneTasks,
         };
       });
@@ -175,6 +194,7 @@ export default function ProjectDetailPage() {
         (m) => m.projectId === id && m.status === "scheduled" && m.scheduledAt
       );
       setMeetings(projectMeetings);
+      setAvailableTeams(teamsData);
     } catch (error) {
       console.error("Error loading project:", error);
     } finally {
@@ -267,7 +287,7 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const handleMilestoneCreate = async (newMilestone: Partial<Milestone>) => {
+  const handleMilestoneCreate = async (newMilestone: Partial<Milestone> & { taskIds?: string[] }) => {
     try {
       const created = await apiRequest<any>(`/projects/${id}/milestones`, {
         method: "POST",
@@ -277,6 +297,9 @@ export default function ProjectDetailPage() {
         ...prev,
         { ...created, id: created._id, tasks: [] },
       ]);
+      if (newMilestone.taskIds && newMilestone.taskIds.length > 0) {
+        fetchData();
+      }
     } catch (e) {
       console.error(e);
     }
@@ -304,14 +327,11 @@ export default function ProjectDetailPage() {
     setTasks((prev) => prev.map((t) => t.milestoneId === milestoneId ? { ...t, status: "done" } : t));
     
     try {
-      await Promise.all(
-        milestoneTasks.map((t) =>
-          apiRequest(`/projects/${id}/tasks/${t.id}`, {
-            method: "PATCH",
-            data: { status: "done" },
-          })
-        )
-      );
+      await apiRequest(`/projects/milestones/${milestoneId}`, {
+        method: "PATCH",
+        data: { status: "completed" },
+      });
+      fetchData();
     } catch (e) {
       console.error("Failed to complete milestone tasks", e);
     }
@@ -544,6 +564,7 @@ export default function ProjectDetailPage() {
               onGroupUnassigned={handleGroupUnassigned}
               canEdit={canEdit}
               canDelete={canEdit}
+              availableTeams={availableTeams}
             />
           )}
           {activeTab === "board" && (

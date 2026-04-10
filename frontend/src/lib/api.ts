@@ -10,20 +10,17 @@ export async function apiRequest<T>(
   options: FetchOptions = {}
 ): Promise<T> {
 
-
-  let finalUrl = "";
-
-  if (endpoint.includes("artifacts") || endpoint.includes("transcribe")) {
-
-    const cleanPath = endpoint.startsWith("/") ? endpoint.slice(1) : endpoint;
-    finalUrl = `${BASE_URL}/${cleanPath}`;
-  } else {
-
-    const cleanEndpoint = endpoint.startsWith("/api")
-      ? endpoint.replace("/api", "")
-      : endpoint;
-    finalUrl = `${BASE_URL}${cleanEndpoint}`;
+  const base = BASE_URL.replace(/\/$/, "");
+  
+  let cleanEndpoint = endpoint;
+  if (cleanEndpoint.startsWith("/api")) {
+    cleanEndpoint = cleanEndpoint.replace("/api", "");
   }
+  if (!cleanEndpoint.startsWith("/")) {
+    cleanEndpoint = "/" + cleanEndpoint;
+  }
+  
+  const finalUrl = `${base}${cleanEndpoint}`;
 
   const { data, headers, ...customConfig } = options;
 

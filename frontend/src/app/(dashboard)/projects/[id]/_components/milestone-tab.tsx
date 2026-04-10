@@ -20,6 +20,7 @@ interface TimelineTabProps {
   onMilestoneDelete: (milestoneId: string) => void;
   canEdit: boolean;
   canDelete: boolean;
+  projectMembers?: any[];
 }
 
 type ViewMode = "Month" | "Weekly" | "Monthly" | "Yearly";
@@ -44,6 +45,7 @@ export function TimelineTab({
   onMilestoneDelete,
   canEdit,
   canDelete,
+  projectMembers,
 }: TimelineTabProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("Month");
   const [viewModeOpen, setViewModeOpen] = useState(false);
@@ -372,16 +374,32 @@ export function TimelineTab({
 
                   {/* Gantt bar */}
                   <div className="flex-1 relative h-16">
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 h-6 bg-green-100 border border-green-300 rounded flex items-center"
-                      style={getBarStyle(
-                        milestone.startDate,
-                        milestone.dueDate
-                      )}
-                    >
-                      <div className="w-1 h-full bg-green-500 rounded-l" />
-                      <div className="w-1 h-full bg-green-500 rounded-r absolute right-0" />
-                    </div>
+                    {(() => {
+                      const isCompleted = milestone.status === "completed";
+                      const allTasksDone = milestoneTasks.length > 0 && milestoneTasks.every(t => t.status === "done");
+                      const barColorClass = isCompleted
+                        ? allTasksDone
+                          ? "bg-emerald-100 border-emerald-300"
+                          : "bg-neutral-200 border-neutral-400"
+                        : "bg-green-100 border-green-300";
+                      const edgeColorClass = isCompleted
+                        ? allTasksDone
+                          ? "bg-emerald-500"
+                          : "bg-neutral-500"
+                        : "bg-green-500";
+                      return (
+                        <div
+                          className={cn("absolute top-1/2 -translate-y-1/2 h-6 border rounded flex items-center", barColorClass)}
+                          style={getBarStyle(milestone.startDate, milestone.dueDate)}
+                        >
+                          <div className={cn("w-1 h-full rounded-l", edgeColorClass)} />
+                          <div className={cn("w-1 h-full rounded-r absolute right-0", edgeColorClass)} />
+                          {isCompleted && (
+                            <span className="text-[8px] font-bold uppercase px-1 text-neutral-600 mx-auto">Done</span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 

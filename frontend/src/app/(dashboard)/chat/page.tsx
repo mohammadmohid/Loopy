@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import useSWR, { mutate as globalMutate } from "swr";
+import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/lib/auth-provider";
 import { apiRequest } from "@/lib/api";
 import type { Channel, ChatMessage } from "@/lib/types";
@@ -16,16 +18,11 @@ import { MessageCircle, Search, X } from "lucide-react";
 
 export default function ChatPage() {
     const { user } = useAuth();
-    const [channels, setChannels] = useState<Channel[]>([]);
     const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [threadParent, setThreadParent] = useState<ChatMessage | null>(null);
     const [showChannelInfo, setShowChannelInfo] = useState(false);
     const [showSearch, setShowSearch] = useState(false);
     const [showCreateChannel, setShowCreateChannel] = useState(false);
-    const [loadingChannels, setLoadingChannels] = useState(true);
-    const [loadingMessages, setLoadingMessages] = useState(false);
-    const [workspaceMembers, setWorkspaceMembers] = useState<any[]>([]);
     const { socket, unreadCounts, clearUnread, joinChannel, leaveChannel, emitTyping, emitStopTyping, setCurrentChannelId } = useChat();
     const [typingUsers, setTypingUsers] = useState<Record<string, Set<string>>>({});
     const typingTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
@@ -34,6 +31,17 @@ export default function ChatPage() {
     useEffect(() => {
         selectedChannelIdRef.current = selectedChannel?._id || null;
     }, [selectedChannel]);
+
+    // --- SWR Hooks ---
+  const { data: rawChannels, isLoading: loadingChannels } = useSWR<Channel[]>("/chat/channels", fetcher as any);
+  const channels = rawChannels || [];
+
+  const { data: membersObj } = useSWR<{ members: any[] }>("/auth/workspaces/members", fetcher as any);
+  const workspaceMembers = membersObj?.members || [];
+
+  const messageKey = selectedChannel ? `/chat/channels/${selectedChannel._id}/messages?limit=50` : null;
+  const { data: messagesData, isLoading: loadingMessages } = useSWR<{ messages: ChatMessage[]; hasMore: boolean; nextCursor: string | null }>(messageKey, fetcher as any);
+    const messages = messagesData?.messages || [];
 
     // Derived DMs list combining existing direct channels + workspace members not yet individually messaged
     const directChannels = useMemo(() => {
@@ -74,22 +82,33 @@ export default function ChatPage() {
         return [...existingDMs, ...syntheticDMs];
     }, [channels, workspaceMembers, user?.id, user?.workspaceId]);
 
+    useEffect(() => {
+        if (channels.length > 0 && !selectedChannelIdRef.current) {
+            setSelectedChannel(channels[0]);
+        }
+    }, [channels]);
+
     // --- Socket.IO ---
     useEffect(() => {
         if (!socket) return;
 
         const onNewMessage = (message: ChatMessage) => {
             const currentSelectedId = selectedChannelIdRef.current;
-            setMessages((prev) => {
-                if (prev.some((m) => m._id === message._id)) return prev;
-                if (message.channelId === currentSelectedId) {
-                    return [...prev, message];
-                }
-                return prev;
-            });
+            const currentMessageKey = currentSelectedId ? `/chat/channels/${currentSelectedId}/messages?limit=50` : null;
             
-            // Update channel's last message preview and sort
-            setChannels((prev) => {
+            if (currentMessageKey) {
+                globalMutate(currentMessageKey, (prev: any) => {
+                    if (!prev) return prev;
+                    if (prev.messages.some((m: any) => m._id === message._id)) return prev;
+                    if (message.channelId === currentSelectedId) {
+                        return { ...prev, messages: [...prev.messages, message] };
+                    }
+                    return prev;
+                }, false);
+            }
+            
+            globalMutate("/chat/channels", (prev: Channel[] | undefined) => {
+                if (!prev) return prev;
                 const updated = prev.map((ch) =>
                     ch._id === message.channelId
                         ? {
@@ -100,34 +119,63 @@ export default function ChatPage() {
                         : ch
                 );
                 return updated.sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime());
-            });
+            }, false);
         };
 
         const onMessageDeleted = ({ messageId, channelId }: { messageId: string, channelId: string }) => {
-            setMessages((prev) =>
-                prev.map((m) =>
-                    m._id === messageId ? { ...m, isDeleted: true, content: "This message was deleted." } : m
-                )
-            );
+            const currentSelectedId = selectedChannelIdRef.current;
+            const currentMessageKey = currentSelectedId ? `/chat/channels/${currentSelectedId}/messages?limit=50` : null;
+
+            if (currentMessageKey) {
+                globalMutate(currentMessageKey, (prev: any) => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        messages: prev.messages.map((m: any) =>
+                            m._id === messageId ? { ...m, isDeleted: true, content: "This message was deleted." } : m
+                        )
+                    };
+                }, false);
+            }
             
-            // Optimistically update preview if it might have been the last message
-            setChannels((prev) => prev.map(ch => 
-                ch._id === channelId 
-                    ? { ...ch, lastMessagePreview: "This message was deleted." }
-                    : ch
-            ));
+            globalMutate("/chat/channels", (prev: Channel[] | undefined) => {
+                if (!prev) return prev;
+                return prev.map(ch => 
+                    ch._id === channelId 
+                        ? { ...ch, lastMessagePreview: "This message was deleted." }
+                        : ch
+                );
+            }, false);
         };
 
         const onMessageEdited = (updated: ChatMessage) => {
-            setMessages((prev) =>
-                prev.map((m) => (m._id === updated._id ? updated : m))
-            );
+            const currentSelectedId = selectedChannelIdRef.current;
+            const currentMessageKey = currentSelectedId ? `/chat/channels/${currentSelectedId}/messages?limit=50` : null;
+
+            if (currentMessageKey) {
+                globalMutate(currentMessageKey, (prev: any) => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        messages: prev.messages.map((m: any) => (m._id === updated._id ? updated : m))
+                    };
+                }, false);
+            }
         };
 
         const onReactionUpdated = (updated: ChatMessage) => {
-            setMessages((prev) =>
-                prev.map((m) => (m._id === updated._id ? updated : m))
-            );
+            const currentSelectedId = selectedChannelIdRef.current;
+            const currentMessageKey = currentSelectedId ? `/chat/channels/${currentSelectedId}/messages?limit=50` : null;
+
+            if (currentMessageKey) {
+                globalMutate(currentMessageKey, (prev: any) => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        messages: prev.messages.map((m: any) => (m._id === updated._id ? updated : m))
+                    };
+                }, false);
+            }
         };
 
         const onUserTyping = ({ channelId, userId }: { channelId: string, userId: string }) => {
@@ -158,32 +206,54 @@ export default function ChatPage() {
         };
 
         const onThreadReply = ({ parentId, message }: { parentId: string, message: ChatMessage }) => {
-            setMessages((prev) => 
-                prev.map((m) => m._id === parentId ? { ...m, replyCount: (m.replyCount || 0) + 1 } : m)
-            );
+            const currentSelectedId = selectedChannelIdRef.current;
+            const currentMessageKey = currentSelectedId ? `/chat/channels/${currentSelectedId}/messages?limit=50` : null;
+
+            if (currentMessageKey) {
+                globalMutate(currentMessageKey, (prev: any) => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        messages: prev.messages.map((m: any) => m._id === parentId ? { ...m, replyCount: (m.replyCount || 0) + 1 } : m)
+                    };
+                }, false);
+            }
         };
 
         const onChannelCreated = (channel: Channel) => {
-            setChannels((prev) => {
+            globalMutate("/chat/channels", (prev: Channel[] | undefined) => {
+                if (!prev) return prev;
                 if (prev.some((c) => c._id === channel._id)) return prev;
                 return [channel, ...prev];
-            });
+            }, false);
         };
 
         const onChannelUpdated = (channel: Channel) => {
-            setChannels((prev) => prev.map((c) => c._id === channel._id ? channel : c));
+            globalMutate("/chat/channels", (prev: Channel[] | undefined) => {
+                if (!prev) return prev;
+                return prev.map((c) => c._id === channel._id ? channel : c);
+            }, false);
         };
 
         const onChannelDeleted = ({ channelId }: { channelId: string }) => {
-            setChannels((prev) => prev.filter((c) => c._id !== channelId));
+            globalMutate("/chat/channels", (prev: Channel[] | undefined) => {
+                if (!prev) return prev;
+                return prev.filter((c) => c._id !== channelId);
+            }, false);
         };
 
         const onChannelArchived = ({ channelId }: { channelId: string }) => {
-            setChannels((prev) => prev.filter((c) => c._id !== channelId));
+            globalMutate("/chat/channels", (prev: Channel[] | undefined) => {
+                if (!prev) return prev;
+                return prev.filter((c) => c._id !== channelId);
+            }, false);
         };
 
         const onChannelRemoved = ({ channelId }: { channelId: string }) => {
-            setChannels((prev) => prev.filter((c) => c._id !== channelId));
+            globalMutate("/chat/channels", (prev: Channel[] | undefined) => {
+                if (!prev) return prev;
+                return prev.filter((c) => c._id !== channelId);
+            }, false);
         };
 
         socket.on("new-message", onNewMessage);
@@ -215,50 +285,12 @@ export default function ChatPage() {
         };
     }, [socket, user?.id]);
 
-    // --- Fetch channels ---
-    const fetchChannels = useCallback(async () => {
-        try {
-            setLoadingChannels(true);
-            const [data, membersData] = await Promise.all([
-                apiRequest<Channel[]>("/chat/channels"),
-                apiRequest<{ members: any[] }>("/auth/workspaces/members").catch(()=>({members:[]})),
-            ]);
-            setChannels(data);
-            setWorkspaceMembers(membersData.members);
-            if (data.length > 0 && !selectedChannelIdRef.current) {
-                setSelectedChannel(data[0]);
-            }
-        } catch (err) {
-            console.error("Failed to fetch channels:", err);
-        } finally {
-            setLoadingChannels(false);
-        }
-    }, []);
 
-    useEffect(() => {
-        fetchChannels();
-    }, [fetchChannels]);
-
-    // --- Fetch messages when channel changes ---
-    const fetchMessages = useCallback(async (channelId: string) => {
-        try {
-            setLoadingMessages(true);
-            const data = await apiRequest<{ messages: ChatMessage[]; hasMore: boolean; nextCursor: string | null }>(
-                `/chat/channels/${channelId}/messages?limit=50`
-            );
-            setMessages(data.messages);
-        } catch (err) {
-            console.error("Failed to fetch messages:", err);
-        } finally {
-            setLoadingMessages(false);
-        }
-    }, []);
 
     useEffect(() => {
         if (selectedChannel) {
             clearUnread(selectedChannel._id);
             setCurrentChannelId(selectedChannel._id);
-            fetchMessages(selectedChannel._id);
             joinChannel(selectedChannel._id);
             setThreadParent(null);
             setShowChannelInfo(false);
@@ -270,7 +302,7 @@ export default function ChatPage() {
                 leaveChannel(selectedChannel._id);
             }
         };
-    }, [selectedChannel, fetchMessages, joinChannel, leaveChannel, clearUnread, setCurrentChannelId]);
+    }, [selectedChannel, joinChannel, leaveChannel, clearUnread, setCurrentChannelId]);
 
     // --- Message actions ---
     const handleSendMessage = async (
@@ -305,7 +337,10 @@ export default function ChatPage() {
             updatedAt: new Date().toISOString(),
         };
 
-        setMessages((prev) => [...prev, optimisticMessage]);
+        globalMutate(messageKey, (prev: any) => {
+            if (!prev) return prev;
+            return { ...prev, messages: [...prev.messages, optimisticMessage] };
+        }, false);
 
         try {
             const body: Record<string, unknown> = { content };
@@ -317,17 +352,21 @@ export default function ChatPage() {
             });
 
             // Replace or remove optimistic message
-            setMessages((prev) => {
-                const exists = prev.some((m) => m._id === savedMessage._id && m._id !== tempId);
+            globalMutate(messageKey, (prev: any) => {
+                if (!prev) return prev;
+                const exists = prev.messages.some((m: ChatMessage) => m._id === savedMessage._id && m._id !== tempId);
                 if (exists) {
-                    return prev.filter((m) => m._id !== tempId);
+                    return { ...prev, messages: prev.messages.filter((m: ChatMessage) => m._id !== tempId) };
                 }
-                return prev.map((m) => (m._id === tempId ? savedMessage : m));
-            });
+                return { ...prev, messages: prev.messages.map((m: ChatMessage) => (m._id === tempId ? savedMessage : m)) };
+            }, false);
         } catch (err) {
             console.error("Failed to send message:", err);
             // Revert message on failure
-            setMessages((prev) => prev.filter((m) => m._id !== tempId));
+            globalMutate(messageKey, (prev: any) => {
+                if (!prev) return prev;
+                return { ...prev, messages: prev.messages.filter((m: ChatMessage) => m._id !== tempId) };
+            }, false);
         }
     };
 
@@ -379,10 +418,11 @@ export default function ChatPage() {
                         }
                     });
                     setSelectedChannel(realChannel);
-                    setChannels((prev) => {
+                    globalMutate("/chat/channels", (prev: Channel[] | undefined) => {
+                        if (!prev) return prev;
                         if (prev.some((c) => c._id === realChannel._id)) return prev;
                         return [realChannel, ...prev];
-                    });
+                    }, false);
                 } catch (err) {
                     console.error("Failed to vivify synthetic DM:", err);
                 }
@@ -513,7 +553,7 @@ export default function ChatPage() {
                     channel={selectedChannel}
                     currentUserId={user?.id || ""}
                     onClose={() => setShowChannelInfo(false)}
-                    onUpdated={fetchChannels}
+                    onUpdated={() => globalMutate("/chat/channels")}
                 />
             )}
 
@@ -536,7 +576,10 @@ export default function ChatPage() {
                 <CreateChannelDialog
                     onClose={() => setShowCreateChannel(false)}
                     onCreated={(newChannel) => {
-                        setChannels((prev) => [newChannel, ...prev]);
+                        globalMutate("/chat/channels", (prev: Channel[] | undefined) => {
+                            if (!prev) return prev;
+                            return [newChannel, ...prev];
+                        }, false);
                         setSelectedChannel(newChannel);
                         setShowCreateChannel(false);
                     }}

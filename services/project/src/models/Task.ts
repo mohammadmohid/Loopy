@@ -9,6 +9,7 @@ export interface ITask extends Document {
   projectId: mongoose.Types.ObjectId;
   milestoneId?: mongoose.Types.ObjectId;
   assignees?: mongoose.Types.ObjectId[];
+  assignedTeams?: mongoose.Types.ObjectId[];
   dueDate?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -35,6 +36,7 @@ const TaskSchema: Schema = new Schema(
     projectId: { type: Schema.Types.ObjectId, ref: "Project", required: true },
     milestoneId: { type: Schema.Types.ObjectId, ref: "Milestone" },
     assignees: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    assignedTeams: [{ type: Schema.Types.ObjectId, ref: "Team" }],
     dueDate: { type: Date },
   },
   { timestamps: true }

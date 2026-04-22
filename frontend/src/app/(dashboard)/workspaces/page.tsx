@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
+import useSWR from "swr";
+import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/lib/auth-provider";
 import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -40,9 +42,8 @@ interface PendingInvite {
 
 export default function ManageWorkspacesPage() {
   const { user } = useAuth();
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [invites, setInvites] = useState<PendingInvite[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [selectedMember, setSelectedMember] = useState<string>("");
+  const [members, setMembers] = useState<any[]>([]);
 
   // Dialog state
   const [leaveDialog, setLeaveDialog] = useState<{ open: boolean; workspace: Workspace | null }>({
@@ -59,32 +60,13 @@ export default function ManageWorkspacesPage() {
     open: false,
     workspace: null,
   });
-  const [members, setMembers] = useState<any[]>([]);
-  const [selectedMember, setSelectedMember] = useState<string>("");
 
   const router = useRouter();
 
-  const fetchData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const data = await apiRequest<{
-        workspaces: Workspace[];
-        pendingInvites: PendingInvite[];
-      }>("/auth/workspaces/me");
+  const { data, error, isLoading, mutate } = useSWR("/auth/workspaces/me", fetcher);
 
-      setWorkspaces(data.workspaces);
-      setInvites(data.pendingInvites);
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to load workspaces");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const workspaces: Workspace[] = (data as any)?.workspaces || [];
+  const invites: PendingInvite[] = (data as any)?.pendingInvites || [];
 
   const handleLeave = async () => {
     if (!leaveDialog.workspace) return;
@@ -93,7 +75,7 @@ export default function ManageWorkspacesPage() {
         method: "POST",
       });
       toast.success("Left workspace successfully");
-      fetchData();
+      mutate();
 
       // If left the active workspace, redirect to home to re-evaluate active workspace
       if (user?.activeWorkspace === leaveDialog.workspace.id) {
@@ -114,7 +96,7 @@ export default function ManageWorkspacesPage() {
         method: "DELETE",
       });
       toast.success("Workspace deleted successfully");
-      fetchData();
+      mutate();
 
       // If deleted the active workspace, redirect to projects to re-evaluate active workspace
       if (user?.activeWorkspace === deleteDialog.workspace.id) {
@@ -157,7 +139,7 @@ export default function ManageWorkspacesPage() {
         toast.info("You no longer own any workspace. Please create one to continue managing your own projects.");
       }
 
-      fetchData();
+      mutate();
     } catch (e: any) {
       console.error(e);
       toast.error(e.response?.data?.message || "Failed to transfer ownership");
@@ -174,7 +156,7 @@ export default function ManageWorkspacesPage() {
         data: { token },
       });
       toast.success("Joined workspace successfully");
-      fetchData();
+      mutate();
     } catch (e: any) {
       console.error(e);
       toast.error(e.response?.data?.message || "Failed to join workspace");

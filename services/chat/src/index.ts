@@ -4,8 +4,8 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import cookieParser from "cookie-parser";
 import { createServer } from "http";
-import chatRoutes from "./routes/chatRoutes";
-import { initializeSocket } from "./socket";
+import chatRoutes from "./routes/chatRoutes.js";
+import { initializeSocket } from "./socket.js";
 
 dotenv.config();
 
@@ -52,7 +52,7 @@ app.get("/health", (req, res) => {
     res.json({ status: "ok", service: "chat" });
 });
 
-const PORT = process.env.PORT || 5004;
+const PORT = process.env.PORT || 5005;
 httpServer.listen(PORT, () =>
     console.log(`Chat Service running on port ${PORT}`)
 );

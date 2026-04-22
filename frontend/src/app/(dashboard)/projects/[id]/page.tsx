@@ -8,9 +8,12 @@ import { ProjectOverviewTab } from "./_components/project-overview-tab";
 import { TasksMilestonesTab } from "./_components/tasks-milestones-tab";
 import { TimelineTab } from "./_components/timeline-tab";
 import { BoardTab } from "./_components/board-tab";
-import { TaskDetailPanel } from "./_components/task-detail-panel";
-import { UploadDialog } from "@/components/upload-dialog";
-import { MoreVertical, Folder, UploadCloud, Loader2 } from "lucide-react";
+import dynamic from "next/dynamic";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+const TaskDetailPanel = dynamic(() => import("./_components/task-detail-panel").then(mod => mod.TaskDetailPanel), { ssr: false });
+const UploadDialog = dynamic(() => import("@/components/upload-dialog").then(mod => mod.UploadDialog), { ssr: false });
+import { MoreVertical, Folder, UploadCloud, Loader2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/api";
 import { useAuth } from "@/lib/auth-provider";
@@ -49,6 +52,7 @@ export default function ProjectDetailPage() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]); // New state for meetings
+  const [availableTeams, setAvailableTeams] = useState<any[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -58,6 +62,7 @@ export default function ProjectDetailPage() {
         apiRequest<any[]>(`/projects/${id}/milestones`),
         apiRequest<Activity[]>(`/projects/${id}/activity`),
         apiRequest<any[]>("/meetings"),
+        apiRequest<any[]>("/projects/teams").catch(() => []),
       ]);
 
       const projectData = results[0].status === "fulfilled" ? results[0].value : [];
@@ -65,6 +70,7 @@ export default function ProjectDetailPage() {
       const milestonesData = results[2].status === "fulfilled" ? results[2].value : [];
       const activityData = results[3].status === "fulfilled" ? results[3].value : [];
       const allMeetings = results[4].status === "fulfilled" ? results[4].value : [];
+      const teamsData = results[5].status === "fulfilled" ? results[5].value : [];
 
       const currentProjectRaw = Array.isArray(projectData)
         ? projectData.find((p: any) => p._id === id)
@@ -106,11 +112,16 @@ export default function ProjectDetailPage() {
       };
 
       const mappedTasks: Task[] = tasksData.map((t) => {
-        const { _id, assignees, ...rest } = t;
+        const { _id, assignees, assignedTeams: taskTeams, ...rest } = t;
         return {
           ...rest,
           id: _id,
           assignees: assignees ? assignees.map(mapUser) : [],
+          assignedTeams: (taskTeams || []).map((tm: any) => ({
+            id: tm._id || tm.id,
+            _id: tm._id || tm.id,
+            name: tm.name || "Team",
+          })),
           status: mappedProject.boardColumns.some((c) => c.id === t.status)
             ? t.status
             : mappedProject.boardColumns[0].id,
@@ -118,7 +129,7 @@ export default function ProjectDetailPage() {
       });
 
       const mappedMilestones: Milestone[] = milestonesData.map((m) => {
-        const { _id, assignees, ...rest } = m;
+        const { _id, assignees, assignedTeams, ...rest } = m;
         const milestoneTasks = mappedTasks.filter((t) => t.milestoneId === _id);
 
         // If no explicit assignees on milestone, aggregate from tasks
@@ -134,10 +145,19 @@ export default function ProjectDetailPage() {
           finalAssignees = Array.from(uniqueUsers.values());
         }
 
+        // Map assigned teams
+        const mappedTeams = (assignedTeams || []).map((t: any) => ({
+          id: t._id || t.id,
+          _id: t._id || t.id,
+          name: t.name || "Team",
+        }));
+
         return {
           ...rest,
           id: _id,
+          status: rest.status || "open",
           assignees: finalAssignees,
+          assignedTeams: mappedTeams,
           tasks: milestoneTasks,
         };
       });
@@ -174,6 +194,7 @@ export default function ProjectDetailPage() {
         (m) => m.projectId === id && m.status === "scheduled" && m.scheduledAt
       );
       setMeetings(projectMeetings);
+      setAvailableTeams(teamsData);
     } catch (error) {
       console.error("Error loading project:", error);
     } finally {
@@ -188,11 +209,20 @@ export default function ProjectDetailPage() {
   // --- CRUD Handlers ---
   const handleTaskCreate = async (newTask: Partial<Task>) => {
     try {
+      const apiPayload = {
+        ...newTask,
+        assignees: newTask.assignees?.map((a: any) => a.id) || [],
+      };
+
       const created = await apiRequest<any>(`/projects/${id}/tasks`, {
         method: "POST",
-        data: newTask,
+        data: apiPayload,
       });
-      const task: Task = { ...created, id: created._id };
+      const task: Task = { 
+        ...created, 
+        id: created._id,
+        assignees: newTask.assignees || [],
+      };
       setTasks((prev) => [...prev, task]);
 
       // Refresh milestones to update task counts if assigned
@@ -257,7 +287,7 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const handleMilestoneCreate = async (newMilestone: Partial<Milestone>) => {
+  const handleMilestoneCreate = async (newMilestone: Partial<Milestone> & { taskIds?: string[] }) => {
     try {
       const created = await apiRequest<any>(`/projects/${id}/milestones`, {
         method: "POST",
@@ -267,6 +297,9 @@ export default function ProjectDetailPage() {
         ...prev,
         { ...created, id: created._id, tasks: [] },
       ]);
+      if (newMilestone.taskIds && newMilestone.taskIds.length > 0) {
+        fetchData();
+      }
     } catch (e) {
       console.error(e);
     }
@@ -283,6 +316,56 @@ export default function ProjectDetailPage() {
       });
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleMilestoneComplete = async (milestoneId: string) => {
+    const milestoneTasks = tasks.filter((t) => t.milestoneId === milestoneId && t.status !== "done");
+    if (milestoneTasks.length === 0) return;
+    
+    // Optimistic update
+    setTasks((prev) => prev.map((t) => t.milestoneId === milestoneId ? { ...t, status: "done" } : t));
+    
+    try {
+      await apiRequest(`/projects/milestones/${milestoneId}`, {
+        method: "PATCH",
+        data: { status: "completed" },
+      });
+      fetchData();
+    } catch (e) {
+      console.error("Failed to complete milestone tasks", e);
+    }
+  };
+
+  const handleGroupUnassigned = async () => {
+    const unassigned = tasks.filter((t) => !t.milestoneId);
+    if (!unassigned.length) return;
+    try {
+      const ms = await apiRequest<any>(`/projects/${id}/milestones`, {
+        method: "POST",
+        data: {
+          title: "New Grouped Milestone",
+          status: "pending",
+          startDate: new Date().toISOString(),
+          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          description: "Auto-grouped milestone from unassigned tasks."
+        }
+      });
+      const newMs: Milestone = { ...ms, id: ms._id };
+      setMilestones((prev) => [...prev, newMs]);
+      
+      setTasks((prev) => prev.map((t) => !t.milestoneId ? { ...t, milestoneId: newMs.id } : t));
+      
+      await Promise.all(
+        unassigned.map((t) =>
+          apiRequest(`/projects/${id}/tasks/${t.id}`, {
+            method: "PATCH",
+            data: { milestoneId: newMs.id },
+          })
+        )
+      );
+    } catch (e) {
+      console.error("Failed to group unassigned", e);
     }
   };
 
@@ -324,7 +407,7 @@ export default function ProjectDetailPage() {
   if (!project) return <div>Project not found</div>;
 
   const canEdit =
-    user?.workspaceRole === "ADMIN" || project.owner.id === user?.id || true;
+    user?.workspaceRole === "ADMIN" || project.owner.id === user?.id || user?.workspaceRole === "PROJECT_MANAGER";
 
   const handleActivityClick = (activity: Activity) => {
     if (activity.type === "task") {
@@ -354,9 +437,46 @@ export default function ProjectDetailPage() {
           <h1 className="text-2xl font-semibold text-neutral-900">
             {project.name}
           </h1>
-          <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors">
-            <MoreVertical className="w-5 h-5 text-neutral-500" />
-          </button>
+          <div className="flex items-center gap-1">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button 
+                  className="p-2 hover:bg-neutral-100 rounded-lg transition-colors text-neutral-500 hover:text-primary"
+                  title="View Team Members"
+                >
+                  <Users className="w-5 h-5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-64 p-3 shadow-lg border border-neutral-200" sideOffset={8}>
+                <h4 className="text-sm font-semibold mb-3 text-neutral-900 border-b border-neutral-100 pb-2">Project Team</h4>
+                <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+                  {project.members && project.members.length > 0 ? (
+                    project.members.map((m: any) => (
+                      <div key={m.id} className="flex items-center gap-3 p-1.5 hover:bg-neutral-50 rounded-md transition-colors">
+                        <div className="w-7 h-7 rounded-full bg-neutral-200 border border-neutral-300 flex items-center justify-center text-xs font-semibold overflow-hidden shrink-0 text-neutral-600">
+                          {m.avatar?.startsWith('http') ? (
+                            <img src={m.avatar} alt={m.name} className="object-cover w-full h-full" />
+                          ) : (
+                            m.avatar || m.name?.[0]?.toUpperCase() || 'U'
+                          )}
+                        </div>
+                        <div className="flex flex-col flex-1 min-w-0">
+                          <span className="text-sm font-medium text-neutral-700 truncate">{m.name}</span>
+                          {m.role && <span className="text-[10px] text-neutral-400 capitalize">{m.role.replace("_", " ")}</span>}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-sm text-neutral-500 text-center py-4">No members assigned</div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors">
+              <MoreVertical className="w-5 h-5 text-neutral-500" />
+            </button>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button
@@ -429,6 +549,7 @@ export default function ProjectDetailPage() {
             <TasksMilestonesTab
               tasks={tasks}
               milestones={milestones}
+              projectMembers={project.members}
               onTaskClick={(t) => {
                 setSelectedTask(t);
                 setIsTaskPanelOpen(true);
@@ -439,8 +560,11 @@ export default function ProjectDetailPage() {
               onMilestoneCreate={handleMilestoneCreate}
               onMilestoneUpdate={handleMilestoneUpdate}
               onMilestoneDelete={handleMilestoneDelete}
+              onMilestoneComplete={handleMilestoneComplete}
+              onGroupUnassigned={handleGroupUnassigned}
               canEdit={canEdit}
               canDelete={canEdit}
+              availableTeams={availableTeams}
             />
           )}
           {activeTab === "board" && (
@@ -477,6 +601,8 @@ export default function ProjectDetailPage() {
         onDelete={handleTaskDelete}
         canEdit={canEdit}
         canDelete={canEdit}
+        projectMembers={project.members}
+        boardColumns={project.boardColumns}
       />
     </div>
   );

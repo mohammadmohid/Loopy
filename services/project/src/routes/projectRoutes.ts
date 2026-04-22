@@ -11,6 +11,7 @@ import {
   getProjectById,
   generateScreenRecordingUploadUrl
 } from "../controllers/projectController";
+import { getDashboard } from "../controllers/dashboardController";
 import {
   signUpload,
   createArtifact,
@@ -39,6 +40,7 @@ const router = express.Router();
 
 router.post("/", protect, authorize("ADMIN", "PROJECT_MANAGER"), createProject);
 router.get("/", protect, getProjects);
+router.get("/dashboard", protect, getDashboard);
 router.post("/upload/screen-recording", protect, generateScreenRecordingUploadUrl);
 
 // Project Activity

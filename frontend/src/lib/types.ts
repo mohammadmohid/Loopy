@@ -26,6 +26,7 @@ export interface Task {
   type: TaskType;
   priority: Priority;
   assignees: User[];
+  assignedTeams?: { id: string; name: string; _id?: string }[];
   dueDate?: string;
   milestoneId?: string;
   projectId: string;
@@ -38,9 +39,11 @@ export interface Milestone {
   id: string;
   name: string;
   description?: string;
+  status?: "open" | "completed";
   startDate: string;
   dueDate: string;
   assignees: User[];
+  assignedTeams?: { id: string; name: string; _id?: string }[];
   team?: string;
   tasks: Task[];
   attachments?: string[];

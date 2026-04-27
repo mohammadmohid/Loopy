@@ -82,7 +82,7 @@ export function Header({
     // Listen for custom event to refetch when meetings are modified
     window.addEventListener("meetingsUpdated", fetchUpcomingCount);
     return () => window.removeEventListener("meetingsUpdated", fetchUpcomingCount);
-  }, [pathname]);
+  }, [pathname, user?.activeWorkspace, user?.workspaceId]);
 
   const getInitials = () => {
     if (!user?.profile) return "U";

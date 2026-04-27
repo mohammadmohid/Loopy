@@ -4,8 +4,10 @@ import { useState, useEffect } from "react";
 import { apiRequest } from "@/lib/api";
 import { MeetingHistoryList, type Meeting } from "../_components/meeting-history-list";
 import { Loader2 } from "lucide-react";
+import { useAuth } from "@/lib/auth-provider";
 
 export default function UpcomingMeetingsPage() {
+    const { user } = useAuth();
     const [upcomingMeetings, setUpcomingMeetings] = useState<Meeting[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -24,7 +26,7 @@ export default function UpcomingMeetingsPage() {
         };
 
         fetchUpcomingMeetings();
-    }, []);
+    }, [user?.activeWorkspace, user?.workspaceId]);
 
     return (
         <div className="flex flex-col h-[calc(100vh-80px)] -mt-6 -mx-6 bg-white overflow-hidden p-6 sm:p-8">

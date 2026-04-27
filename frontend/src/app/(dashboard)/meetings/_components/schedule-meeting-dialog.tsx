@@ -44,6 +44,7 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
   // Form State
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [title, setTitle] = useState("");
+  const [agenda, setAgenda] = useState("");
   const [date, setDate] = useState(""); // YYYY-MM-DD
   const [time, setTime] = useState(""); // HH:mm
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
@@ -90,6 +91,7 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
 
       // Reset form
       setTitle("");
+      setAgenda("");
       setDate("");
       setTime("");
       setSelectedUsers([]);
@@ -123,6 +125,7 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
             projectId: selectedProjectId,
             projectName: projectName,
             title: title,
+            agenda: agenda,
             scheduledAt, // Pass scheduled date to backend!
             participants: selectedUsers, // Selected participants from UI
             hostName: hostName,
@@ -199,6 +202,17 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
               className="w-full p-2.5 border border-neutral-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary/20"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+
+          {/* Meeting Agenda */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-neutral-700">Meeting Agenda</label>
+            <textarea
+              placeholder="Write a brief agenda for this meeting..."
+              className="w-full p-2.5 border border-neutral-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary/20 resize-none min-h-[84px]"
+              value={agenda}
+              onChange={(e) => setAgenda(e.target.value)}
             />
           </div>
 

@@ -16,6 +16,21 @@ const MY_IP_ADDRESS = "http://192.168.7.15:3000";
 
 const allowedOrigins = ["http://localhost:3000", "https://loopy-mu.vercel.app", MY_IP_ADDRESS];
 
+/**
+ * With `app.use("/api/auth", proxy)`, Express strips the mount path before the proxy runs,
+ * so `path` is often `/login` instead of `/api/auth/login`. Upstream services mount at
+ * `/api/...`, so we must prepend that prefix.
+ *
+ * If `path` already starts with the prefix (some HPM/Express combinations pass the full URL),
+ * return it unchanged to avoid doubling.
+ */
+function rewriteForUpstream(apiPrefix: string) {
+  return (path: string) => {
+    const p = path || "/";
+    if (p.startsWith(apiPrefix)) return p;
+    return apiPrefix + (p.startsWith("/") ? p : `/${p}`);
+  };
+}
 
 app.use(
   cors({
@@ -41,7 +56,7 @@ app.use(
   createProxyMiddleware({
     target: process.env.AUTH_SERVICE_URL,
     changeOrigin: true,
-    pathRewrite: { "^": "/api/auth" },
+    pathRewrite: rewriteForUpstream("/api/auth"),
   })
 );
 
@@ -51,7 +66,7 @@ app.use(
   createProxyMiddleware({
     target: process.env.PROJECT_SERVICE_URL,
     changeOrigin: true,
-    pathRewrite: { "^": "/api/projects" },
+    pathRewrite: rewriteForUpstream("/api/projects"),
   })
 );
 
@@ -61,25 +76,36 @@ app.use(
   createProxyMiddleware({
     target: process.env.MEETING_SERVICE_URL,
     changeOrigin: true,
-    pathRewrite: { "^": "/api/meetings" },
+    pathRewrite: rewriteForUpstream("/api/meetings"),
   })
 );
 
+// Transcription service mounts routes at /transcribe, /:meetingId, etc. — strip this prefix
+// so /api/artifacts/transcribe → /transcribe (same as other services' rewriteForUpstream pattern).
 app.use(
   "/api/artifacts",
   createProxyMiddleware({
     target: process.env.TRANSCRIPTION_SERVICE_URL || "http://localhost:4002",
     changeOrigin: true,
+    pathRewrite: (pathname: string) => {
+      const p = pathname || "/";
+      if (p.startsWith("/api/artifacts")) {
+        const rest = p.slice("/api/artifacts".length);
+        if (!rest || rest === "") return "/";
+        return rest.startsWith("/") ? rest : `/${rest}`;
+      }
+      return p;
+    },
   })
 );
 
-// Route: Chat Service
+// Route: Chat Service (default port matches services/chat)
 app.use(
   "/api/chat",
   createProxyMiddleware({
-    target: process.env.CHAT_SERVICE_URL || "http://localhost:5004",
+    target: process.env.CHAT_SERVICE_URL || "http://localhost:5005",
     changeOrigin: true,
-    pathRewrite: { "^": "/api/chat" },
+    pathRewrite: rewriteForUpstream("/api/chat"),
   })
 );
 

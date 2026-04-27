@@ -10,6 +10,6 @@ router.get("/", protect, getMyMeetings);
 router.get("/join/:roomName", protect, getJoinToken);
 router.patch("/end/:roomName", protect, endMeeting);
 router.post("/webhook", handleJaaSWebhook);
-router.get("/:id", getMeetingById);
+router.get("/:id", protect, getMeetingById);
 router.patch("/:id", protect, updateMeeting);
 export default router;

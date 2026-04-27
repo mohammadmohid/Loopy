@@ -27,6 +27,14 @@ interface User {
   lastName: string;
 }
 
+/** Current user snapshot from /auth/me — host is always a participant and never listed as togglable. */
+interface HostSelf {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
 interface HostMeetingDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -43,7 +51,9 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
   // Form State
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [title, setTitle] = useState("");
-  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]); // User IDs
+  const [agenda, setAgenda] = useState("");
+  const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]); // User IDs (always includes host)
+  const [hostSelf, setHostSelf] = useState<HostSelf | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
   // Dropdown State
@@ -67,31 +77,51 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
       const fetchData = async () => {
         try {
           setLoadingData(true);
-          // Fetch both lists in parallel
-          const [projectsRes, usersRes] = await Promise.all([
+          setHostSelf(null);
+          const [projectsRes, usersRes, meRes] = await Promise.all([
             apiRequest<Project[]>("/projects"),
             apiRequest<User[]>("/auth/users"),
+            apiRequest<{
+              user: {
+                id: string;
+                email: string;
+                profile: { firstName: string; lastName: string };
+              };
+            }>("/auth/me"),
           ]);
 
           setProjects(projectsRes);
           setUsers(usersRes);
 
           if (projectsRes.length > 0) setSelectedProjectId(projectsRes[0]._id);
+
+          const u = meRes.user;
+          const self: HostSelf = {
+            id: String(u.id),
+            email: u.email,
+            firstName: u.profile.firstName,
+            lastName: u.profile.lastName,
+          };
+          setHostSelf(self);
+          setSelectedParticipants([self.id]);
         } catch (error) {
           console.error("Failed to load data", error);
+          setHostSelf(null);
+          setSelectedParticipants([]);
         } finally {
           setLoadingData(false);
         }
       };
       fetchData();
 
-      // Reset form
+      // Reset form (participants re-filled after fetch with host only)
       setTitle("");
-      setSelectedParticipants([]);
+      setAgenda("");
     }
   }, [isOpen]);
 
   const toggleParticipant = (userId: string) => {
+    if (hostSelf && String(userId) === hostSelf.id) return;
     setSelectedParticipants((prev) =>
       prev.includes(userId)
         ? prev.filter((id) => id !== userId)
@@ -105,10 +135,12 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
     try {
       setIsCreating(true);
 
-      // 1. Get current user profile (for hostName)
-      // We fetch this so we can tell invited users exactly who is hosting
-      const userRes = await apiRequest<{ user: { profile: { firstName: string; lastName: string } } }>("/auth/me");
-      const hostName = `${userRes.user.profile.firstName} ${userRes.user.profile.lastName}`;
+      // Host display name (prefer dialog load; fallback if session changed)
+      let hostName = hostSelf ? `${hostSelf.firstName} ${hostSelf.lastName}` : "";
+      if (!hostName.trim()) {
+        const userRes = await apiRequest<{ user: { profile: { firstName: string; lastName: string } } }>("/auth/me");
+        hostName = `${userRes.user.profile.firstName} ${userRes.user.profile.lastName}`;
+      }
 
       const selectedProject = projects.find(p => p._id === selectedProjectId);
       const projectName = selectedProject ? selectedProject.name : "Unknown Project";
@@ -122,6 +154,7 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
             projectId: selectedProjectId,
             projectName: projectName,
             title: title,
+            agenda: agenda,
             // Send IDs directly (Backend now expects array of User IDs)
             participants: selectedParticipants,
             hostName: hostName,
@@ -188,12 +221,28 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
             />
           </div>
 
+          {/* Meeting Agenda */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-neutral-700">Meeting Agenda</label>
+            <textarea
+              placeholder="Write a brief agenda for this meeting..."
+              className="w-full p-2.5 border border-neutral-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary/20 resize-none min-h-[84px]"
+              value={agenda}
+              onChange={(e) => setAgenda(e.target.value)}
+            />
+          </div>
+
           {/* Participants Dropdown */}
           <div className="space-y-1.5 relative" ref={dropdownRef}>
             <label className="text-sm font-medium text-neutral-700 flex items-center justify-between">
               <span>Participants</span>
               <span className="text-xs font-normal text-neutral-400">
-                {selectedParticipants.length} selected
+                {hostSelf
+                  ? (() => {
+                      const others = selectedParticipants.filter((id) => id !== hostSelf.id).length;
+                      return others === 0 ? "You (host)" : `You + ${others}`;
+                    })()
+                  : `${selectedParticipants.length} selected`}
               </span>
             </label>
 
@@ -204,9 +253,11 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
               <div className="flex items-center gap-2 text-neutral-500 overflow-hidden">
                 <Users className="w-4 h-4 shrink-0" />
                 <span className="truncate">
-                  {selectedParticipants.length === 0
-                    ? "Select team members..."
-                    : `${selectedParticipants.length} user(s) selected`}
+                  {!hostSelf
+                    ? "Loading…"
+                    : selectedParticipants.filter((id) => id !== hostSelf.id).length === 0
+                      ? "You (host) — add invitees optional"
+                      : `You + ${selectedParticipants.filter((id) => id !== hostSelf.id).length} invitee(s)`}
                 </span>
               </div>
               <ChevronsUpDown className="w-4 h-4 text-neutral-400 shrink-0" />
@@ -220,7 +271,26 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
                   <CommandList>
                     <CommandEmpty>No users found.</CommandEmpty>
                     <CommandGroup className="max-h-48 overflow-y-auto">
-                      {users.map((user) => (
+                      {hostSelf && (
+                        <div
+                          className="flex items-center gap-2 px-2 py-2 text-sm border-b border-neutral-100 bg-neutral-50 cursor-default select-none"
+                          aria-readonly
+                        >
+                          <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary bg-primary text-primary-foreground">
+                            <Check className="h-3 w-3 text-white" />
+                          </div>
+                          <div className="flex min-w-0 flex-col">
+                            <span className="font-medium text-neutral-900">
+                              {hostSelf.firstName} {hostSelf.lastName}{" "}
+                              <span className="text-xs font-normal text-neutral-500">(you, host)</span>
+                            </span>
+                            <span className="truncate text-xs text-neutral-400">{hostSelf.email}</span>
+                          </div>
+                        </div>
+                      )}
+                      {users
+                        .filter((user) => !hostSelf || String(user.id) !== hostSelf.id)
+                        .map((user) => (
                         <CommandItem
                           key={user.id}
                           onSelect={() => toggleParticipant(user.id)}
@@ -255,7 +325,7 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
           </Button>
           <Button
             onClick={handleStartMeeting}
-            disabled={isCreating || !title || !selectedProjectId}
+            disabled={isCreating || !title || !selectedProjectId || !hostSelf}
             className="bg-primary text-white"
           >
             {isCreating ? (

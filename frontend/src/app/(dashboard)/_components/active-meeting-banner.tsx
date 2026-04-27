@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { apiRequest } from "@/lib/api";
+import { useAuth } from "@/lib/auth-provider";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
 
 export function ActiveMeetingBanner() {
+    const { user } = useAuth();
     const pathname = usePathname();
     const router = useRouter();
     const [activeMeeting, setActiveMeeting] = useState<any | null>(null);
@@ -34,7 +36,7 @@ export function ActiveMeetingBanner() {
         fetchActiveMeetings();
         const interval = setInterval(fetchActiveMeetings, 30000); // Check every 30s
         return () => clearInterval(interval);
-    }, [pathname]);
+    }, [pathname, user?.activeWorkspace, user?.workspaceId]);
 
     // Timer logic based on meeting creation time
     useEffect(() => {

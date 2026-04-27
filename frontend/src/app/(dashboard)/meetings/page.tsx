@@ -11,12 +11,14 @@ import { cn } from "@/lib/utils";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import dynamic from "next/dynamic";
+import { useAuth } from "@/lib/auth-provider";
 
 const UploadDialog = dynamic(() => import("@/components/upload-dialog").then(mod => mod.UploadDialog), { ssr: false });
 const HostMeetingDialog = dynamic(() => import("./_components/host-meeting-dialog").then(mod => mod.HostMeetingDialog), { ssr: false });
 const ScheduleMeetingDialog = dynamic(() => import("./_components/schedule-meeting-dialog").then(mod => mod.ScheduleMeetingDialog), { ssr: false });
 
 export default function MeetingsPage() {
+  const { user } = useAuth();
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isHostMeetingOpen, setIsHostMeetingOpen] = useState(false);
   const [isScheduleMeetingOpen, setIsScheduleMeetingOpen] = useState(false);
@@ -28,7 +30,12 @@ export default function MeetingsPage() {
 
   const { data: artifactsData, mutate: mutateArtifacts } = useSWR("/projects/artifacts", fetcher);
   const artifacts: Artifact[] = (artifactsData as Artifact[]) || [];
-  const { data: allMeetingsData, isLoading, mutate: mutateMeetings } = useSWR("/meetings", fetcher);
+  const activeWs = user?.activeWorkspace ?? user?.workspaceId;
+  const meetingsSwrKey = activeWs ? ([`/meetings`, activeWs] as const) : null;
+  const { data: allMeetingsData, isLoading, mutate: mutateMeetings } = useSWR(
+    meetingsSwrKey,
+    ([path]) => fetcher(path)
+  );
   const allMeetings: Meeting[] = (allMeetingsData as Meeting[]) || [];
 
   const refetchAll = () => {

@@ -4,7 +4,9 @@ dotenv.config();
 import { S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import axios from "axios";
+import mongoose from "mongoose";
 import Meeting from "../models/Meeting.js";
+import { triggerTranscriptionPipeline } from "../utils/triggerTranscription.js";
 
 // --- CONFIG & SAFETY CHECKS ---
 const hasKeys = process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY;
@@ -139,27 +141,34 @@ export const handleJaaSWebhook = async (req, res) => {
         meeting.recordingUrl = publicR2Url;
         await meeting.save();
         console.log("Database updated.");
-
-        const transcriptionServiceUrl = `${process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:4002'}/transcribe`;
-
-        console.log(`🚀 Triggering Transcription Service at: ${transcriptionServiceUrl}`);
-
-        // 2. Timeout of 1000ms ensures we don't hang.
-        axios.post(transcriptionServiceUrl, {
-          meetingId: meeting._id,
-          projectId: meeting.projectId,
-          recordingUrl: publicR2Url,
-          filename: fileName
-        }, { timeout: 2000 })
-          .then(() => console.log("✅ Transcription Service acknowledge receipt."))
-          .catch((err) => {
-            // We ignore timeouts because that means the request was sent!
-            if (err.code === 'ECONNABORTED') {
-              console.log("✅ Trigger sent (Background processing started)");
-            } else {
-              console.error("⚠️ Trigger Warning:", err.message);
-            }
-          });
+        triggerTranscriptionPipeline(
+          {
+            meetingId: meeting._id,
+            projectId: meeting.projectId,
+            recordingUrl: publicR2Url,
+            filename: fileName,
+          },
+          "jaas-webhook"
+        );
+      } else if (meetingId && mongoose.Types.ObjectId.isValid(meetingId)) {
+        // Recording landed in R2 but first DB lookup missed (e.g. room string edge case). Attach URL and run pipeline.
+        const recovered = await Meeting.findByIdAndUpdate(
+          meetingId,
+          { $set: { recordingUrl: publicR2Url } },
+          { new: true }
+        );
+        if (recovered) {
+          console.log(`📝 Recovered meeting ${meetingId} — saved recordingUrl + transcription trigger.`);
+          triggerTranscriptionPipeline(
+            {
+              meetingId: recovered._id,
+              projectId: recovered.projectId,
+              recordingUrl: publicR2Url,
+              filename: fileName,
+            },
+            "jaas-webhook-recovered"
+          );
+        }
       }
     }
   } catch (error) {

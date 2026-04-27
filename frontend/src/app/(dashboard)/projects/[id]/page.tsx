@@ -200,7 +200,7 @@ export default function ProjectDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [id]);
+  }, [id, user?.activeWorkspace, user?.workspaceId]);
 
   useEffect(() => {
     fetchData();

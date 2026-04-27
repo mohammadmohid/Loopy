@@ -11,9 +11,19 @@ const meetingSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    agenda: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     projectId: {
       type: String,
       required: true,
+    },
+    /** Active workspace when the meeting was created (JWT workspaceId); used to scope lists per workspace. */
+    workspaceId: {
+      type: String,
+      index: true,
     },
     projectName: {
       type: String,
@@ -44,6 +54,9 @@ const meetingSchema = new mongoose.Schema(
   },
   { timestamps: true } // Automatically adds createdAt and updatedAt
 );
+
+// Speeds up stale "active" cleanup in getMyMeetings
+meetingSchema.index({ status: 1, createdAt: 1 });
 
 const Meeting = mongoose.model("Meeting", meetingSchema);
 

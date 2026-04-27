@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "@/lib/auth-provider";
 import type { ChatMessage } from "@/lib/types";
@@ -23,6 +24,7 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
+    const pathname = usePathname();
     const socketRef = useRef<Socket | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
@@ -35,19 +37,28 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }, [currentChannelId]);
 
     useEffect(() => {
-        // Only connect if user is logged in
         if (!user) return;
 
-        const socket = io(
-            process.env.NEXT_PUBLIC_CHAT_URL || "http://localhost:5004",
-            {
-                withCredentials: true,
-                transports: ["websocket", "polling"],
-                reconnection: true,
-                reconnectionAttempts: 10,
-                reconnectionDelay: 1000,
-            }
-        );
+        // Avoid opening ws://localhost:5004 on every dashboard page (e.g. meetings / transcript regen)
+        // when the chat service is not running. Socket connects only on /chat unless eager mode is on.
+        const eager =
+            process.env.NEXT_PUBLIC_CHAT_SOCKET_EAGER === "true" ||
+            process.env.NEXT_PUBLIC_CHAT_SOCKET_EAGER === "1";
+        const onChatRoute = pathname?.startsWith("/chat") ?? false;
+        if (!eager && !onChatRoute) {
+            setIsConnected(false);
+            return;
+        }
+
+        const url = process.env.NEXT_PUBLIC_CHAT_URL || "http://localhost:5004";
+        const socket = io(url, {
+            withCredentials: true,
+            transports: ["websocket", "polling"],
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 2000,
+            reconnectionDelayMax: 10_000,
+        });
 
         socketRef.current = socket;
 
@@ -71,14 +82,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             // Here we could hypothetically fetch the real unread counts from the DB if they existed.
             // For now, since unread count is session-based, we start at 0 or whatever is built up from the socket.
         };
-        fetchUnreadCounts()
+        void fetchUnreadCounts();
 
         return () => {
             socket.removeAllListeners();
             socket.disconnect();
             socketRef.current = null;
+            setIsConnected(false);
         };
-    }, [user]);
+    }, [user, pathname]);
 
     const clearUnread = useCallback((channelId: string) => {
         setUnreadCounts((prev) => {

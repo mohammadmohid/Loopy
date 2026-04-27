@@ -28,6 +28,7 @@ import {
 interface Meeting {
   _id: string;
   title: string;
+  agenda?: string;
   projectId: string;
   roomName: string;
   status: "active" | "ended";
@@ -44,7 +45,6 @@ interface ArtifactDetail {
   transcriptJson?: any;
   summary?: string;
   overview?: string;
-  agenda?: string[];
   chatHistory?: { role: "user" | "model", content: string }[];
   createdAt: string;
   error?: string;
@@ -55,6 +55,39 @@ interface User {
   email: string;
   firstName: string;
   lastName: string;
+}
+
+/** Matches any backend “minutes failed” message so the Retry UI is shown. */
+function looksLikeSummaryFailure(summary?: string | null): boolean {
+  if (!summary || typeof summary !== "string") return false;
+  const t = summary.trim();
+  if (!t) return false;
+  const lower = t.toLowerCase();
+  if (lower.startsWith("summary generation failed")) return true;
+  if (t === "Transcript too short to summarize.") return true;
+  if (lower.includes("api key is not configured")) return true;
+  if (lower.includes("configure gemini_api_key") || lower.includes("configure openrouter")) return true;
+  if (t.includes("System Error: API Key missing")) return true;
+  return false;
+}
+
+/** Empty summary or backend placeholder when LLM produced nothing useful — still offer Retry. */
+function isPlaceholderOrMissingMinutes(summary?: string | null): boolean {
+  const t = (summary ?? "").trim();
+  if (!t) return true;
+  const low = t.toLowerCase();
+  if (low === "no minutes generated." || low === "no minutes generated") return true;
+  if (low.includes("summary generation returned empty")) return true;
+  return false;
+}
+
+function transcriptPlainText(artifact: ArtifactDetail | null): string {
+  if (!artifact?.transcriptJson) return "";
+  const j = artifact.transcriptJson as Record<string, unknown>;
+  if (j.deepgram && typeof j.text === "string") return j.text;
+  const words = j.words as { text?: string }[] | undefined;
+  if (Array.isArray(words)) return words.map((w) => w?.text || "").join("");
+  return "";
 }
 
 export default function MeetingDetailPage() {
@@ -118,7 +151,17 @@ export default function MeetingDetailPage() {
           }
         } catch (artifactErr) {
           console.warn("⚠️ Artifact fetch failed:", artifactErr);
-          setArtifact(null);
+          // Recording may exist while webhook/transcription is still starting — poll for artifact.
+          if (meetingData.recordingUrl) {
+            setArtifact({
+              _id: "pending",
+              transcriptionStatus: "pending",
+              filename: meetingData.title,
+              createdAt: new Date().toISOString(),
+            } as ArtifactDetail);
+          } else {
+            setArtifact(null);
+          }
         }
 
       } catch (e) {
@@ -139,6 +182,9 @@ export default function MeetingDetailPage() {
       artifact?.transcriptionStatus === "pending" ||
       isPollingSummary // 👈 Poll if we are explicitly waiting for summary
     ) {
+      const maxConsecutiveFailures = 25; // ~75s at 3s — avoids infinite spinner if gateway/route is wrong
+      let consecutiveFailures = 0;
+
       const interval = setInterval(async () => {
         try {
           const updated = await apiRequest<ArtifactDetail>(`/artifacts/${id}`, {
@@ -146,6 +192,7 @@ export default function MeetingDetailPage() {
             next: { revalidate: 0 }
           } as any);
 
+          consecutiveFailures = 0;
           setArtifact(updated);
 
           // Stop polling if Transcription is done (and we aren't waiting for summary)
@@ -160,7 +207,28 @@ export default function MeetingDetailPage() {
             clearInterval(interval);
           }
 
-        } catch (e) { console.error("Polling...", e); }
+        } catch (e) {
+          consecutiveFailures += 1;
+          console.error("Polling artifact failed:", e);
+          if (consecutiveFailures >= maxConsecutiveFailures) {
+            clearInterval(interval);
+            if (isPollingSummary) {
+              setIsPollingSummary(false);
+              setSummarizing(false);
+            } else {
+              setArtifact((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      transcriptionStatus: "FAILED",
+                      error:
+                        "Could not reach the transcription service after several attempts. Check that the API gateway proxies /api/artifacts to the transcription service and that it is running.",
+                    }
+                  : prev
+              );
+            }
+          }
+        }
       }, 3000); // Check every 3s
 
       return () => clearInterval(interval);
@@ -182,12 +250,26 @@ export default function MeetingDetailPage() {
         }
       });
 
-      setArtifact({
-        _id: "temp",
-        transcriptionStatus: "processing",
-        filename: meeting.title,
-        createdAt: new Date().toISOString()
-      } as ArtifactDetail);
+      // Prefer server artifact so polling uses real _id/status (gateway must rewrite /api/artifacts → transcription routes).
+      let fromServer: ArtifactDetail | null = null;
+      try {
+        fromServer = await apiRequest<ArtifactDetail>(`/artifacts/${meeting._id}`, {
+          cache: "no-store",
+          next: { revalidate: 0 },
+        } as any);
+      } catch {
+        /* row may appear on next poll */
+      }
+
+      setArtifact(
+        fromServer ||
+          ({
+            _id: "temp",
+            transcriptionStatus: "processing",
+            filename: meeting.title,
+            createdAt: new Date().toISOString(),
+          } as ArtifactDetail)
+      );
 
     } catch (err) {
       console.error("Failed to start generation", err);
@@ -352,9 +434,8 @@ export default function MeetingDetailPage() {
   }
 
   // Retroactive support + New DB format mapping
-  let parsedSummary: { overview: string, agenda: string[], minutes: string } = {
+  let parsedSummary: { overview: string, minutes: string } = {
     overview: artifact?.overview || "",
-    agenda: artifact?.agenda || [],
     minutes: artifact?.summary || ""
   };
 
@@ -363,17 +444,28 @@ export default function MeetingDetailPage() {
     try {
       const parsed = JSON.parse(artifact.summary);
       if (parsed.overview) parsedSummary.overview = parsed.overview;
-      if (parsed.agenda) parsedSummary.agenda = parsed.agenda;
       if (parsed.minutes) parsedSummary.minutes = parsed.minutes;
     } catch (e) {
       // It's just a raw text summary
     }
   }
 
-  const isSummaryError =
-    artifact?.summary === "Summary generation failed. Please try again." ||
-    artifact?.summary === "Transcript too short to summarize." ||
-    artifact?.summary === "System Error: API Key missing.";
+  const userAgendaItems =
+    (meeting?.agenda || "")
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^\s*[-*]\s*/, "").trim())
+      .filter(Boolean);
+
+  const canRetrySummary =
+    !!artifact &&
+    artifact.transcriptionStatus === "COMPLETED" &&
+    transcriptPlainText(artifact).trim().length >= 20;
+
+  /** Show Retry when transcript is ready but minutes are missing, failed, or a known placeholder. */
+  const showMinutesRetryUi =
+    canRetrySummary &&
+    (looksLikeSummaryFailure(artifact?.summary) ||
+      isPlaceholderOrMissingMinutes(artifact?.summary));
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-white -mx-6 -mt-6">
@@ -429,14 +521,31 @@ export default function MeetingDetailPage() {
 
           {/* Summary / Overview Section */}
           <div className="mt-4 mb-8 space-y-6 text-neutral-800">
-            <h2 className="text-base font-bold flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-primary" /> Summary
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-bold flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary" /> Summary
+              </h2>
+              {showMinutesRetryUi && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateSummaryOnly}
+                  disabled={summarizing}
+                  className="shrink-0"
+                >
+                  {summarizing ? "Retrying…" : "Retry summary"}
+                </Button>
+              )}
+            </div>
 
             <div className="space-y-4">
               <h3 className="font-semibold text-sm text-neutral-900">Overview</h3>
               <p className="text-sm leading-relaxed text-neutral-600">
-                {parsedSummary.overview || "No overview available for this meeting yet. Try generating AI Minutes."}
+                {showMinutesRetryUi
+                  ? "AI minutes are missing or need to be regenerated. Use Retry above or open the Minutes tab."
+                  : parsedSummary.overview ||
+                    "No overview available for this meeting yet. Try generating AI Minutes."}
               </p>
             </div>
 
@@ -444,14 +553,14 @@ export default function MeetingDetailPage() {
               <h3 className="font-semibold text-sm text-neutral-900 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-primary block"></span> Agenda
               </h3>
-              {parsedSummary.agenda && parsedSummary.agenda.length > 0 ? (
+              {userAgendaItems.length > 0 ? (
                 <ul className="list-disc pl-5 text-sm text-neutral-600 leading-relaxed space-y-1">
-                  {parsedSummary.agenda.map((item: string, i: number) => (
+                  {userAgendaItems.map((item, i) => (
                     <li key={i}>{item}</li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-neutral-500 italic">No agenda detected.</p>
+                <p className="text-sm text-neutral-500 italic">No agenda provided by host.</p>
               )}
             </div>
           </div>
@@ -485,10 +594,23 @@ export default function MeetingDetailPage() {
               <div className="h-full">
                 {!artifact || artifact.transcriptionStatus !== "COMPLETED" ? (
                   <div className="h-full flex flex-col items-center justify-center bg-neutral-50 rounded-xl border border-dashed border-neutral-200 text-neutral-400 p-8 text-center space-y-4">
-                    {artifact?.transcriptionStatus === "processing" ? (
+                    {artifact?.transcriptionStatus === "processing" ||
+                    artifact?.transcriptionStatus === "pending" ? (
                       <>
                         <Loader2 className="w-8 h-8 animate-spin text-primary" />
                         <p className="text-neutral-900 font-medium">Generating Transcript...</p>
+                      </>
+                    ) : artifact?.transcriptionStatus === "FAILED" ? (
+                      <>
+                        <FileWarning className="h-10 w-10 mb-2 text-amber-500" />
+                        <p className="font-semibold text-neutral-700">Transcript generation failed</p>
+                        {artifact.error ? (
+                          <p className="text-xs text-neutral-500 max-w-sm">{artifact.error}</p>
+                        ) : null}
+                        <Button onClick={handleGenerateSummary} disabled={generating} size="sm" className="mt-2">
+                          {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
+                          Try again
+                        </Button>
                       </>
                     ) : (
                       <>
@@ -541,12 +663,32 @@ export default function MeetingDetailPage() {
 
             {activeTab === "Minutes" && (
               <div className="p-4">
-                {isSummaryError ? (
+                {showMinutesRetryUi ? (
                   <div className="flex flex-col items-center justify-center py-12 px-4 bg-neutral-50 rounded-xl border border-dashed border-neutral-300 gap-4 text-center">
-                    <FileWarning className="w-8 h-8 text-red-500" />
-                    <p className="text-neutral-900 font-medium">Minutes Generation Failed</p>
-                    <Button onClick={handleGenerateSummaryOnly} disabled={summarizing} variant="outline" size="sm">
-                      {summarizing ? "Retrying..." : "Retry"}
+                    <FileWarning className="w-8 h-8 text-amber-600" />
+                    <p className="text-neutral-900 font-medium">
+                      {looksLikeSummaryFailure(artifact?.summary)
+                        ? "Minutes generation failed"
+                        : "No minutes yet"}
+                    </p>
+                    <p className="text-xs text-neutral-600 max-w-sm">
+                      {looksLikeSummaryFailure(artifact?.summary)
+                        ? "You can run the summary step again using your configured AI providers."
+                        : "Transcription is ready but minutes were not produced (or were a placeholder). Retry below."}
+                    </p>
+                    {!canRetrySummary && (
+                      <p className="text-xs text-neutral-500 max-w-sm">
+                        Transcription must finish with a usable transcript before you can generate minutes.
+                      </p>
+                    )}
+                    <Button
+                      onClick={handleGenerateSummaryOnly}
+                      disabled={summarizing || !canRetrySummary}
+                      variant="outline"
+                      size="sm"
+                      title={!canRetrySummary ? "Transcript required before retrying summary." : undefined}
+                    >
+                      {summarizing ? "Retrying..." : "Generate / Retry minutes"}
                     </Button>
                   </div>
                 ) : (
@@ -563,13 +705,21 @@ export default function MeetingDetailPage() {
                           <div id="printable-minutes">
                             <Markdown
                               components={{
-                                h1: ({ node, ...props }) => <h1 className="text-2xl font-bold text-[#cc2233] mb-6 pb-4 border-b border-neutral-100" {...props} />,
-                                h2: ({ node, ...props }) => <h2 className="text-lg font-bold text-neutral-800 mt-8 mb-4" {...props} />,
-                                h3: ({ node, ...props }) => <h3 className="text-md font-bold text-neutral-800 mt-6 mb-3" {...props} />,
-                                p: ({ node, ...props }) => <p className="text-sm text-neutral-600 mb-4 leading-relaxed" {...props} />,
-                                ul: ({ node, ...props }) => <ul className="list-disc list-outside ml-5 space-y-2 mb-6 text-sm text-neutral-600" {...props} />,
+                                h1: ({ node, ...props }) => <h1 className="text-2xl font-bold text-[#b22222] mb-4 pb-3 border-b border-neutral-200" {...props} />,
+                                h2: ({ node, ...props }) => <h2 className="text-lg font-bold text-neutral-900 mt-8 mb-3" {...props} />,
+                                h3: ({ node, ...props }) => <h3 className="text-md font-bold text-neutral-900 mt-6 mb-3" {...props} />,
+                                p: ({ node, ...props }) => <p className="text-sm text-neutral-700 mb-3 leading-relaxed" {...props} />,
+                                ul: ({ node, ...props }) => <ul className="list-disc list-outside ml-5 space-y-2 mb-6 text-sm text-neutral-700" {...props} />,
+                                ol: ({ node, ...props }) => <ol className="list-decimal list-outside ml-5 space-y-2 mb-6 text-sm text-neutral-700" {...props} />,
                                 li: ({ node, ...props }) => <li className="pl-1" {...props} />,
                                 strong: ({ node, ...props }) => <strong className="font-semibold text-neutral-900" {...props} />,
+                                table: ({ node, ...props }) => <table className="w-full text-sm text-neutral-600 mb-4 border-collapse" {...props} />,
+                                thead: ({ node, ...props }) => <thead {...props} />,
+                                tbody: ({ node, ...props }) => <tbody {...props} />,
+                                tr: ({ node, ...props }) => <tr {...props} />,
+                                th: ({ node, ...props }) => <th className="text-left font-normal py-1 pr-4 align-top" {...props} />,
+                                td: ({ node, ...props }) => <td className="text-right font-semibold text-neutral-800 py-1 pl-4 align-top" {...props} />,
+                                hr: ({ node, ...props }) => <hr className="my-4 border-neutral-200" {...props} />,
                               }}
                             >
                               {parsedSummary.minutes}

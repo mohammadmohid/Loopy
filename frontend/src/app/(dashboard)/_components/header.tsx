@@ -19,6 +19,7 @@ import { apiRequest } from "@/lib/api";
 import { useScreenRecorder } from "@/hooks/useScreenRecorder";
 import { ScreenRecordModal } from "@/components/modals/ScreenRecordModal";
 import { ScreenRecordingPreviewModal } from "@/components/modals/ScreenRecordingPreviewModal";
+import { NotificationSidebar } from "./notification-sidebar";
 
 export function Header({
   onMenuClick,
@@ -31,6 +32,8 @@ export function Header({
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [upcomingCount, setUpcomingCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const pathname = usePathname();
 
   // Screen Recording State
@@ -82,6 +85,23 @@ export function Header({
     // Listen for custom event to refetch when meetings are modified
     window.addEventListener("meetingsUpdated", fetchUpcomingCount);
     return () => window.removeEventListener("meetingsUpdated", fetchUpcomingCount);
+  }, [pathname, user?.activeWorkspace, user?.workspaceId]);
+
+  useEffect(() => {
+    const fetchNotificationCount = async () => {
+      try {
+        const data = await apiRequest<{ notifications: unknown[] }>(
+          "/projects/notifications/inbox"
+        );
+        setNotificationCount(data.notifications?.length ?? 0);
+      } catch {
+        setNotificationCount(0);
+      }
+    };
+    fetchNotificationCount();
+    window.addEventListener("meetingsUpdated", fetchNotificationCount);
+    return () =>
+      window.removeEventListener("meetingsUpdated", fetchNotificationCount);
   }, [pathname, user?.activeWorkspace, user?.workspaceId]);
 
   const getInitials = () => {
@@ -179,10 +199,31 @@ export function Header({
           )}
         </div>
 
-        <button className="p-2 hover:bg-neutral-100 rounded-full text-neutral-500 relative transition-colors">
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+        <button
+          type="button"
+          onClick={() => setNotificationsOpen(true)}
+          className="relative rounded-full p-2 text-neutral-500 transition-colors hover:bg-neutral-100"
+          aria-label="Open notifications"
+        >
+          <Bell className="h-5 w-5" />
+          {notificationCount > 0 && (
+            <span className="absolute top-2 right-2 h-2 w-2 rounded-full border-2 border-white bg-red-500" />
+          )}
         </button>
+
+        <NotificationSidebar
+          open={notificationsOpen}
+          onOpenChange={(open) => {
+            setNotificationsOpen(open);
+            if (!open) {
+              apiRequest<{ notifications: unknown[] }>(
+                "/projects/notifications/inbox"
+              )
+                .then((d) => setNotificationCount(d.notifications?.length ?? 0))
+                .catch(() => setNotificationCount(0));
+            }
+          }}
+        />
 
         {/* User Menu */}
         <div className="relative" ref={menuRef}>

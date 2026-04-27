@@ -35,12 +35,14 @@ import {
   updateTeam,
   deleteTeam,
 } from "../controllers/teamController";
+import { getMyNotifications } from "../controllers/notificationController";
 
 const router = express.Router();
 
 router.post("/", protect, authorize("ADMIN", "PROJECT_MANAGER"), createProject);
 router.get("/", protect, getProjects);
 router.get("/dashboard", protect, getDashboard);
+router.get("/notifications/inbox", protect, getMyNotifications);
 router.post("/upload/screen-recording", protect, generateScreenRecordingUploadUrl);
 
 // Project Activity

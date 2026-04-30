@@ -1,6 +1,8 @@
-import { Response } from "express";
+import express from "express";
 import mongoose from "mongoose";
 import { AuthRequest, getR2Client } from "@loopy/shared";
+
+type Response = express.Response;
 import Project from "../models/Project";
 import Task from "../models/Task";
 import Milestone from "../models/Milestone";

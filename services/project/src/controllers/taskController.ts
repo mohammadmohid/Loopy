@@ -1,5 +1,7 @@
-import { Response } from "express";
+import express from "express";
 import { AuthRequest } from "@loopy/shared";
+
+type Response = express.Response;
 import Task from "../models/Task";
 import Milestone from "../models/Milestone";
 

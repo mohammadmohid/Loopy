@@ -27,7 +27,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^9.0.0",
     "nodemailer": "^8.0.1",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "@loopy/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.7",

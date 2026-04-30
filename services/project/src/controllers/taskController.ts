@@ -1,8 +1,31 @@
 import { Response } from "express";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "@loopy/shared";
 import Task from "../models/Task";
 import Milestone from "../models/Milestone";
-import "../models/User";
+
+// Allowed fields for task creation/updates to prevent mass assignment
+const ALLOWED_TASK_FIELDS = [
+  "title", "description", "status", "type", "priority",
+  "assignees", "assignedTeams", "dueDate", "milestoneId",
+] as const;
+
+const ALLOWED_MILESTONE_FIELDS = [
+  "name", "description", "status", "dueDate",
+  "assignees", "assignedTeams", "taskIds",
+] as const;
+
+/**
+ * Picks only allowed fields from a request body.
+ */
+const pickFields = (body: any, allowed: readonly string[]): Record<string, any> => {
+  const result: Record<string, any> = {};
+  for (const key of allowed) {
+    if (body[key] !== undefined) {
+      result[key] = body[key];
+    }
+  }
+  return result;
+};
 
 // --- TASKS ---
 
@@ -23,16 +46,19 @@ export const getProjectTasks = async (req: AuthRequest, res: Response) => {
 
 export const createTask = async (req: AuthRequest, res: Response) => {
   try {
-    let { assignees } = req.body;
+    const safeFields = pickFields(req.body, ALLOWED_TASK_FIELDS);
 
     // Enforce at least one assignee (default to creator)
-    if (!assignees || !Array.isArray(assignees) || assignees.length === 0) {
-      assignees = [req.user!.id];
+    if (!safeFields.assignees || !Array.isArray(safeFields.assignees) || safeFields.assignees.length === 0) {
+      safeFields.assignees = [req.user!.id];
+    }
+
+    if (!safeFields.title || !safeFields.title.trim()) {
+      return res.status(400).json({ message: "Task title is required" });
     }
 
     const task = await Task.create({
-      ...req.body,
-      assignees,
+      ...safeFields,
       projectId: req.params.projectId,
     });
 
@@ -48,7 +74,13 @@ export const createTask = async (req: AuthRequest, res: Response) => {
 
 export const updateTask = async (req: AuthRequest, res: Response) => {
   try {
-    const task = await Task.findByIdAndUpdate(req.params.id, req.body, {
+    const safeUpdates = pickFields(req.body, ALLOWED_TASK_FIELDS);
+
+    if (Object.keys(safeUpdates).length === 0) {
+      return res.status(400).json({ message: "No valid fields provided for update" });
+    }
+
+    const task = await Task.findByIdAndUpdate(req.params.id, safeUpdates, {
       new: true,
     }).populate([
       { path: "assignees", select: "profile.firstName profile.lastName profile.avatarKey email" },
@@ -91,16 +123,21 @@ export const getProjectMilestones = async (req: AuthRequest, res: Response) => {
 
 export const createMilestone = async (req: AuthRequest, res: Response) => {
   try {
-    // Default assignees logic can be handled here or frontend.
-    // If not provided, we can leave it empty or default to creator.
+    const safeFields = pickFields(req.body, ALLOWED_MILESTONE_FIELDS);
+    const { taskIds, ...milestoneData } = safeFields;
+
+    if (!milestoneData.name || !milestoneData.name.trim()) {
+      return res.status(400).json({ message: "Milestone name is required" });
+    }
+
     const milestone = await Milestone.create({
-      ...req.body,
+      ...milestoneData,
       projectId: req.params.projectId,
     });
 
-    if (req.body.taskIds && Array.isArray(req.body.taskIds) && req.body.taskIds.length > 0) {
+    if (taskIds && Array.isArray(taskIds) && taskIds.length > 0) {
       await Task.updateMany(
-        { _id: { $in: req.body.taskIds } },
+        { _id: { $in: taskIds } },
         { milestoneId: milestone._id }
       );
     }
@@ -113,9 +150,15 @@ export const createMilestone = async (req: AuthRequest, res: Response) => {
 
 export const updateMilestone = async (req: AuthRequest, res: Response) => {
   try {
+    const safeUpdates = pickFields(req.body, ALLOWED_MILESTONE_FIELDS);
+
+    if (Object.keys(safeUpdates).length === 0) {
+      return res.status(400).json({ message: "No valid fields provided for update" });
+    }
+
     const milestone = await Milestone.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      safeUpdates,
       { new: true }
     ).populate([
       { path: "assignees", select: "profile.firstName profile.lastName profile.avatarKey email" },
@@ -124,7 +167,7 @@ export const updateMilestone = async (req: AuthRequest, res: Response) => {
 
     if (!milestone) return res.status(404).json({ message: "Milestone not found" });
 
-    if (req.body.status === "completed") {
+    if (safeUpdates.status === "completed") {
       await Task.updateMany(
         { milestoneId: req.params.id, status: { $ne: "done" } },
         { status: "done" }
@@ -138,7 +181,12 @@ export const updateMilestone = async (req: AuthRequest, res: Response) => {
 
 export const deleteMilestone = async (req: AuthRequest, res: Response) => {
   try {
-    await Milestone.findByIdAndDelete(req.params.id);
+    const milestone = await Milestone.findByIdAndDelete(req.params.id);
+
+    if (!milestone) {
+      return res.status(404).json({ message: "Milestone not found" });
+    }
+
     await Task.updateMany(
       { milestoneId: req.params.id },
       { $unset: { milestoneId: "" } }

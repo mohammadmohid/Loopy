@@ -1,16 +1,11 @@
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
-import User from "../models/User.js";
+import { User, Workspace, getR2Client } from "@loopy/shared";
 import OTPToken from "../models/OTPToken.js";
-import Workspace from "../models/Workspace.js";
 import { sendOTPEmail, sendInviteEmail } from "../config/mailer.js";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getR2Client } from "../config/r2.js";
 import axios from "axios";
-
-// ── Helpers ──────────────────────────────────────────────
+import { notifyWorkspaceMemberSync } from "../events/authEvents.js";
 
 function generateOTP(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -43,19 +38,9 @@ const sendTokenCookie = (token: string, res: Response) => {
 
 const getAvatarUrl = async (key?: string) => {
     if (!key) return null;
-    try {
-        const r2 = getR2Client();
-        const command = new GetObjectCommand({
-            Bucket: process.env.R2_BUCKET_NAME,
-            Key: key,
-        });
-        return await getSignedUrl(r2, command, { expiresIn: 86400 });
-    } catch {
-        return null;
-    }
+    const baseUrl = process.env.GATEWAY_URL;
+    return `${baseUrl}/api/auth/avatars/${key}`;
 };
-
-// ── OTP Verification ─────────────────────────────────────
 
 // @desc    Verify OTP code and auto-login
 // @route   POST /api/auth/verify-otp
@@ -67,9 +52,9 @@ export const verifyOTP = async (req: Request, res: Response) => {
             return res.status(400).json({ message: "User ID and code are required" });
         }
 
-        const otpRecord = await OTPToken.findOne({ userId, code });
+        const otpRecord = await OTPToken.findOne({ userId });
 
-        if (!otpRecord) {
+        if (!otpRecord || !(await (otpRecord as any).matchCode(code))) {
             return res.status(400).json({ message: "Invalid or expired code" });
         }
 
@@ -200,16 +185,11 @@ export const createWorkspace = async (
         );
         sendTokenCookie(token, res);
 
-        // Webhook: create global "Everyone" channel in chat service
-        try {
-            const chatServiceUrl = process.env.CHAT_SERVICE_URL || "http://localhost:5004";
-            await axios.post(`${chatServiceUrl}/api/chat/channels/member-webhook`, {
-                workspaceId: workspace._id.toString(),
-                userId: userId,
-            });
-        } catch (err: any) {
-            console.error("Failed to webhook chat service for global channel:", err.message);
-        }
+        // Notify chat service to create global "Everyone" channel (awaited for Vercel)
+        await notifyWorkspaceMemberSync({
+            workspaceId: workspace._id.toString(),
+            userId: userId,
+        });
 
         res.status(201).json({
             success: true,
@@ -253,7 +233,7 @@ export const inviteMember = async (
 
         // Only ADMIN can invite
         const callerMember = workspace.members.find(
-            (m) => m.user.toString() === userId
+            (m: any) => m.user.toString() === userId
         );
         if (!callerMember || callerMember.role !== "ADMIN") {
             return res.status(403).json({ message: "Only admins can invite members" });
@@ -263,7 +243,7 @@ export const inviteMember = async (
         const existingUser = await User.findOne({ email: email.toLowerCase() });
         if (existingUser) {
             const alreadyMember = workspace.members.some(
-                (m) => m.user.toString() === existingUser._id.toString()
+                (m: any) => m.user.toString() === existingUser._id.toString()
             );
             if (alreadyMember) {
                 return res.status(400).json({ message: "User is already a member" });
@@ -272,7 +252,7 @@ export const inviteMember = async (
 
         // Check for existing unused invite
         const existingInvite = workspace.inviteTokens.find(
-            (t) => t.email === email.toLowerCase() && !t.used && t.expiresAt > new Date()
+            (t: any) => t.email === email.toLowerCase() && !t.used && t.expiresAt > new Date()
         );
         if (existingInvite) {
             return res.status(400).json({ message: "An active invite already exists for this email" });
@@ -324,7 +304,7 @@ export const acceptInvite = async (req: Request, res: Response) => {
         }
 
         const invite = workspace.inviteTokens.find(
-            (t) => t.token === token && !t.used
+            (t: any) => t.token === token && !t.used
         );
         if (!invite || invite.expiresAt < new Date()) {
             return res.status(400).json({ message: "Invite has expired" });
@@ -366,7 +346,7 @@ export const joinWorkspace = async (
         }
 
         const invite = workspace.inviteTokens.find(
-            (t) => t.token === token && !t.used
+            (t: any) => t.token === token && !t.used
         );
         if (!invite || invite.expiresAt < new Date()) {
             return res.status(400).json({ message: "Invite has expired" });
@@ -374,7 +354,7 @@ export const joinWorkspace = async (
 
         // Check not already member
         const alreadyMember = workspace.members.some(
-            (m) => m.user.toString() === userId
+            (m: any) => m.user.toString() === userId
         );
         if (alreadyMember) {
             invite.used = true;
@@ -406,16 +386,11 @@ export const joinWorkspace = async (
         );
         sendTokenCookie(jwtToken, res);
 
-        // Webhook: add new member to global chat channel
-        try {
-            const chatServiceUrl = process.env.CHAT_SERVICE_URL || "http://localhost:5004";
-            await axios.post(`${chatServiceUrl}/api/chat/channels/member-webhook`, {
-                workspaceId: workspace._id.toString(),
-                userId: userId,
-            });
-        } catch (err: any) {
-            console.error("Failed to webhook chat service for member sync:", err.message);
-        }
+        // Notify chat service to sync new member to global channel (awaited for Vercel)
+        await notifyWorkspaceMemberSync({
+            workspaceId: workspace._id.toString(),
+            userId: userId,
+        });
 
         res.json({
             success: true,
@@ -467,8 +442,8 @@ export const getMembers = async (
 
         // Pending invites
         const pendingInvites = workspace.inviteTokens
-            .filter((t) => !t.used && t.expiresAt > new Date())
-            .map((t) => ({
+            .filter((t: any) => !t.used && t.expiresAt > new Date())
+            .map((t: any) => ({
                 email: t.email,
                 role: t.role,
                 expiresAt: t.expiresAt,
@@ -526,8 +501,8 @@ export const getWorkspaceMembersById = async (
 
         // Pending invites
         const pendingInvites = workspace.inviteTokens
-            .filter((t) => !t.used && t.expiresAt > new Date())
-            .map((t) => ({
+            .filter((t: any) => !t.used && t.expiresAt > new Date())
+            .map((t: any) => ({
                 email: t.email,
                 role: t.role,
                 expiresAt: t.expiresAt,
@@ -562,7 +537,7 @@ export const updateMemberRole = async (
 
         // Verify caller is ADMIN
         const callerMember = workspace.members.find(
-            (m) => m.user.toString() === req.user.id
+            (m: any) => m.user.toString() === req.user.id
         );
         if (!callerMember || callerMember.role !== "ADMIN") {
             return res.status(403).json({ message: "Only admins can change roles" });
@@ -574,7 +549,7 @@ export const updateMemberRole = async (
         }
 
         const targetMember = workspace.members.find(
-            (m) => m.user.toString() === memberId
+            (m: any) => m.user.toString() === memberId
         );
         if (!targetMember) {
             return res.status(404).json({ message: "Member not found" });
@@ -607,7 +582,7 @@ export const removeMember = async (
 
         // Verify caller is ADMIN
         const callerMember = workspace.members.find(
-            (m) => m.user.toString() === req.user.id
+            (m: any) => m.user.toString() === req.user.id
         );
         if (!callerMember || callerMember.role !== "ADMIN") {
             return res.status(403).json({ message: "Only admins can remove members" });
@@ -619,7 +594,7 @@ export const removeMember = async (
         }
 
         const memberIndex = workspace.members.findIndex(
-            (m) => m.user.toString() === memberId
+            (m: any) => m.user.toString() === memberId
         );
         if (memberIndex === -1) {
             return res.status(404).json({ message: "Member not found" });
@@ -631,7 +606,7 @@ export const removeMember = async (
         // Also clean up the user's workspaces array
         const user = await User.findById(memberId);
         if (user) {
-            user.workspaces = user.workspaces.filter((id) => id.toString() !== workspaceId);
+            user.workspaces = user.workspaces.filter((id: any) => id.toString() !== workspaceId);
             if (user.activeWorkspace?.toString() === workspaceId) {
                 user.activeWorkspace = undefined;
             }
@@ -666,14 +641,14 @@ export const resendInvite = async (
 
         // Verify caller is ADMIN
         const callerMember = workspace.members.find(
-            (m) => m.user.toString() === req.user.id
+            (m: any) => m.user.toString() === req.user.id
         );
         if (!callerMember || callerMember.role !== "ADMIN") {
             return res.status(403).json({ message: "Only admins can resend invites" });
         }
 
         const invite = workspace.inviteTokens.find(
-            (t) => t.email === email.toLowerCase() && !t.used
+            (t: any) => t.email === email.toLowerCase() && !t.used
         );
 
         if (!invite) {
@@ -713,7 +688,7 @@ export const switchWorkspace = async (
 
         // Verify user is a member
         const isMember = user.workspaces.some(
-            (w) => w.toString() === workspaceId
+            (w: any) => w.toString() === workspaceId
         );
         if (!isMember) {
             return res.status(403).json({ message: "Not a member of this workspace" });
@@ -779,7 +754,7 @@ export const getMyWorkspaces = async (
             })),
             pendingInvites: pendingInvites.map(ws => {
                 const invite = ws.inviteTokens.find(
-                    t => t.email === user.email && !t.used && t.expiresAt > new Date()
+                    (t: any) => t.email === user.email && !t.used && t.expiresAt > new Date()
                 );
                 return {
                     workspaceId: ws._id,
@@ -919,7 +894,7 @@ export const deleteWorkspace = async (
 
         if (user) {
             // Remove the deleted workspace from their workspaces array
-            user.workspaces = user.workspaces.filter(id => id.toString() !== workspaceId);
+            user.workspaces = user.workspaces.filter((id: any) => id.toString() !== workspaceId);
 
             if (user.activeWorkspace?.toString() === workspaceId) {
                 user.activeWorkspace = undefined;

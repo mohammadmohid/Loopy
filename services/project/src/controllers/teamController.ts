@@ -1,7 +1,11 @@
 import { Response } from "express";
 import mongoose from "mongoose";
-import axios from "axios";
-import { AuthRequest } from "../middleware/auth.js";
+import { AuthRequest } from "@loopy/shared";
+import {
+  notifyTeamCreated,
+  notifyTeamUpdated,
+  notifyTeamDeleted,
+} from "../events/projectEvents.js";
 import Team from "../models/Team.js";
 
 // @desc    Create a new team
@@ -16,31 +20,26 @@ export const createTeam = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "No active workspace" });
     }
 
-    if (!name) {
+    if (!name || !name.trim()) {
       return res.status(400).json({ message: "Team name is required" });
     }
 
     // Default leader to the creator
     const team = await Team.create({
-      name,
+      name: name.trim(),
       workspaceId: new mongoose.Types.ObjectId(workspaceId),
       leader: new mongoose.Types.ObjectId(req.user!.id),
       members: members || [req.user!.id],
     });
 
-    // Webhook: create team channel in chat service
-    try {
-      const chatServiceUrl = process.env.CHAT_SERVICE_URL || "http://localhost:5004";
-      await axios.post(`${chatServiceUrl}/api/chat/channels/team-webhook`, {
-        teamId: team._id.toString(),
-        teamName: team.name,
-        members: (team.members || []).map((m: any) => m.toString()),
-        leaderId: req.user!.id,
-        workspaceId: workspaceId,
-      });
-    } catch (err: any) {
-      console.error("Failed to create team chat channel:", err.message);
-    }
+    // Notify chat service (awaited for Vercel)
+    await notifyTeamCreated({
+      teamId: team._id.toString(),
+      teamName: team.name,
+      members: (team.members || []).map((m: any) => m.toString()),
+      leaderId: req.user!.id,
+      workspaceId: workspaceId,
+    });
 
     res.status(201).json(team);
   } catch (error: any) {
@@ -80,6 +79,10 @@ export const updateTeam = async (req: AuthRequest, res: Response) => {
     const { name, members, leader } = req.body;
     const teamId = req.params.id;
 
+    if (!mongoose.Types.ObjectId.isValid(teamId)) {
+      return res.status(400).json({ message: "Invalid team ID format" });
+    }
+
     const team = await Team.findById(teamId);
 
     if (!team) {
@@ -96,9 +99,14 @@ export const updateTeam = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ message: "Not authorized to update team" });
     }
 
-    if (name) team.name = name;
+    if (name) team.name = name.trim();
     if (members) team.members = members;
-    if (leader) team.leader = leader;
+    if (leader) {
+      if (!mongoose.Types.ObjectId.isValid(leader)) {
+        return res.status(400).json({ message: "Invalid leader ID format" });
+      }
+      team.leader = leader;
+    }
 
     await team.save();
 
@@ -107,19 +115,14 @@ export const updateTeam = async (req: AuthRequest, res: Response) => {
       "profile.firstName profile.lastName profile.avatarKey email"
     );
 
-    // Webhook: sync team channel members in chat service
-    try {
-      const chatServiceUrl = process.env.CHAT_SERVICE_URL || "http://localhost:5004";
-      await axios.post(`${chatServiceUrl}/api/chat/channels/team-webhook`, {
-        teamId: team._id.toString(),
-        teamName: team.name,
-        members: (team.members || []).map((m: any) => m.toString()),
-        leaderId: (team.leader || "").toString(),
-        workspaceId: (team.workspaceId || "").toString(),
-      });
-    } catch (err: any) {
-      console.error("Failed to sync team chat channel:", err.message);
-    }
+    // Notify chat service of team update (awaited for Vercel)
+    await notifyTeamUpdated({
+      teamId: team._id.toString(),
+      teamName: team.name,
+      members: (team.members || []).map((m: any) => m.toString()),
+      leaderId: (team.leader || "").toString(),
+      workspaceId: (team.workspaceId || "").toString(),
+    });
 
     res.status(200).json(updatedTeam);
   } catch (error: any) {
@@ -134,6 +137,10 @@ export const updateTeam = async (req: AuthRequest, res: Response) => {
 export const deleteTeam = async (req: AuthRequest, res: Response) => {
   try {
     const teamId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(teamId)) {
+      return res.status(400).json({ message: "Invalid team ID format" });
+    }
 
     const team = await Team.findById(teamId);
 
@@ -153,13 +160,8 @@ export const deleteTeam = async (req: AuthRequest, res: Response) => {
 
     await team.deleteOne();
 
-    // Webhook: delete team channel in chat service
-    try {
-      const chatServiceUrl = process.env.CHAT_SERVICE_URL || "http://localhost:5004";
-      await axios.delete(`${chatServiceUrl}/api/chat/channels/team-webhook/${teamId}`);
-    } catch (err: any) {
-      console.error("Failed to delete team chat channel:", err.message);
-    }
+    // Notify chat service (awaited for Vercel)
+    await notifyTeamDeleted(teamId);
 
     res.status(200).json({ message: "Team deleted successfully" });
   } catch (error: any) {

@@ -1,14 +1,14 @@
 import { Response } from "express";
 import mongoose from "mongoose";
-import { AuthRequest } from "../middleware/auth";
-import Channel from "../models/Channel";
+import { AuthRequest, Channel } from "@loopy/shared";
 import Message from "../models/Message";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getR2Client } from "../config/r2";
 import { v4 as uuidv4 } from "uuid";
-import "../models/User";
+import "@loopy/shared";
 import { createAvatarResolver } from "../utils/avatar";
+import { pusher } from "../config/pusher";
 
 // @desc    Get paginated messages for a channel
 // @route   GET /api/chat/channels/:channelId/messages
@@ -25,7 +25,7 @@ export const getMessages = async (req: AuthRequest, res: Response) => {
         }
 
         const isMember = channel.type === "global" || channel.members.some(
-            (m) => m.user.toString() === req.user!.id
+            (m: any) => m.user.toString() === req.user!.id
         );
         if (!isMember) {
             return res
@@ -103,7 +103,7 @@ export const getThreadMessages = async (req: AuthRequest, res: Response) => {
         }
 
         const isMember = channel.type === "global" || channel.members.some(
-            (m) => m.user.toString() === req.user!.id
+            (m: any) => m.user.toString() === req.user!.id
         );
         if (!isMember) {
             return res.status(403).json({ message: "Not a member of this channel" });
@@ -152,7 +152,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
         }
 
         const isMember = channel.type === "global" || channel.members.some(
-            (m) => m.user.toString() === req.user!.id
+            (m: any) => m.user.toString() === req.user!.id
         );
         if (!isMember) {
             return res
@@ -217,26 +217,33 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
 
         const messageObj = message.toObject();
 
-        // Emit via Socket.IO
-        const io = req.app.get("io");
-        if (io) {
-            if (threadParentId) {
-                io.to(`channel:${channelId}`).emit("thread-reply", {
-                    parentId: threadParentId,
-                    message: messageObj,
-                });
-            } else {
-                io.to(`channel:${channelId}`).emit("new-message", messageObj);
-            }
-
-            // Notify mentioned users specifically
-            parsedMentions.forEach((userId: string) => {
-                io.to(`user:${userId}`).emit("mention", {
-                    channelId,
-                    message: messageObj,
-                });
+        // Emit via Pusher
+        if (threadParentId) {
+            pusher.trigger(`channel-${channelId}`, "thread-reply", {
+                parentId: threadParentId,
+                message: messageObj,
             });
+        } else {
+            pusher.trigger(`channel-${channelId}`, "new-message", messageObj);
         }
+
+        if (!threadParentId && channel.members) {
+            const userChannels = channel.members.map((m: any) => `user-${m.user.toString()}`);
+            for (let i = 0; i < userChannels.length; i += 100) {
+                pusher.trigger(userChannels.slice(i, i + 100), "message-notification", {
+                    channelId,
+                    message: messageObj
+                });
+            }
+        }
+
+        // Notify mentioned users specifically
+        parsedMentions.forEach((userId: string) => {
+            pusher.trigger(`user-${userId}`, "mention", {
+                channelId,
+                message: messageObj,
+            });
+        });
 
         res.status(201).json(messageObj);
     } catch (error: any) {
@@ -280,10 +287,7 @@ export const editMessage = async (req: AuthRequest, res: Response) => {
 
         const messageObj = message.toObject();
 
-        const io = req.app.get("io");
-        if (io) {
-            io.to(`channel:${message.channelId}`).emit("message-edited", messageObj);
-        }
+        pusher.trigger(`channel-${message.channelId}`, "message-edited", messageObj);
 
         res.json(messageObj);
     } catch (error: any) {
@@ -307,7 +311,7 @@ export const deleteMessage = async (req: AuthRequest, res: Response) => {
         if (!isSender) {
             const channel = await Channel.findById(message.channelId);
             const isChannelAdmin = channel?.members.some(
-                (m) => m.user.toString() === req.user!.id && m.role === "admin"
+                (m: any) => m.user.toString() === req.user!.id && m.role === "admin"
             );
             if (!isChannelAdmin) {
                 return res
@@ -322,13 +326,10 @@ export const deleteMessage = async (req: AuthRequest, res: Response) => {
         message.reactions = [];
         await message.save();
 
-        const io = req.app.get("io");
-        if (io) {
-            io.to(`channel:${message.channelId}`).emit("message-deleted", {
-                messageId: message._id,
-                channelId: message.channelId,
-            });
-        }
+        pusher.trigger(`channel-${message.channelId}`, "message-deleted", {
+            messageId: message._id,
+            channelId: message.channelId,
+        });
 
         res.json({ message: "Message deleted" });
     } catch (error: any) {
@@ -380,13 +381,10 @@ export const toggleReaction = async (req: AuthRequest, res: Response) => {
 
         await message.save();
 
-        const io = req.app.get("io");
-        if (io) {
-            io.to(`channel:${message.channelId}`).emit("reaction-updated", {
-                messageId: message._id,
-                reactions: message.reactions,
-            });
-        }
+        pusher.trigger(`channel-${message.channelId}`, "reaction-updated", {
+            messageId: message._id,
+            reactions: message.reactions,
+        });
 
         res.json({ reactions: message.reactions });
     } catch (error: any) {

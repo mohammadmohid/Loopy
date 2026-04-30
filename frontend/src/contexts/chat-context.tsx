@@ -1,12 +1,12 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
-import { io, Socket } from "socket.io-client";
+import Pusher from "pusher-js";
 import { useAuth } from "@/lib/auth-provider";
 import type { ChatMessage } from "@/lib/types";
 
 interface ChatContextValue {
-    socket: Socket | null;
+    pusher: Pusher | null;
     isConnected: boolean;
     unreadCounts: Record<string, number>;
     totalUnread: number;
@@ -23,11 +23,11 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
     const { user } = useAuth();
-    const socketRef = useRef<Socket | null>(null);
+    const pusherRef = useRef<Pusher | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
     const [currentChannelId, setCurrentChannelId] = useState<string | null>(null);
-    
+
     // We use refs to avoid binding stale state in socket listeners
     const selectedChannelIdRef = useRef<string | null>(null);
     useEffect(() => {
@@ -35,48 +35,41 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }, [currentChannelId]);
 
     useEffect(() => {
-        // Only connect if user is logged in
         if (!user) return;
 
-        const socket = io(
-            process.env.NEXT_PUBLIC_CHAT_URL || "http://localhost:5004",
+        const pusher = new Pusher(
+            process.env.NEXT_PUBLIC_PUSHER_KEY || "dummy_key",
             {
-                withCredentials: true,
-                transports: ["websocket", "polling"],
-                reconnection: true,
-                reconnectionAttempts: 10,
-                reconnectionDelay: 1000,
+                cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER || "us2",
             }
         );
 
-        socketRef.current = socket;
+        pusherRef.current = pusher;
 
-        socket.on("connect", () => setIsConnected(true));
-        socket.on("disconnect", () => setIsConnected(false));
-        socket.on("connect_error", () => setIsConnected(false));
+        pusher.connection.bind("connected", () => setIsConnected(true));
+        pusher.connection.bind("disconnected", () => setIsConnected(false));
+        pusher.connection.bind("error", () => setIsConnected(false));
 
-        // Global listeners for unread count
-        socket.on("new-message", (message: ChatMessage) => {
+        const userChannel = pusher.subscribe(`user-${user.id}`);
+        
+        const handleMessageNotification = (data: { channelId: string; message: ChatMessage }) => {
             const currentSelectedId = selectedChannelIdRef.current;
-            if (message.channelId !== currentSelectedId) {
+            // Only increment badge if we are NOT actively viewing the channel
+            if (data.channelId !== currentSelectedId) {
                 setUnreadCounts((prev) => ({
                     ...prev,
-                    [message.channelId]: (prev[message.channelId] || 0) + 1,
+                    [data.channelId]: (prev[data.channelId] || 0) + 1,
                 }));
             }
-        });
-
-        // Add channel unread count fetching on connect
-        const fetchUnreadCounts = async () => {
-            // Here we could hypothetically fetch the real unread counts from the DB if they existed.
-            // For now, since unread count is session-based, we start at 0 or whatever is built up from the socket.
         };
-        fetchUnreadCounts()
+
+        userChannel.bind("message-notification", handleMessageNotification);
 
         return () => {
-            socket.removeAllListeners();
-            socket.disconnect();
-            socketRef.current = null;
+            userChannel.unbind("message-notification", handleMessageNotification);
+            pusher.unsubscribe(`user-${user.id}`);
+            pusher.disconnect();
+            pusherRef.current = null;
         };
     }, [user]);
 
@@ -90,19 +83,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const joinChannel = useCallback((channelId: string) => {
-        socketRef.current?.emit("join-channel", channelId);
+        // Handled by use-chat-socket
     }, []);
 
     const leaveChannel = useCallback((channelId: string) => {
-        socketRef.current?.emit("leave-channel", channelId);
+        // Handled by use-chat-socket
     }, []);
 
     const emitTyping = useCallback((channelId: string) => {
-        socketRef.current?.emit("typing", channelId);
+        // Handled by REST API or custom Pusher events if needed
     }, []);
 
     const emitStopTyping = useCallback((channelId: string) => {
-        socketRef.current?.emit("stop-typing", channelId);
+        // Handled by REST API or custom Pusher events if needed
     }, []);
 
     const totalUnread = Object.values(unreadCounts).reduce((acc, count) => acc + count, 0);
@@ -110,7 +103,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     return (
         <ChatContext.Provider
             value={{
-                socket: socketRef.current,
+                pusher: pusherRef.current,
                 isConnected,
                 unreadCounts,
                 totalUnread,

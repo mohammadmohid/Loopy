@@ -19,7 +19,8 @@
     "form-data": "^4.0.5",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.3.2",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "@loopy/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.7",

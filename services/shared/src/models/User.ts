@@ -1,0 +1,54 @@
+import mongoose, { Document, Schema } from "mongoose";
+import bcrypt from "bcryptjs";
+import "./Workspace.js"; // Ensure Workspace model is registered
+
+export interface IUser extends Document {
+  email: string;
+  password?: string;
+  isEmailConfirmed: boolean;
+  workspaces: mongoose.Types.ObjectId[];
+  activeWorkspace?: mongoose.Types.ObjectId;
+  profile: {
+    firstName: string;
+    lastName: string;
+    avatarKey?: string;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+  matchPassword(enteredPassword: string): Promise<boolean>;
+}
+
+const userSchema = new Schema<IUser>(
+  {
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      maxlength: 254,
+    },
+    password: { type: String, minLength: 8, required: true, select: false },
+    isEmailConfirmed: { type: Boolean, default: false },
+    workspaces: [{ type: Schema.Types.ObjectId, ref: "Workspace" }],
+    activeWorkspace: { type: Schema.Types.ObjectId, ref: "Workspace" },
+    profile: {
+      firstName: { type: String, required: true, trim: true, maxlength: 100 },
+      lastName: { type: String, required: true, trim: true, maxlength: 100 },
+      avatarKey: { type: String },
+    },
+  },
+  { timestamps: true }
+);
+
+userSchema.pre("save", async function () {
+  if (!this.isModified("password")) return;
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password as string, salt);
+});
+
+userSchema.methods.matchPassword = async function (enteredPassword: string) {
+  return await bcrypt.compare(enteredPassword, this.password as string);
+};
+
+export default mongoose.models.User || mongoose.model<IUser>("User", userSchema);

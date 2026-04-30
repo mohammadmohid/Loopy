@@ -17,9 +17,9 @@ export interface IProject extends Document {
 
 const ProjectSchema: Schema = new Schema(
   {
-    name: { type: String, required: true },
-    description: { type: String },
-    workspaceId: { type: Schema.Types.ObjectId, required: true, index: true },
+    name: { type: String, required: true, trim: true, maxlength: 100 },
+    description: { type: String, maxlength: 2000 },
+    workspaceId: { type: Schema.Types.ObjectId, required: true },
     owner: { type: Schema.Types.ObjectId, ref: "User", required: true },
 
     // Direct Member Assignment with Roles
@@ -64,5 +64,13 @@ const ProjectSchema: Schema = new Schema(
   },
   { timestamps: true }
 );
+
+// ── Indexes ────────────────────────────────────────────────────────────
+
+// Dashboard queries: list projects by workspace, filter by status
+ProjectSchema.index({ workspaceId: 1, status: 1 });
+
+// Access control: check if user is a member
+ProjectSchema.index({ "members.user": 1 });
 
 export default mongoose.model<IProject>("Project", ProjectSchema);

@@ -3,14 +3,11 @@ import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import cookieParser from "cookie-parser";
-import { createServer } from "http";
 import chatRoutes from "./routes/chatRoutes.js";
-import { initializeSocket } from "./socket.js";
 
 dotenv.config();
 
 const app = express();
-const httpServer = createServer(app);
 
 const allowedOrigins = [
     "http://localhost:3000",
@@ -34,10 +31,6 @@ app.use(
 app.use(cookieParser());
 app.use(express.json());
 
-// Initialize Socket.IO and store on app for controllers to access
-const io = initializeSocket(httpServer);
-app.set("io", io);
-
 // Connect to MongoDB
 mongoose
     .connect(process.env.MONGO_URI as string)
@@ -52,7 +45,11 @@ app.get("/health", (req, res) => {
     res.json({ status: "ok", service: "chat" });
 });
 
-const PORT = process.env.PORT || 5005;
-httpServer.listen(PORT, () =>
-    console.log(`Chat Service running on port ${PORT}`)
-);
+if (process.env.NODE_ENV !== "production") {
+    const PORT = process.env.PORT || 5005;
+    app.listen(PORT, () =>
+        console.log(`Chat Service running on port ${PORT}`)
+    );
+}
+
+export default app;

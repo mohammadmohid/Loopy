@@ -1,16 +1,18 @@
 import { Response } from "express";
 import mongoose from "mongoose";
-import axios from "axios";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest, getR2Client } from "@loopy/shared";
 import Project from "../models/Project";
 import Task from "../models/Task";
 import Milestone from "../models/Milestone";
 import Team from "../models/Team";
-import "../models/User";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getR2Client } from "../config/r2.js";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { notifyProjectCreated, notifyProjectDeleted } from "../events/projectEvents.js";
+import {
+  resolveOwnerAvatar,
+  resolveMemberAvatars,
+  buildScopedProjectQuery,
+} from "../helpers.js";
 
 interface Member {
   user: mongoose.Types.ObjectId;
@@ -36,23 +38,30 @@ export const createProject = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "No active workspace" });
     }
 
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: "Project name is required" });
+    }
+
     const initialMembers: Member[] = [];
 
-    // 1. Add Owner as MANAGER
+    // Add Owner as MANAGER
     initialMembers.push({
       user: new mongoose.Types.ObjectId(req.user!.id),
       role: "MANAGER",
     });
 
-    // 2. Add Team Lead as MANAGER (if provided and different from owner)
+    // Add Team Lead as MANAGER (if provided and different from owner)
     if (teamLead && teamLead !== req.user!.id) {
+      if (!mongoose.Types.ObjectId.isValid(teamLead)) {
+        return res.status(400).json({ message: "Invalid team lead ID" });
+      }
       initialMembers.push({
         user: new mongoose.Types.ObjectId(teamLead),
         role: "MANAGER",
       });
     }
 
-    // 3. Add other members
+    // Add other members
     if (members && Array.isArray(members)) {
       members.forEach((m: any) => {
         const rawId = typeof m === "string" ? m : m.user;
@@ -70,7 +79,7 @@ export const createProject = async (req: AuthRequest, res: Response) => {
     }
 
     const project = await Project.create({
-      name,
+      name: name.trim(),
       description,
       startDate,
       endDate,
@@ -80,19 +89,14 @@ export const createProject = async (req: AuthRequest, res: Response) => {
       assignedTeams: assignedTeams || [],
     });
 
-    // Auto-create a chat channel for this project (non-blocking)
-    try {
-      const chatServiceUrl = process.env.CHAT_SERVICE_URL || "http://localhost:5004";
-      await axios.post(`${chatServiceUrl}/api/chat/channels/project-webhook`, {
-        projectId: project._id,
-        projectName: project.name,
-        members: initialMembers.map((m) => m.user.toString()),
-        createdBy: req.user!.id,
-        workspaceId: workspaceId,
-      });
-    } catch (chatErr: any) {
-      console.error("Failed to create project chat channel:", chatErr.message);
-    }
+    // Notify chat service (awaited for Vercel compatibility)
+    await notifyProjectCreated({
+      projectId: project._id.toString(),
+      projectName: project.name,
+      members: initialMembers.map((m) => m.user.toString()),
+      createdBy: req.user!.id,
+      workspaceId: workspaceId,
+    });
 
     res.status(201).json(project);
   } catch (error: any) {
@@ -105,30 +109,14 @@ export const createProject = async (req: AuthRequest, res: Response) => {
 // @access  Private
 export const getProjects = async (req: AuthRequest, res: Response) => {
   try {
-    const { id, role } = req.user!;
     const workspaceId = req.user!.workspaceId;
 
     if (!workspaceId) {
       return res.status(200).json([]);
     }
 
-    // Always filter by workspace — even ADMINs only see their workspace's projects
-    let query: any = { workspaceId };
-
-    // Non-ADMIN and non-PM users only see projects they're part of
-    if (role !== "ADMIN" && role !== "PROJECT_MANAGER") {
-      const userTeams = await Team.find({ members: id }).select("_id");
-      const userTeamIds = userTeams.map((t) => t._id);
-
-      query = {
-        workspaceId,
-        $or: [
-          { owner: id },
-          { "members.user": id },
-          { "assignedTeams.team": { $in: userTeamIds } },
-        ],
-      };
-    }
+    const query = await buildScopedProjectQuery(req.user);
+    if (!query) return res.status(200).json([]);
 
     const projects = await Project.find(query)
       .populate("owner", "profile.firstName profile.lastName profile.avatarKey")
@@ -136,53 +124,13 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
       .sort({ updatedAt: -1 })
       .lean();
 
-    // Sign Avatars
-    const projectsWithAvatars = await Promise.all(
-      projects.map(async (project: any) => {
-        if (
-          project.owner &&
-          project.owner.profile &&
-          project.owner.profile.avatarKey
-        ) {
-          try {
-            const r2 = getR2Client();
-            const command = new GetObjectCommand({
-              Bucket: process.env.R2_BUCKET_NAME,
-              Key: project.owner.profile.avatarKey,
-            });
-            const avatarUrl = await getSignedUrl(r2, command, {
-              expiresIn: 86400,
-            });
-            project.owner.profile.avatarUrl = avatarUrl;
-          } catch (error) {
-            console.error("Failed to sign avatar for project", project._id);
-          }
-        }
+    // Resolve avatars
+    for (const project of projects as any[]) {
+      resolveOwnerAvatar(project.owner);
+      resolveMemberAvatars(project.members);
+    }
 
-        // Sign member avatars
-        if (project.members && Array.isArray(project.members)) {
-          const r2 = getR2Client();
-          for (const m of project.members) {
-            const userObj = m.user as any;
-            if (userObj?.profile?.avatarKey) {
-              try {
-                const command = new GetObjectCommand({
-                  Bucket: process.env.R2_BUCKET_NAME,
-                  Key: userObj.profile.avatarKey,
-                });
-                userObj.profile.avatarUrl = await getSignedUrl(r2, command, { expiresIn: 86400 });
-              } catch (error) {
-                // ignore
-              }
-            }
-          }
-        }
-
-        return project;
-      })
-    );
-
-    res.status(200).json(projectsWithAvatars);
+    res.status(200).json(projects);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }
@@ -196,7 +144,7 @@ export const getProjectById = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(404).json({ message: "Project not found" });
+      return res.status(400).json({ message: "Invalid project ID format" });
     }
 
     const userId = req.user!.id;
@@ -222,8 +170,8 @@ export const getProjectById = async (req: AuthRequest, res: Response) => {
       let isTeamMember = false;
       if (!isDirectMember && !isOwner && project.assignedTeams?.length > 0) {
         const teamIds = project.assignedTeams.map((at: any) => at.team);
-        const userTeams = await Team.find({ _id: { $in: teamIds }, members: userId }).select("_id");
-        if (userTeams.length > 0) isTeamMember = true;
+        const userTeams = await Team.find({ _id: { $in: teamIds }, members: userId }).select("_id").lean();
+        isTeamMember = userTeams.length > 0;
       }
 
       if (!isDirectMember && !isOwner && !isTeamMember) {
@@ -231,39 +179,9 @@ export const getProjectById = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Sign owner avatar if exists
-    const ownerObj = project.owner as any;
-    if (ownerObj?.profile?.avatarKey) {
-      try {
-        const r2 = getR2Client();
-        const command = new GetObjectCommand({
-          Bucket: process.env.R2_BUCKET_NAME,
-          Key: ownerObj.profile.avatarKey,
-        });
-        ownerObj.profile.avatarUrl = await getSignedUrl(r2, command, { expiresIn: 86400 });
-      } catch (error) {
-        // ignore
-      }
-    }
-
-    // Sign member avatars if exists
-    if (project.members && Array.isArray(project.members)) {
-      const r2 = getR2Client();
-      for (const m of project.members) {
-        const userObj = m.user as any;
-        if (userObj?.profile?.avatarKey) {
-          try {
-            const command = new GetObjectCommand({
-              Bucket: process.env.R2_BUCKET_NAME,
-              Key: userObj.profile.avatarKey,
-            });
-            userObj.profile.avatarUrl = await getSignedUrl(r2, command, { expiresIn: 86400 });
-          } catch (error) {
-            // ignore
-          }
-        }
-      }
-    }
+    // Resolve avatars
+    resolveOwnerAvatar((project as any).owner);
+    resolveMemberAvatars((project as any).members);
 
     res.status(200).json(project);
   } catch (error: any) {
@@ -293,12 +211,8 @@ export const deleteProject = async (req: AuthRequest, res: Response) => {
 
     await project.deleteOne();
 
-    try {
-      const chatServiceUrl = process.env.CHAT_SERVICE_URL;
-      await axios.delete(`${chatServiceUrl}/api/chat/channels/project-webhook/${project._id}`);
-    } catch (chatErr: any) {
-      console.error("Failed to delete project chat channel:", chatErr.message);
-    }
+    // Notify chat service (awaited for Vercel)
+    await notifyProjectDeleted(project._id.toString());
 
     res.status(200).json({ message: "Project removed" });
   } catch (error: any) {
@@ -336,6 +250,9 @@ export const updateProject = async (req: AuthRequest, res: Response) => {
 
       // Owner Transfer (ADMIN only)
       if (req.body.newOwner && isAdmin) {
+        if (!mongoose.Types.ObjectId.isValid(req.body.newOwner)) {
+          return res.status(400).json({ message: "Invalid new owner ID" });
+        }
         project.owner = new mongoose.Types.ObjectId(req.body.newOwner);
         // Ensure new owner is in members as MANAGER
         const ownerInMembers = project.members.find(
@@ -396,6 +313,11 @@ export const updateProject = async (req: AuthRequest, res: Response) => {
 export const assignTeamLead = async (req: AuthRequest, res: Response) => {
   try {
     const { teamLeadId } = req.body;
+
+    if (!teamLeadId || !mongoose.Types.ObjectId.isValid(teamLeadId)) {
+      return res.status(400).json({ message: "Valid team lead ID is required" });
+    }
+
     const project = await Project.findById(req.params.id);
 
     if (!project) {
@@ -509,17 +431,10 @@ export const deleteWorkspaceProjects = async (req: AuthRequest, res: Response) =
       // Delete all projects
       await Project.deleteMany({ workspaceId });
 
-      // Attempt to delete associated chat channels for all these projects
-      try {
-        const chatServiceUrl = process.env.CHAT_SERVICE_URL || "http://localhost:5004";
-        await Promise.all(
-          projects.map(p =>
-            axios.delete(`${chatServiceUrl}/api/chat/channels/project-webhook/${p._id}`).catch(() => { })
-          )
-        );
-      } catch (err) {
-        console.error("Failed to delete project chat channels for workspace:", workspaceId);
-      }
+      // Notify chat service for each deleted project (awaited for Vercel)
+      await Promise.allSettled(
+        projects.map((p) => notifyProjectDeleted(p._id.toString()))
+      );
     }
 
     res.status(200).json({ message: `Deleted ${projects.length} projects for workspace ${workspaceId}` });
@@ -552,17 +467,16 @@ export const generateScreenRecordingUploadUrl = async (req: AuthRequest, res: Re
     const command = new PutObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: key,
-      ContentType: contentType, // e.g. "video/webm"
+      ContentType: contentType,
     });
 
     // Generate link valid for 30 minutes
     const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 1800 });
 
-    // The final URL where the file can be publicly accessed (if bucket is public or via a CDN)
+    // The final URL where the file can be publicly accessed
     const publicUrl = `${process.env.R2_PUBLIC_DOMAIN}/${key}`;
 
-    // Requirement: Output success log in terminal
-    console.log(`✅ Started secure cloud upload for file: ${sanitizedFilename} by user: ${userId}`);
+    console.log(`Started secure cloud upload for file: ${sanitizedFilename} by user: ${userId}`);
 
     res.status(200).json({ presignedUrl, publicUrl, key });
   } catch (error: any) {

@@ -9,8 +9,8 @@ dotenv.config();
 
 const app = express();
 
-const allowedOrigins = ["http://localhost:3000", "https://loopy-mu.vercel.app"];
-
+// Get allowed origins from env
+const allowedOrigins = (process.env.ALLOWED_ORIGINS as string) && (process.env.ALLOWED_ORIGINS as string).split(",");
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -35,4 +35,8 @@ mongoose
 app.use("/api/projects", projectRoutes);
 
 const PORT = process.env.PORT || 5002;
-app.listen(PORT, () => console.log(`Project Service running on port ${PORT}`));
+if (process.env.NODE_ENV !== "production") {
+  app.listen(PORT, () => console.log(`Project Service running on port ${PORT}`));
+}
+
+export default app;

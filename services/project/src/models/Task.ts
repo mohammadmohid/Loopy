@@ -17,8 +17,8 @@ export interface ITask extends Document {
 
 const TaskSchema: Schema = new Schema(
   {
-    title: { type: String, required: true },
-    description: { type: String },
+    title: { type: String, required: true, trim: true, maxlength: 200 },
+    description: { type: String, maxlength: 5000 },
     status: {
       type: String,
       default: "todo",
@@ -41,5 +41,13 @@ const TaskSchema: Schema = new Schema(
   },
   { timestamps: true }
 );
+
+// ── Indexes ────────────────────────────────────────────────────────────
+
+// Board column queries: tasks by project filtered by status
+TaskSchema.index({ projectId: 1, status: 1 });
+
+// Milestone detail: tasks belonging to a milestone
+TaskSchema.index({ milestoneId: 1 }, { sparse: true });
 
 export default mongoose.model<ITask>("Task", TaskSchema);

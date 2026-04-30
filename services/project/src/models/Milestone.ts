@@ -15,8 +15,8 @@ export interface IMilestone extends Document {
 
 const MilestoneSchema: Schema = new Schema(
   {
-    name: { type: String, required: true },
-    description: { type: String },
+    name: { type: String, required: true, trim: true, maxlength: 100 },
+    description: { type: String, maxlength: 2000 },
     status: { type: String, enum: ["open", "completed"], default: "open" },
     startDate: { type: Date, required: true },
     dueDate: { type: Date, required: true },
@@ -26,5 +26,10 @@ const MilestoneSchema: Schema = new Schema(
   },
   { timestamps: true }
 );
+
+// ── Indexes ────────────────────────────────────────────────────────────
+
+// Primary query: milestones by project
+MilestoneSchema.index({ projectId: 1 });
 
 export default mongoose.model<IMilestone>("Milestone", MilestoneSchema);

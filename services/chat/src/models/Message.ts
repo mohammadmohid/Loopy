@@ -35,14 +35,13 @@ const MessageSchema: Schema = new Schema(
             type: Schema.Types.ObjectId,
             ref: "Channel",
             required: true,
-            index: true,
         },
         sender: {
             type: Schema.Types.ObjectId,
             ref: "User",
             required: true,
         },
-        content: { type: String, default: "" },
+        content: { type: String, default: "", maxlength: 10000 },
         type: {
             type: String,
             enum: ["text", "system", "file"],
@@ -51,7 +50,6 @@ const MessageSchema: Schema = new Schema(
         threadParentId: {
             type: Schema.Types.ObjectId,
             ref: "Message",
-            index: true,
         },
         replyCount: { type: Number, default: 0 },
         mentions: [{ type: Schema.Types.ObjectId, ref: "User" }],
@@ -63,10 +61,10 @@ const MessageSchema: Schema = new Schema(
         ],
         attachments: [
             {
-                name: { type: String, required: true },
-                key: { type: String, required: true },
+                name: { type: String, required: true, maxlength: 255 },
+                key: { type: String, required: true, select: false },
                 size: { type: Number, required: true },
-                mimeType: { type: String, required: true },
+                mimeType: { type: String, required: true, maxlength: 127 },
             },
         ],
         isEdited: { type: Boolean, default: false },
@@ -77,6 +75,9 @@ const MessageSchema: Schema = new Schema(
 
 // Compound index for paginated channel messages
 MessageSchema.index({ channelId: 1, createdAt: -1 });
+
+// Compound index for paginated thread replies
+MessageSchema.index({ threadParentId: 1, createdAt: -1 }, { sparse: true });
 
 // Text index for search
 MessageSchema.index({ content: "text" });

@@ -43,9 +43,6 @@ interface ArtifactDetail {
   transcriptionStatus: "pending" | "processing" | "COMPLETED" | "FAILED";
   transcriptJson?: any;
   summary?: string;
-  overview?: string;
-  agenda?: string[];
-  chatHistory?: { role: "user" | "model", content: string }[];
   createdAt: string;
   error?: string;
 }
@@ -113,9 +110,6 @@ export default function MeetingDetailPage() {
             next: { revalidate: 0 }
           } as any);
           setArtifact(artifactData);
-          if (artifactData.chatHistory) {
-            setChatHistory(artifactData.chatHistory);
-          }
         } catch (artifactErr) {
           console.warn("⚠️ Artifact fetch failed:", artifactErr);
           setArtifact(null);
@@ -304,7 +298,7 @@ export default function MeetingDetailPage() {
     setIsAsking(true);
 
     try {
-      const res = await apiRequest<{ answer: string, chatHistory: any[] }>(`/artifacts/ask/${meeting._id}`, {
+      const res = await apiRequest<{ answer: string }>(`/artifacts/ask/${meeting._id}`, {
         method: "POST",
         data: { question: userMsg }
       });
@@ -351,10 +345,9 @@ export default function MeetingDetailPage() {
     );
   }
 
-  // Retroactive support + New DB format mapping
   let parsedSummary: { overview: string, agenda: string[], minutes: string } = {
-    overview: artifact?.overview || "",
-    agenda: artifact?.agenda || [],
+    overview: "",
+    agenda: [],
     minutes: artifact?.summary || ""
   };
 

@@ -1,13 +1,9 @@
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
-import User from "../models/User.js";
-import TokenBlocklist from "../models/TokenBlocklist.js";
+import { User, Workspace } from "@loopy/shared";
+import { TokenBlocklist } from "@loopy/shared";
 import OTPToken from "../models/OTPToken.js";
-import Workspace from "../models/Workspace.js";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getR2Client } from "../config/r2.js";
 import { sendOTPEmail } from "../config/mailer.js";
 
 const generateToken = (id: string, role: string, workspaceId?: string) => {
@@ -23,18 +19,8 @@ const generateToken = (id: string, role: string, workspaceId?: string) => {
 
 const getAvatarUrl = async (key?: string) => {
   if (!key) return null;
-  try {
-    const r2 = getR2Client();
-    const command = new GetObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
-      Key: key,
-    });
-    // Link valid for 24 hours (matches token expiry)
-    return await getSignedUrl(r2, command, { expiresIn: 86400 });
-  } catch (error) {
-    console.error("Error signing avatar URL:", error);
-    return null;
-  }
+  const baseUrl = process.env.GATEWAY_URL;
+  return `${baseUrl}/api/auth/avatars/${key}`;
 };
 
 // Helper to set cookie

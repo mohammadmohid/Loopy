@@ -87,7 +87,7 @@ export async function sendInviteEmail(
   workspaceName: string,
   inviterName: string
 ): Promise<void> {
-  const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
+  const clientUrl = process.env.CLIENT_URL;
   const joinUrl = `${clientUrl}/join?token=${inviteToken}`;
 
   const html = baseLayout(`

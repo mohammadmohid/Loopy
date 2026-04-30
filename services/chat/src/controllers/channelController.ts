@@ -1,10 +1,10 @@
 import { Response } from "express";
 import mongoose from "mongoose";
-import { AuthRequest } from "../middleware/auth";
-import Channel from "../models/Channel";
+import { AuthRequest, Channel } from "@loopy/shared";
 import Message from "../models/Message";
-import "../models/User";
+import "@loopy/shared"; // Load User model
 import { createAvatarResolver, populateChannelAvatars } from "../utils/avatar";
+import { pusher } from "../config/pusher";
 
 // @desc    Get all channels the authenticated user belongs to (scoped to workspace)
 // @route   GET /api/chat/channels
@@ -78,7 +78,7 @@ export const getChannelById = async (req: AuthRequest, res: Response) => {
         }
 
         // Verify membership (global channels are open to everyone)
-        const isMember = channel.type === "global" || channel.members.some(
+        const isMember = (channel as any).type === "global" || (channel as any).members.some(
             (m: any) => m.user._id?.toString() === req.user!.id || m.user?.toString() === req.user!.id
         );
         if (!isMember) {
@@ -86,7 +86,7 @@ export const getChannelById = async (req: AuthRequest, res: Response) => {
         }
 
         const resolveAvatar = createAvatarResolver();
-        await populateChannelAvatars(channel, resolveAvatar);
+        await populateChannelAvatars(channel as any, resolveAvatar);
 
         res.json(channel);
     } catch (error: any) {
@@ -153,7 +153,7 @@ export const createChannel = async (req: AuthRequest, res: Response) => {
             const existingDM = await Channel.findOne({
                 type: "direct",
                 isArchived: false,
-                "members.user": { $all: members.map((m) => m.user) },
+                "members.user": { $all: members.map((m: any) => m.user) },
                 $expr: { $eq: [{ $size: "$members" }, 2] },
             });
 
@@ -178,13 +178,10 @@ export const createChannel = async (req: AuthRequest, res: Response) => {
             "profile.firstName profile.lastName profile.avatarKey email"
         );
 
-        // Emit socket event for all members
-        const io = req.app.get("io");
-        if (io) {
-            members.forEach((m) => {
-                io.to(`user:${m.user.toString()}`).emit("channel-created", channel);
-            });
-        }
+        // Emit Pusher event for all members
+        members.forEach((m: any) => {
+            pusher.trigger(`user-${m.user.toString()}`, "channel-created", channel);
+        });
 
         res.status(201).json(channel);
     } catch (error: any) {
@@ -248,13 +245,10 @@ export const createProjectChannel = async (
             type: "system",
         });
 
-        // Notify connected users
-        const io = req.app.get("io");
-        if (io) {
-            channelMembers.forEach((m: any) => {
-                io.to(`user:${m.user.toString()}`).emit("channel-created", channel);
-            });
-        }
+        // Notify connected users via Pusher
+        channelMembers.forEach((m: any) => {
+            pusher.trigger(`user-${m.user.toString()}`, "channel-created", channel);
+        });
 
         res.status(201).json(channel);
     } catch (error: any) {
@@ -289,15 +283,12 @@ export const deleteProjectChannel = async (
         // Delete the actual channels
         await Channel.deleteMany({ _id: { $in: channelIds } });
 
-        // Optionally, emit a socket deletion event here if needed
-        const io = req.app.get("io");
-        if (io) {
-            channelIds.forEach(id => {
-                io.to(`channel:${id}`).emit("channel-deleted", {
-                    channelId: id.toString()
-                });
+        // Optionally, emit a Pusher deletion event here if needed
+        channelIds.forEach(id => {
+            pusher.trigger(`channel-${id}`, "channel-deleted", {
+                channelId: id.toString()
             });
-        }
+        });
 
         res.status(200).json({ message: "Project channels and messages deleted" });
     } catch (error: any) {
@@ -317,7 +308,7 @@ export const updateChannel = async (req: AuthRequest, res: Response) => {
 
         // Only channel admins can update
         const memberEntry = channel.members.find(
-            (m) => m.user.toString() === req.user!.id
+            (m: any) => m.user.toString() === req.user!.id
         );
         if (!memberEntry || memberEntry.role !== "admin") {
             return res
@@ -344,11 +335,8 @@ export const updateChannel = async (req: AuthRequest, res: Response) => {
             "profile.firstName profile.lastName profile.avatarKey email"
         );
 
-        // Notify all channel members
-        const io = req.app.get("io");
-        if (io) {
-            io.to(`channel:${channel._id}`).emit("channel-updated", channel);
-        }
+        // Notify all channel members via Pusher
+        pusher.trigger(`channel-${channel._id}`, "channel-updated", channel);
 
         res.json(channel);
     } catch (error: any) {
@@ -367,7 +355,7 @@ export const archiveChannel = async (req: AuthRequest, res: Response) => {
         }
 
         const memberEntry = channel.members.find(
-            (m) => m.user.toString() === req.user!.id
+            (m: any) => m.user.toString() === req.user!.id
         );
         if (!memberEntry || memberEntry.role !== "admin") {
             return res
@@ -399,12 +387,9 @@ export const archiveChannel = async (req: AuthRequest, res: Response) => {
         channel.isArchived = true;
         await channel.save();
 
-        const io = req.app.get("io");
-        if (io) {
-            io.to(`channel:${channel._id}`).emit("channel-archived", {
-                channelId: channel._id,
-            });
-        }
+        pusher.trigger(`channel-${channel._id}`, "channel-archived", {
+            channelId: channel._id,
+        });
 
         res.json({ message: "Channel archived" });
     } catch (error: any) {
@@ -424,7 +409,7 @@ export const addMembers = async (req: AuthRequest, res: Response) => {
 
         // Only admins can add members
         const memberEntry = channel.members.find(
-            (m) => m.user.toString() === req.user!.id
+            (m: any) => m.user.toString() === req.user!.id
         );
         if (!memberEntry || memberEntry.role !== "admin") {
             return res
@@ -443,7 +428,7 @@ export const addMembers = async (req: AuthRequest, res: Response) => {
             if (!mongoose.Types.ObjectId.isValid(id)) return;
 
             const exists = channel.members.find(
-                (m) => m.user.toString() === id
+                (m: any) => m.user.toString() === id
             );
             if (!exists) {
                 const newMember = {
@@ -466,8 +451,7 @@ export const addMembers = async (req: AuthRequest, res: Response) => {
             "profile.firstName profile.lastName profile.avatarKey email"
         );
 
-        // Create system messages and notify
-        const io = req.app.get("io");
+        // Create system messages and notify via Pusher
         for (const nm of newMembers) {
             await Message.create({
                 channelId: channel._id,
@@ -476,13 +460,11 @@ export const addMembers = async (req: AuthRequest, res: Response) => {
                 type: "system",
             });
 
-            if (io) {
-                io.to(`user:${nm.user.toString()}`).emit("channel-created", channel);
-                io.to(`channel:${channel._id}`).emit("member-joined", {
-                    channelId: channel._id,
-                    userId: nm.user.toString(),
-                });
-            }
+            pusher.trigger(`user-${nm.user.toString()}`, "channel-created", channel);
+            pusher.trigger(`channel-${channel._id}`, "member-joined", {
+                channelId: channel._id,
+                userId: nm.user.toString(),
+            });
         }
 
         res.json(channel);
@@ -507,7 +489,7 @@ export const removeMember = async (req: AuthRequest, res: Response) => {
         // If not self-removing, must be admin
         if (!isSelf) {
             const memberEntry = channel.members.find(
-                (m) => m.user.toString() === req.user!.id
+                (m: any) => m.user.toString() === req.user!.id
             );
             if (!memberEntry || memberEntry.role !== "admin") {
                 return res
@@ -524,7 +506,7 @@ export const removeMember = async (req: AuthRequest, res: Response) => {
         }
 
         const memberIndex = channel.members.findIndex(
-            (m) => m.user.toString() === targetUserId
+            (m: any) => m.user.toString() === targetUserId
         );
 
         if (memberIndex === -1) {
@@ -542,16 +524,13 @@ export const removeMember = async (req: AuthRequest, res: Response) => {
             type: "system",
         });
 
-        const io = req.app.get("io");
-        if (io) {
-            io.to(`channel:${channel._id}`).emit("member-left", {
-                channelId: channel._id.toString(),
-                userId: targetUserId,
-            });
-            io.to(`user:${targetUserId}`).emit("channel-removed", {
-                channelId: channel._id.toString(),
-            });
-        }
+        pusher.trigger(`channel-${channel._id}`, "member-left", {
+            channelId: channel._id.toString(),
+            userId: targetUserId,
+        });
+        pusher.trigger(`user-${targetUserId}`, "channel-removed", {
+            channelId: channel._id.toString(),
+        });
 
         res.json({ message: "Member removed" });
     } catch (error: any) {
@@ -576,7 +555,7 @@ export const getChannelMembers = async (req: AuthRequest, res: Response) => {
         }
 
         // Verify membership
-        const isMember = channel.members.some(
+        const isMember = (channel as any).members.some(
             (m: any) => m.user._id?.toString() === req.user!.id || m.user?.toString() === req.user!.id
         );
         if (!isMember) {
@@ -584,9 +563,9 @@ export const getChannelMembers = async (req: AuthRequest, res: Response) => {
         }
 
         const resolveAvatar = createAvatarResolver();
-        await populateChannelAvatars(channel, resolveAvatar);
+        await populateChannelAvatars(channel as any, resolveAvatar);
 
-        res.json(channel.members);
+        res.json((channel as any).members);
     } catch (error: any) {
         console.error("getChannelMembers Error:", error);
         res.status(500).json({ message: error.message });
@@ -635,13 +614,10 @@ export const syncTeamChannel = async (req: AuthRequest, res: Response) => {
             });
         }
 
-        // Notify connected users
-        const io = req.app.get("io");
-        if (io) {
-            channelMembers.forEach((m: any) => {
-                io.to(`user:${m.user.toString()}`).emit("channel-created", channel);
-            });
-        }
+        // Notify connected users via Pusher
+        channelMembers.forEach((m: any) => {
+            pusher.trigger(`user-${m.user.toString()}`, "channel-created", channel);
+        });
 
         res.status(200).json(channel);
     } catch (error: any) {
@@ -669,14 +645,11 @@ export const deleteTeamChannel = async (req: AuthRequest, res: Response) => {
         // Delete the actual channels
         await Channel.deleteMany({ _id: { $in: channelIds } });
 
-        const io = req.app.get("io");
-        if (io) {
-            channelIds.forEach(id => {
-                io.to(`channel:${id}`).emit("channel-deleted", {
-                    channelId: id.toString()
-                });
+        channelIds.forEach(id => {
+            pusher.trigger(`channel-${id}`, "channel-deleted", {
+                channelId: id.toString()
             });
-        }
+        });
 
         res.status(200).json({ message: "Team channels and messages deleted" });
     } catch (error: any) {
@@ -709,7 +682,7 @@ export const syncWorkspaceMember = async (req: AuthRequest, res: Response) => {
 
         // Add user if not already a member
         const alreadyMember = globalChannel.members.some(
-            (m) => m.user.toString() === userId
+            (m: any) => m.user.toString() === userId
         );
 
         if (!alreadyMember) {

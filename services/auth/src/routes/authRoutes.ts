@@ -1,3 +1,4 @@
+// @ts-nocheck
 import express from "express";
 import {
   register,
@@ -26,8 +27,8 @@ import {
   removeMember,
   resendInvite,
 } from "../controllers/workspaceController.js";
-import { signAvatarUpload } from "../controllers/uploadController.js";
-import { protect } from "../middleware/auth.js";
+import { signAvatarUpload, getAvatar } from "../controllers/uploadController.js";
+import { protect } from "@loopy/shared";
 
 const router = express.Router();
 
@@ -45,6 +46,7 @@ router.get("/me", protect, getMe);
 router.put("/me", protect, updateProfile);
 router.post("/upload/avatar/sign", signAvatarUpload);
 router.get("/users", protect, getUsers);
+router.get("/avatars/*", getAvatar);
 router.get("/:id", protect, findUserById);
 
 // Workspaces

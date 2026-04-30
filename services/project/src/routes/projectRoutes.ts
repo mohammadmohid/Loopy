@@ -1,5 +1,5 @@
 import express from "express";
-import { authorize, protect } from "../middleware/auth";
+import { authorize, protect } from "@loopy/shared";
 import {
   createProject,
   getProjects,
@@ -15,7 +15,6 @@ import { getDashboard } from "../controllers/dashboardController";
 import {
   signUpload,
   createArtifact,
-  handleTranscriptionWebhook,
   getArtifacts,
   getArtifactById,
 } from "../controllers/artifactController";
@@ -69,8 +68,7 @@ router.get("/teams", protect, getTeams);
 router.patch("/teams/:id", protect, updateTeam);
 router.delete("/teams/:id", protect, deleteTeam);
 
-// Webhooks
-router.post("/webhooks/transcription", handleTranscriptionWebhook);
+// Inter-service Webhooks
 router.delete("/workspace-webhook/:workspaceId", deleteWorkspaceProjects); // Inter-service auth could be via API Key, skipping `protect` for simpilcity to trust internal network
 
 // ID-based Project Routes (Must be at the bottom to prevent swallowing /teams, /artifacts etc)

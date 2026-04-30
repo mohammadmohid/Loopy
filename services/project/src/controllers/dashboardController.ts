@@ -1,11 +1,11 @@
 import { Response } from "express";
 import mongoose from "mongoose";
-import { AuthRequest } from "../middleware/auth";
+import { AuthRequest } from "@loopy/shared";
 import Project from "../models/Project";
 import Task from "../models/Task";
 import Milestone from "../models/Milestone";
 import Team from "../models/Team";
-import "../models/User";
+import { buildScopedProjectQuery } from "../helpers.js";
 
 /**
  * @desc    Get aggregated dashboard data for the home page
@@ -26,21 +26,15 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // ── 1. Fetch Projects (scoped by role) ──────────────────────────
-    let projectQuery: any = { workspaceId };
-
-    if (role !== "ADMIN" && role !== "PROJECT_MANAGER") {
-      const userTeams = await Team.find({ members: userId }).select("_id");
-      const userTeamIds = userTeams.map((t) => t._id);
-
-      projectQuery = {
-        workspaceId,
-        $or: [
-          { owner: userId },
-          { "members.user": userId },
-          { "assignedTeams.team": { $in: userTeamIds } },
-        ],
-      };
+    // Fetch Projects (DRY: reuses shared query builder)
+    const projectQuery = await buildScopedProjectQuery(req.user);
+    if (!projectQuery) {
+      return res.status(200).json({
+        kpis: {},
+        projects: [],
+        myTasks: [],
+        recentActivity: [],
+      });
     }
 
     const projects = await Project.find(projectQuery)
@@ -57,7 +51,7 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
 
     const projectIds = projects.map((p: any) => p._id);
 
-    // ── 2. Fetch Tasks ──────────────────────────────────────────────
+    // Fetch Tasks
     const allTasks = await Task.find({ projectId: { $in: projectIds } })
       .populate(
         "assignees",
@@ -66,28 +60,21 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
       .sort({ updatedAt: -1 })
       .lean();
 
-    // For MEMBER role, filter to only tasks assigned to the current user
-    const myTasks =
-      role === "ADMIN" || role === "PROJECT_MANAGER"
-        ? allTasks.filter((t: any) =>
-            t.assignees?.some(
-              (a: any) => a._id?.toString() === userId
-            )
-          )
-        : allTasks.filter((t: any) =>
-            t.assignees?.some(
-              (a: any) => a._id?.toString() === userId
-            )
-          );
+    // "My Tasks" — tasks assigned to the current user (same for all roles)
+    const myTasks = allTasks.filter((t: any) =>
+      t.assignees?.some(
+        (a: any) => a._id?.toString() === userId
+      )
+    );
 
-    // ── 3. Compute KPIs ─────────────────────────────────────────────
+    // Compute KPIs
     const now = new Date();
     const sevenDaysFromNow = new Date(
       now.getTime() + 7 * 24 * 60 * 60 * 1000
     );
 
-    // For MEMBER: KPIs are scoped to their assigned tasks only
-    // For PM/ADMIN: KPIs cover all workspace tasks
+    // For role=`MEMBER`: KPIs are scoped to their assigned tasks only
+    // For role=`PM || ADMIN`: KPIs cover all workspace tasks
     const kpiTasks =
       role === "ADMIN" || role === "PROJECT_MANAGER"
         ? allTasks
@@ -128,7 +115,7 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
       dueSoonTasks,
     };
 
-    // ADMIN-only: workspace-level stats
+    // ADMIN-only: workspace-level stats (lazy — only fetched when needed)
     if (role === "ADMIN" || role === "PROJECT_MANAGER") {
       const teams = await Team.find({
         workspaceId: new mongoose.Types.ObjectId(workspaceId),
@@ -147,7 +134,7 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
       kpis.totalMembers = memberSet.size;
     }
 
-    // ── 4. Recent Activity (last 10) ────────────────────────────────
+    // Recent Activity (last 10)
     const recentTasks = allTasks.slice(0, 15);
     const milestones = await Milestone.find({
       projectId: { $in: projectIds },
@@ -199,13 +186,13 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
       )
       .slice(0, 10);
 
-    // ── 5. Build project name map for frontend convenience ─────────
+    // Build project name map for frontend
     const projectMap: Record<string, string> = {};
     projects.forEach((p: any) => {
       projectMap[p._id.toString()] = p.name;
     });
 
-    // ── 6. Response ─────────────────────────────────────────────────
+    // Response
     res.status(200).json({
       kpis,
       projects: projects.slice(0, 6),

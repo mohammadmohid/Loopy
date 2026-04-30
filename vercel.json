@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "pnpm --filter @loopy/shared build && cd frontend && pnpm build",
+  "buildCommand": "pnpm run build:services && cd frontend && pnpm build",
   "outputDirectory": "frontend/.next",
   "framework": "nextjs",
   "installCommand": "pnpm install",

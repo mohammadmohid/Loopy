@@ -1,9 +1,10 @@
 {
     "name": "loopy-monorepo",
     "private": true,
+    "type": "module",
     "packageManager": "pnpm@10.15.1",
     "scripts": {
-        "build:shared": "pnpm --filter @loopy/shared build",
+        "build:services": "pnpm --filter @loopy/shared build && pnpm --filter loopy-auth build && pnpm --filter loopy-chat build && pnpm --filter loopy-project build && pnpm --filter loopy-meeting build && pnpm --filter loopy-transcription build",
         "build:frontend": "cd frontend && pnpm build"
     },
     "devDependencies": {

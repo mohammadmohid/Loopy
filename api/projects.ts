@@ -1,2 +1,3 @@
-import app from "../services/project/src/index.js";
+// @ts-nocheck
+import app from "../services/project/dist/index.js";
 export default app;

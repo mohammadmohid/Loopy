@@ -3,10 +3,10 @@ import mongoose from "mongoose";
 import { AuthRequest, getR2Client } from "@loopy/shared";
 
 type Response = express.Response;
-import Project from "../models/Project";
-import Task from "../models/Task";
-import Milestone from "../models/Milestone";
-import Team from "../models/Team";
+import Project from "../models/Project.js";
+import Task from "../models/Task.js";
+import Milestone from "../models/Milestone.js";
+import Team from "../models/Team.js";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { notifyProjectCreated, notifyProjectDeleted } from "../events/projectEvents.js";

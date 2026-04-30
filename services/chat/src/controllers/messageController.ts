@@ -1,16 +1,16 @@
 import { Response } from "express";
 import mongoose from "mongoose";
 import { AuthRequest, Channel } from "@loopy/shared";
-import Message from "../models/Message";
+import Message from "../models/Message.js";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getR2Client } from "../config/r2";
+import { getR2Client } from "../config/r2.js";
 import { v4 as uuidv4 } from "uuid";
 import "@loopy/shared";
-import { createAvatarResolver } from "../utils/avatar";
-import { pusher } from "../config/pusher";
-import { incrementUnreadBatch } from "../services/unreadService";
-import { cacheMessage, getCachedMessages, invalidateCache } from "../services/messageCacheService";
+import { createAvatarResolver } from "../utils/avatar.js";
+import { pusher } from "../config/pusher.js";
+import { incrementUnreadBatch } from "../services/unreadService.js";
+import { cacheMessage, getCachedMessages, invalidateCache } from "../services/messageCacheService.js";
 
 // @desc    Get paginated messages for a channel
 // @route   GET /api/chat/channels/:channelId/messages

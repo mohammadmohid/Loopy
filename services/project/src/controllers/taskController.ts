@@ -2,8 +2,8 @@ import express from "express";
 import { AuthRequest } from "@loopy/shared";
 
 type Response = express.Response;
-import Task from "../models/Task";
-import Milestone from "../models/Milestone";
+import Task from "../models/Task.js";
+import Milestone from "../models/Milestone.js";
 
 // Allowed fields for task creation/updates to prevent mass assignment
 const ALLOWED_TASK_FIELDS = [

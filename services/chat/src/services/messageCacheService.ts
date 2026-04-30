@@ -1,4 +1,4 @@
-import { getRedisClient } from "../config/redis";
+import { getRedisClient } from "../config/redis.js";
 
 const MSG_PREFIX = "msgs:";
 const MAX_CACHED = 50;

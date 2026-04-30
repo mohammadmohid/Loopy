@@ -5,5 +5,8 @@
     "scripts": {
         "build:shared": "pnpm --filter @loopy/shared build",
         "build:frontend": "cd frontend && pnpm build"
+    },
+    "devDependencies": {
+        "next": "16.0.10"
     }
 }

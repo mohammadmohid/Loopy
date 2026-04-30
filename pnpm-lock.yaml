@@ -6,6 +6,12 @@ settings:
 
 importers:
 
+  .:
+    devDependencies:
+      next:
+        specifier: 16.0.10
+        version: 16.0.10(@babel/core@7.29.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+
   frontend:
     dependencies:
       '@ffmpeg/ffmpeg':

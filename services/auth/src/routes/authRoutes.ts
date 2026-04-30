@@ -46,7 +46,7 @@ router.get("/me", protect, getMe);
 router.put("/me", protect, updateProfile);
 router.post("/upload/avatar/sign", signAvatarUpload);
 router.get("/users", protect, getUsers);
-router.get("/avatars/*", getAvatar);
+router.get("/avatars/{*key}", getAvatar);
 router.get("/:id", protect, findUserById);
 
 // Workspaces

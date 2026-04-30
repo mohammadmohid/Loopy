@@ -1,6 +1,7 @@
 {
   "name": "@loopy/shared",
   "version": "1.0.0",
+  "type": "module",
   "description": "Shared models, middleware, and utils for Loopy services",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

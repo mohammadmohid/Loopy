@@ -88,7 +88,7 @@ export function ChannelList({
                                     </span>
                                     {unreadCounts?.[channel._id] ? (
                                         <span className="shrink-0 bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-flex items-center justify-center min-w-[20px] ml-2">
-                                            {unreadCounts[channel._id]}
+                                            {unreadCounts[channel._id] > 99 ? "99+" : unreadCounts[channel._id]}
                                         </span>
                                     ) : null}
                                 </div>
@@ -224,7 +224,7 @@ function ChannelGroup({
                                 ) : <div />}
                                 {unreadCounts?.[channel._id] ? (
                                     <span className="shrink-0 bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-flex items-center justify-center min-w-[20px]">
-                                        {unreadCounts[channel._id]}
+                                        {unreadCounts[channel._id] > 99 ? "99+" : unreadCounts[channel._id]}
                                     </span>
                                 ) : null}
                             </div>
@@ -328,7 +328,7 @@ function DMGroup({
                                 ) : <div />}
                                 {unreadCounts?.[channel._id] ? (
                                     <span className="shrink-0 bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-flex items-center justify-center min-w-[20px]">
-                                        {unreadCounts[channel._id]}
+                                        {unreadCounts[channel._id] > 99 ? "99+" : unreadCounts[channel._id]}
                                     </span>
                                 ) : null}
                             </div>

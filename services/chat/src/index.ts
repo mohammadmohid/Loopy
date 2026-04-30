@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import cookieParser from "cookie-parser";
 import chatRoutes from "./routes/chatRoutes.js";
+import { getRedisClient } from "./config/redis.js";
 
 dotenv.config();
 
@@ -36,6 +37,11 @@ mongoose
     .connect(process.env.MONGO_URI as string)
     .then(() => console.log("ChatDB Connected"))
     .catch((err) => console.error("ChatDB Connection Error:", err));
+
+// Initialise Upstash Redis client (HTTP-based, no persistent connection)
+const redisClient = getRedisClient();
+if (redisClient) console.log("Redis ready (Upstash REST)");
+else console.warn("Redis unavailable — running without cache");
 
 // Mount routes
 app.use("/api/chat", chatRoutes);

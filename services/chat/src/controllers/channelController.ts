@@ -5,6 +5,7 @@ import Message from "../models/Message";
 import "@loopy/shared"; // Load User model
 import { createAvatarResolver, populateChannelAvatars } from "../utils/avatar";
 import { pusher } from "../config/pusher";
+import { clearUnread } from "../services/unreadService";
 
 // @desc    Get all channels the authenticated user belongs to (scoped to workspace)
 // @route   GET /api/chat/channels
@@ -288,6 +289,14 @@ export const deleteProjectChannel = async (
             pusher.trigger(`channel-${id}`, "channel-deleted", {
                 channelId: id.toString()
             });
+
+            // Clear unread counts for all members (hygiene)
+            const channel = projectChannels.find(c => c._id.toString() === id.toString());
+            if (channel && channel.members) {
+                channel.members.forEach((m: any) => {
+                    clearUnread(m.user.toString(), id.toString()).catch(() => {});
+                });
+            }
         });
 
         res.status(200).json({ message: "Project channels and messages deleted" });
@@ -649,6 +658,14 @@ export const deleteTeamChannel = async (req: AuthRequest, res: Response) => {
             pusher.trigger(`channel-${id}`, "channel-deleted", {
                 channelId: id.toString()
             });
+
+            // Clear unread counts for all members (hygiene)
+            const channel = teamChannels.find(c => c._id.toString() === id.toString());
+            if (channel && channel.members) {
+                channel.members.forEach((m: any) => {
+                    clearUnread(m.user.toString(), id.toString()).catch(() => {});
+                });
+            }
         });
 
         res.status(200).json({ message: "Team channels and messages deleted" });

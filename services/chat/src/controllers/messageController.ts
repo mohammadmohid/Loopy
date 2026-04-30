@@ -9,6 +9,8 @@ import { v4 as uuidv4 } from "uuid";
 import "@loopy/shared";
 import { createAvatarResolver } from "../utils/avatar";
 import { pusher } from "../config/pusher";
+import { incrementUnreadBatch } from "../services/unreadService";
+import { cacheMessage, getCachedMessages, invalidateCache } from "../services/messageCacheService";
 
 // @desc    Get paginated messages for a channel
 // @route   GET /api/chat/channels/:channelId/messages
@@ -39,6 +41,32 @@ export const getMessages = async (req: AuthRequest, res: Response) => {
             threadParentId: { $exists: false },
         };
 
+        // ── Try Redis cache first (only for latest messages, no cursor) ──
+        if (!cursor) {
+            const cached = await getCachedMessages(channelId, parsedLimit);
+            if (cached && cached.length > 0) {
+                // Populate avatar URLs for cached messages
+                const resolveAvatar = createAvatarResolver();
+                for (const msg of cached) {
+                    if ((msg as any).sender && (msg as any).sender.profile) {
+                        const key = (msg as any).sender.profile.avatarKey;
+                        if (key) {
+                            (msg as any).sender.profile.avatarUrl = await resolveAvatar(key);
+                        }
+                    }
+                }
+
+                return res.json({
+                    messages: cached,
+                    hasMore: cached.length >= parsedLimit,
+                    nextCursor: cached.length >= parsedLimit
+                        ? (cached[0] as any)?.createdAt
+                        : null,
+                });
+            }
+        }
+
+        // ── Fallback to MongoDB ──
         // Cursor-based pagination: fetch messages older than cursor
         if (cursor) {
             query.createdAt = { $lt: new Date(cursor as string) };
@@ -237,6 +265,16 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
             }
         }
 
+        // ── Redis: cache message + increment unread for members ──
+        cacheMessage(channelId, messageObj).catch(() => {});
+
+        if (!threadParentId && channel.members) {
+            const memberIds = channel.members
+                .map((m: any) => m.user.toString())
+                .filter((id: string) => id !== req.user!.id);
+            incrementUnreadBatch(memberIds, channelId).catch(() => {});
+        }
+
         // Notify mentioned users specifically
         parsedMentions.forEach((userId: string) => {
             pusher.trigger(`user-${userId}`, "mention", {
@@ -279,6 +317,9 @@ export const editMessage = async (req: AuthRequest, res: Response) => {
         message.content = content;
         message.isEdited = true;
         await message.save();
+
+        // Invalidate Redis cache for this channel
+        invalidateCache(message.channelId.toString()).catch(() => {});
 
         await message.populate(
             "sender",
@@ -325,6 +366,9 @@ export const deleteMessage = async (req: AuthRequest, res: Response) => {
         message.attachments = [];
         message.reactions = [];
         await message.save();
+
+        // Invalidate Redis cache for this channel
+        invalidateCache(message.channelId.toString()).catch(() => {});
 
         pusher.trigger(`channel-${message.channelId}`, "message-deleted", {
             messageId: message._id,

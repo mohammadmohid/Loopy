@@ -85,7 +85,8 @@ export function Sidebar({ collapsed }: SidebarProps) {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
-          const badge = item.label === "Chat" ? (totalUnread > 0 ? totalUnread : undefined) : (item as any).badge;
+          const rawBadge = item.label === "Chat" ? (totalUnread > 0 ? totalUnread : undefined) : (item as any).badge;
+          const badge = rawBadge !== undefined ? (rawBadge > 99 ? "99+" : rawBadge) : undefined;
 
           return (
             <NavItemWrapper

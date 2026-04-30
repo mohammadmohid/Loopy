@@ -3,7 +3,14 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 import Pusher from "pusher-js";
 import { useAuth } from "@/lib/auth-provider";
+import { apiRequest } from "@/lib/api";
 import type { ChatMessage } from "@/lib/types";
+
+/** Polling interval in ms – set via env var, 0 or omit to disable */
+const POLLING_INTERVAL = parseInt(
+    process.env.NEXT_PUBLIC_CHAT_POLLING_INTERVAL || "0",
+    10
+);
 
 interface ChatContextValue {
     pusher: Pusher | null;
@@ -34,6 +41,36 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         selectedChannelIdRef.current = currentChannelId;
     }, [currentChannelId]);
 
+    // ── Hydrate unread counts from server on mount ──
+    const fetchUnreadCounts = useCallback(async () => {
+        if (!user) return;
+        try {
+            const data = await apiRequest<{ counts: Record<string, number> }>("/chat/unread", {
+                method: "GET",
+            });
+            if (data?.counts) {
+                setUnreadCounts(data.counts);
+            }
+        } catch (err) {
+            // Silently fail — Pusher will still work for real-time updates
+            console.warn("[ChatContext] Failed to fetch unread counts:", err);
+        }
+    }, [user]);
+
+    // Fetch on mount / user change
+    useEffect(() => {
+        fetchUnreadCounts();
+    }, [fetchUnreadCounts]);
+
+    // ── Optional polling (controlled by env var) ──
+    useEffect(() => {
+        if (!POLLING_INTERVAL || POLLING_INTERVAL <= 0 || !user) return;
+
+        const interval = setInterval(fetchUnreadCounts, POLLING_INTERVAL);
+        return () => clearInterval(interval);
+    }, [fetchUnreadCounts, user]);
+
+    // ── Pusher connection ──
     useEffect(() => {
         if (!user) return;
 
@@ -73,6 +110,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         };
     }, [user]);
 
+    // ── Clear unread (local + server) ──
     const clearUnread = useCallback((channelId: string) => {
         setUnreadCounts((prev) => {
             if (!prev[channelId]) return prev;
@@ -80,6 +118,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             delete updated[channelId];
             return updated;
         });
+
+        // Persist to server (fire-and-forget)
+        apiRequest("/chat/unread/read", {
+            method: "POST",
+            data: { channelId },
+        }).catch(() => {});
     }, []);
 
     const joinChannel = useCallback((channelId: string) => {

@@ -25,11 +25,19 @@ import {
     searchMessages,
     signUpload,
 } from "../controllers/messageController";
+import {
+    getUnread,
+    markChannelRead,
+} from "../controllers/unreadController";
 
 const router = express.Router();
 
 // --- Search (must be before parameterized routes) ---
 router.get("/search", protect, searchMessages);
+
+// --- Unread Counts ---
+router.get("/unread", protect, getUnread);
+router.post("/unread/read", protect, markChannelRead);
 
 // --- Upload ---
 router.post("/upload/sign", protect, signUpload);

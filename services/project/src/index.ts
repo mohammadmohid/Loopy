@@ -1,13 +1,24 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import mongoose from "mongoose";
+import { connectDB } from "@loopy/shared";
 import cookieParser from "cookie-parser";
 import projectRoutes from "./routes/projectRoutes.js";
 
 dotenv.config();
 
 const app = express();
+
+// Middleware to ensure DB connection
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error("Database connection failed", error);
+    res.status(500).json({ message: "Database connection failed" });
+  }
+});
 
 // Get allowed origins from env
 const allowedOrigins = (process.env.ALLOWED_ORIGINS as string) && (process.env.ALLOWED_ORIGINS as string).split(",");
@@ -27,12 +38,8 @@ app.use(
 app.use(cookieParser());
 app.use(express.json());
 
-mongoose
-  .connect(process.env.MONGO_URI as string)
-  .then(() => console.log("ProjectDB Connected"))
-  .catch((err) => console.error(err));
-
 app.use("/api/projects", projectRoutes);
+
 
 const PORT = process.env.PORT || 5002;
 if (process.env.NODE_ENV !== "production") {

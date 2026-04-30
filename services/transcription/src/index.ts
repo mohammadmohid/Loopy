@@ -4,10 +4,21 @@ dotenv.config();
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import mongoose from "mongoose";
+import { connectDB } from "@loopy/shared";
 import transcriptionRoutes from "./routes/transcriptionRoutes.js";
 
 const app = express();
+
+// Middleware to ensure DB connection
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error("Database connection failed", error);
+    res.status(500).json({ message: "Database connection failed" });
+  }
+});
 
 app.use(helmet());
 
@@ -31,19 +42,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api/artifacts", transcriptionRoutes);
 
-const MONGO_URI = process.env.MONGO_URI;
-if (!MONGO_URI) {
-  console.error("MONGO_URI is not defined. Exiting.");
-  process.exit(1);
-}
 
-mongoose
-  .connect(MONGO_URI)
-  .then(() => console.log("Transcription DB Connected"))
-  .catch((err) => {
-    console.error("DB Connection Error:", err);
-    process.exit(1);
-  });
 
 const PORT = process.env.PORT;
 if (process.env.NODE_ENV !== "production") {

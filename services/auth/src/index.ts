@@ -4,13 +4,22 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
-import { connectDB } from "./config/db.js";
+import { connectDB } from "@loopy/shared";
 import authRoutes from "./routes/authRoutes.js";
-
-connectDB();
 
 const app = express();
 app.set("trust proxy", 1);
+
+// Middleware to ensure DB connection
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error("Database connection failed", error);
+    res.status(500).json({ message: "Database connection failed" });
+  }
+});
 
 app.use(helmet());
 app.use(cookieParser());
@@ -41,3 +50,4 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 export default app;
+

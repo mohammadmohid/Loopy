@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { connectDB } from "@loopy/shared";
+import mongoose from "mongoose";
 import chatRoutes from "./routes/chatRoutes.js";
 import { getRedisClient } from "./config/redis.js";
 import cookieParser from "cookie-parser";
@@ -35,13 +36,14 @@ app.use(express.json());
 // Middleware to ensure DB connection
 app.use(async (req, res, next) => {
     try {
-        await connectDB();
+        await connectDB(undefined, mongoose);
         next();
     } catch (error) {
         console.error("Database connection failed", error);
         res.status(500).json({ message: "Database connection failed" });
     }
 });
+
 
 
 // Initialise Upstash Redis client (HTTP-based, no persistent connection)

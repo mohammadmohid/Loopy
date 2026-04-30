@@ -5,6 +5,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { connectDB } from "@loopy/shared";
+import mongoose from "mongoose";
 import transcriptionRoutes from "./routes/transcriptionRoutes.js";
 
 const app = express();
@@ -12,13 +13,14 @@ const app = express();
 // Middleware to ensure DB connection
 app.use(async (req, res, next) => {
   try {
-    await connectDB();
+    await connectDB(undefined, mongoose);
     next();
   } catch (error) {
     console.error("Database connection failed", error);
     res.status(500).json({ message: "Database connection failed" });
   }
 });
+
 
 app.use(helmet());
 

@@ -1,12 +1,13 @@
-import mongoose from "mongoose";
+import mongoose, { Mongoose } from "mongoose";
 
 let isConnected = false;
 
-export const connectDB = async (uri?: string) => {
-  mongoose.set("strictQuery", true);
+export const connectDB = async (uri?: string, instance?: Mongoose) => {
+  const targetMongoose = instance || mongoose;
+  targetMongoose.set("strictQuery", true);
 
-  if (isConnected && mongoose.connection.readyState === 1) {
-    return mongoose.connection;
+  if (isConnected && targetMongoose.connection.readyState === 1) {
+    return targetMongoose.connection;
   }
 
   const mongoUri = uri || process.env.MONGO_URI;
@@ -16,7 +17,7 @@ export const connectDB = async (uri?: string) => {
   }
 
   try {
-    const db = await mongoose.connect(mongoUri, {
+    const db = await targetMongoose.connect(mongoUri, {
       maxPoolSize: 5,
       minPoolSize: 0,
       maxIdleTimeMS: 10000,
@@ -32,3 +33,4 @@ export const connectDB = async (uri?: string) => {
     throw error;
   }
 };
+

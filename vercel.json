@@ -1,10 +1,29 @@
 {
   "version": 2,
+  "buildCommand": "pnpm --filter @loopy/shared build && cd frontend && pnpm build",
+  "outputDirectory": "frontend/.next",
+  "framework": "nextjs",
+  "installCommand": "pnpm install",
   "rewrites": [
-    { "source": "/api/auth/:match*", "destination": "/api/auth" },
-    { "source": "/api/projects/:match*", "destination": "/api/projects" },
-    { "source": "/api/meetings/:match*", "destination": "/api/meetings" },
-    { "source": "/api/artifacts/:match*", "destination": "/api/artifacts" },
-    { "source": "/api/chat/:match*", "destination": "/api/chat" }
+    {
+      "source": "/api/auth/:match*",
+      "destination": "/api/auth"
+    },
+    {
+      "source": "/api/projects/:match*",
+      "destination": "/api/projects"
+    },
+    {
+      "source": "/api/meetings/:match*",
+      "destination": "/api/meetings"
+    },
+    {
+      "source": "/api/artifacts/:match*",
+      "destination": "/api/artifacts"
+    },
+    {
+      "source": "/api/chat/:match*",
+      "destination": "/api/chat"
+    }
   ]
 }

@@ -15,7 +15,7 @@ app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cookieParser());
 
-const allowedOrigins = ["http://localhost:3000", "https://loopy-mu.vercel.app", "http://192.168.7.15:3000"];
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") ?? [];
 
 app.use(
   cors({
@@ -37,7 +37,7 @@ app.use("/api/auth", authRoutes);
 
 const PORT = process.env.PORT || 5001;
 if (process.env.NODE_ENV !== "production") {
-    app.listen(PORT, () => console.log(`Auth Service running on port ${PORT}`));
+  app.listen(PORT, () => console.log(`Auth Service running on port ${PORT}`));
 }
 
 export default app;

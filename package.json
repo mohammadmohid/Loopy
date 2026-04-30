@@ -1,0 +1,9 @@
+{
+    "name": "loopy-monorepo",
+    "private": true,
+    "packageManager": "pnpm@10.15.1",
+    "scripts": {
+        "build:shared": "pnpm --filter @loopy/shared build",
+        "build:frontend": "cd frontend && pnpm build"
+    }
+}

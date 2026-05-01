@@ -37,7 +37,5 @@ next-env.d.ts
 .vscode
 
 # Agent
-/.antigravity
-/.agent
 /.agents
 skills-lock.json

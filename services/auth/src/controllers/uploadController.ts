@@ -48,7 +48,7 @@ export const getAvatar = async (req: Request, res: Response) => {
     const r2Client = getR2Client();
     const command = new GetObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
-      Key: key, // Should be something like "avatars/123_abc"
+      Key: key,
     });
 
     // Cache at edge for 24 hours, browser cache for 24 hours

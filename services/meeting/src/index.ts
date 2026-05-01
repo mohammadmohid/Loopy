@@ -39,10 +39,8 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "Meeting Service is active" });
 });
 
-if (process.env.NODE_ENV !== "production") {
-  app.listen(PORT, () => {
-    console.log(`Meeting Service running on port ${PORT}`);
-  });
-}
+app.listen(PORT, () => {
+  console.log(`Meeting Service running on port ${PORT}`);
+});
 
 export default app;

@@ -47,11 +47,9 @@ app.get("/health", (req, res) => {
     res.json({ status: "ok", service: "chat" });
 });
 
-if (process.env.NODE_ENV !== "production") {
-    const PORT = process.env.PORT || 5005;
-    app.listen(PORT, () =>
-        console.log(`Chat Service running on port ${PORT}`)
-    );
-}
+const PORT = process.env.PORT || 5005;
+app.listen(PORT, () =>
+    console.log(`Chat Service running on port ${PORT}`)
+);
 
 export default app;

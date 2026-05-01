@@ -46,8 +46,6 @@ mongoose
   });
 
 const PORT = process.env.PORT;
-if (process.env.NODE_ENV !== "production") {
-  app.listen(PORT, () => console.log(`Transcription Service running on port ${PORT}`));
-}
+app.listen(PORT, () => console.log(`Transcription Service running on port ${PORT}`));
 
 export default app;

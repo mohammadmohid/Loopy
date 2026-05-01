@@ -36,8 +36,6 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 
 const PORT = process.env.PORT || 5001;
-if (process.env.NODE_ENV !== "production") {
-  app.listen(PORT, () => console.log(`Auth Service running on port ${PORT}`));
-}
+app.listen(PORT, () => console.log(`Auth Service running on port ${PORT}`));
 
 export default app;

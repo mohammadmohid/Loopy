@@ -24,8 +24,7 @@ const limiter = rateLimit({
 app.use(limiter as any);
 
 // Get allowed origins from env
-const allowedOrigins =
-  (process.env.ALLOWED_ORIGINS as string) && (process.env.ALLOWED_ORIGINS as string).split(",");
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") ?? [];
 
 app.use(
   cors({
@@ -33,11 +32,12 @@ app.use(
       // Allow requests with no origin
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.indexOf(origin) !== -1) {
+      if (allowedOrigins.includes(origin)) {
         // Origin is allowed
         return callback(null, true);
       } else {
         // Origin is blocked
+        console.warn(`[Gateway] Origin ${origin} not allowed by CORS`);
         return callback(new Error("Not allowed by CORS"));
       }
     },

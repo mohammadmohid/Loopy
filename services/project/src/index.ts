@@ -35,8 +35,6 @@ mongoose
 app.use("/api/projects", projectRoutes);
 
 const PORT = process.env.PORT || 5002;
-if (process.env.NODE_ENV !== "production") {
-  app.listen(PORT, () => console.log(`Project Service running on port ${PORT}`));
-}
+app.listen(PORT, () => console.log(`Project Service running on port ${PORT}`));
 
 export default app;

@@ -1,3 +1,2 @@
-// @ts-nocheck
-import app from "../services/transcription/dist/index.js";
+import app from "../services/transcription/src/index.js";
 export default app;

@@ -1,14 +1,11 @@
-import { connectDB as sharedConnectDB } from "@loopy/shared";
+import mongoose from "mongoose";
 
 export const connectDB = async () => {
   try {
-    await sharedConnectDB();
+    const conn = await mongoose.connect(process.env.MONGO_URI as string);
+    console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
-    if (process.env.NODE_ENV !== "production") {
-      process.exit(1);
-    }
-    throw error;
+    console.error("MongoDB Connection Error:", error);
+    process.exit(1);
   }
 };
-
-

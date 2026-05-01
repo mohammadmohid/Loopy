@@ -10,14 +10,14 @@ import {
   deleteWorkspaceProjects,
   getProjectById,
   generateScreenRecordingUploadUrl
-} from "../controllers/projectController.js";
-import { getDashboard } from "../controllers/dashboardController.js";
+} from "../controllers/projectController";
+import { getDashboard } from "../controllers/dashboardController";
 import {
   signUpload,
   createArtifact,
   getArtifacts,
   getArtifactById,
-} from "../controllers/artifactController.js";
+} from "../controllers/artifactController";
 import {
   getProjectTasks,
   createTask,
@@ -27,13 +27,13 @@ import {
   createMilestone,
   updateMilestone,
   deleteMilestone,
-} from "../controllers/taskController.js";
+} from "../controllers/taskController";
 import {
   createTeam,
   getTeams,
   updateTeam,
   deleteTeam,
-} from "../controllers/teamController.js";
+} from "../controllers/teamController";
 
 const router = express.Router();
 

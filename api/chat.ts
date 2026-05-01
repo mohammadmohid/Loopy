@@ -1,3 +1,2 @@
-// @ts-nocheck
-import app from "../services/chat/dist/index.js";
+import app from "../services/chat/src/index.js";
 export default app;

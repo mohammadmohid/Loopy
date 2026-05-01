@@ -1,4 +1,4 @@
-import { getRedisClient } from "../config/redis.js";
+import { getRedisClient } from "../config/redis";
 
 const UNREAD_PREFIX = "unread:";
 

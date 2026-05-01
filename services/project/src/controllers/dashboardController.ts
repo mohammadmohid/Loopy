@@ -1,12 +1,10 @@
-import express from "express";
+import { Response } from "express";
 import mongoose from "mongoose";
 import { AuthRequest } from "@loopy/shared";
-
-type Response = express.Response;
-import Project from "../models/Project.js";
-import Task from "../models/Task.js";
-import Milestone from "../models/Milestone.js";
-import Team from "../models/Team.js";
+import Project from "../models/Project";
+import Task from "../models/Task";
+import Milestone from "../models/Milestone";
+import Team from "../models/Team";
 import { buildScopedProjectQuery } from "../helpers.js";
 
 /**

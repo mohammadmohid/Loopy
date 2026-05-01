@@ -1,11 +1,10 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { connectDB } from "@loopy/shared";
 import mongoose from "mongoose";
+import cookieParser from "cookie-parser";
 import chatRoutes from "./routes/chatRoutes.js";
 import { getRedisClient } from "./config/redis.js";
-import cookieParser from "cookie-parser";
 
 dotenv.config();
 
@@ -33,24 +32,16 @@ app.use(
 app.use(cookieParser());
 app.use(express.json());
 
-// Middleware to ensure DB connection
-app.use(async (req, res, next) => {
-    try {
-        await connectDB(undefined, mongoose);
-        next();
-    } catch (error) {
-        console.error("Database connection failed", error);
-        res.status(500).json({ message: "Database connection failed" });
-    }
-});
-
-
+// Connect to MongoDB
+mongoose
+    .connect(process.env.MONGO_URI as string)
+    .then(() => console.log("ChatDB Connected"))
+    .catch((err) => console.error("ChatDB Connection Error:", err));
 
 // Initialise Upstash Redis client (HTTP-based, no persistent connection)
 const redisClient = getRedisClient();
 if (redisClient) console.log("Redis ready (Upstash REST)");
 else console.warn("Redis unavailable — running without cache");
-
 
 // Mount routes
 app.use("/api/chat", chatRoutes);

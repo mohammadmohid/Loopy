@@ -14,7 +14,7 @@ import {
     syncTeamChannel,
     deleteTeamChannel,
     syncWorkspaceMember,
-} from "../controllers/channelController.js";
+} from "../controllers/channelController";
 import {
     getMessages,
     getThreadMessages,
@@ -24,11 +24,11 @@ import {
     toggleReaction,
     searchMessages,
     signUpload,
-} from "../controllers/messageController.js";
+} from "../controllers/messageController";
 import {
     getUnread,
     markChannelRead,
-} from "../controllers/unreadController.js";
+} from "../controllers/unreadController";
 
 const router = express.Router();
 

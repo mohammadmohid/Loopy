@@ -1,3 +1,2 @@
-// @ts-nocheck
-import app from "../services/meeting/dist/index.js";
+import app from "../services/meeting/src/index.js";
 export default app;

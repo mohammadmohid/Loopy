@@ -1,8 +1,6 @@
-import express from "express";
+import { Response } from "express";
 import mongoose from "mongoose";
 import { AuthRequest } from "@loopy/shared";
-
-type Response = express.Response;
 import {
   notifyTeamCreated,
   notifyTeamUpdated,

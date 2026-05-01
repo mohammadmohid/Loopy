@@ -21,7 +21,7 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use(limiter);
+app.use(limiter as any);
 
 // Get allowed origins from env
 const allowedOrigins =

@@ -9,8 +9,8 @@ dotenv.config();
 
 const app = express();
 
-// Get allowed origins from env
-const allowedOrigins = (process.env.ALLOWED_ORIGINS as string) && (process.env.ALLOWED_ORIGINS as string).split(",");
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") ?? [];
+
 app.use(
   cors({
     origin: (origin, callback) => {

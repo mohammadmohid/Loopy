@@ -10,11 +10,7 @@ dotenv.config();
 
 const app = express();
 
-const allowedOrigins = [
-    "http://localhost:3000",
-    "https://loopy-mu.vercel.app",
-    "http://192.168.7.15:3000",
-];
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") ?? [];
 
 app.use(
     cors({

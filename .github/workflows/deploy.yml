@@ -70,7 +70,7 @@ jobs:
             # Set repository owner for docker-compose
             export GITHUB_REPOSITORY_OWNER=${{ github.repository_owner }}
             # Pull latest images and restart
-            docker-compose pull
-            docker-compose up -d
+            docker compose pull
+            docker compose up -d
             # Clean up old images
             docker image prune -f

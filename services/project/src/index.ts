@@ -3,7 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import cookieParser from "cookie-parser";
-import projectRoutes from "./routes/projectRoutes";
+import projectRoutes from "./routes/projectRoutes.js";
 
 dotenv.config();
 

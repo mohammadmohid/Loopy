@@ -1,16 +1,16 @@
 import { Response } from "express";
 import mongoose from "mongoose";
 import { AuthRequest, Channel } from "@loopy/shared";
-import Message from "../models/Message";
+import Message from "../models/Message.js";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getR2Client } from "../config/r2";
+import { getR2Client } from "../config/r2.js";
 import { v4 as uuidv4 } from "uuid";
 import "@loopy/shared";
-import { createAvatarResolver } from "../utils/avatar";
-import { pusher } from "../config/pusher";
-import { incrementUnreadBatch } from "../services/unreadService";
-import { cacheMessage, getCachedMessages, invalidateCache } from "../services/messageCacheService";
+import { createAvatarResolver } from "../utils/avatar.js";
+import { pusher } from "../config/pusher.js";
+import { incrementUnreadBatch } from "../services/unreadService.js";
+import { cacheMessage, getCachedMessages, invalidateCache } from "../services/messageCacheService.js";
 
 // @desc    Get paginated messages for a channel
 // @route   GET /api/chat/channels/:channelId/messages
@@ -397,11 +397,11 @@ export const toggleReaction = async (req: AuthRequest, res: Response) => {
         }
 
         const userId = new mongoose.Types.ObjectId(req.user!.id);
-        const existingReaction = message.reactions.find((r) => r.emoji === emoji);
+        const existingReaction = message.reactions.find((r: any) => r.emoji === emoji);
 
         if (existingReaction) {
             const userIndex = existingReaction.users.findIndex(
-                (u) => u.toString() === req.user!.id
+                (u: any) => u.toString() === req.user!.id
             );
 
             if (userIndex > -1) {
@@ -411,7 +411,7 @@ export const toggleReaction = async (req: AuthRequest, res: Response) => {
                 // If no users left, remove the reaction entirely
                 if (existingReaction.users.length === 0) {
                     message.reactions = message.reactions.filter(
-                        (r) => r.emoji !== emoji
+                        (r: any) => r.emoji !== emoji
                     );
                 }
             } else {

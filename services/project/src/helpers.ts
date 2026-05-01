@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { AuthRequest } from "@loopy/shared";
-import Team from "./models/Team";
+import Team from "./models/Team.js";
 
 /**
  * Resolves an avatar key to a full URL via the gateway proxy.

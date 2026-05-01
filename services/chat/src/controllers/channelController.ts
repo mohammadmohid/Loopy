@@ -1,11 +1,11 @@
 import { Response } from "express";
 import mongoose from "mongoose";
 import { AuthRequest, Channel } from "@loopy/shared";
-import Message from "../models/Message";
+import Message from "../models/Message.js";
 import "@loopy/shared"; // Load User model
-import { createAvatarResolver, populateChannelAvatars } from "../utils/avatar";
-import { pusher } from "../config/pusher";
-import { clearUnread } from "../services/unreadService";
+import { createAvatarResolver, populateChannelAvatars } from "../utils/avatar.js";
+import { pusher } from "../config/pusher.js";
+import { clearUnread } from "../services/unreadService.js";
 
 // @desc    Get all channels the authenticated user belongs to (scoped to workspace)
 // @route   GET /api/chat/channels

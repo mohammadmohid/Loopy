@@ -9,6 +9,8 @@ export interface IMeeting extends Document {
   status: "scheduled" | "active" | "ended";
   scheduledAt?: Date;
   recordingUrl?: string;
+  /** Host-provided agenda (plain text / markdown); shown in UI and injected into meeting minutes — not AI-generated. */
+  agenda?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -48,6 +50,7 @@ const meetingSchema = new Schema<IMeeting>(
     },
     scheduledAt: { type: Date },
     recordingUrl: { type: String },
+    agenda: { type: String, trim: true, maxlength: 8000 },
   },
   { timestamps: true }
 );

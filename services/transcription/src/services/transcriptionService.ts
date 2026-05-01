@@ -41,7 +41,8 @@ export async function transcribeFromUrl(recordingUrl: string): Promise<Transcrip
     const text = result.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? "";
 
     return {
-      raw: { text: text.trim() },
+      // `deepgram: true` lets the UI render flat text; words/diarization can be added later if needed.
+      raw: { text: text.trim(), deepgram: true },
     };
   } catch (error: any) {
     console.error("[Transcription] Deepgram Error:", error.message || error);

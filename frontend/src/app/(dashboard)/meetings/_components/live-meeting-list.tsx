@@ -4,12 +4,14 @@ import { Video, User, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
+import { resolveHostDisplayName, type PopulatedMeetingHost } from "@/lib/meeting-host";
 
 export interface LiveMeeting {
   _id: string;
   title: string;
   roomName: string;
-  hostName: string;
+  hostName?: string;
+  hostId?: string | PopulatedMeetingHost;
   createdAt: string;
   projectId: string;
 }
@@ -59,7 +61,7 @@ export function LiveMeetingList({ meetings, isLoading }: LiveMeetingListProps) {
             
             <div className="flex items-center gap-2 text-sm text-neutral-500 mb-6">
               <User className="w-4 h-4" />
-              <span>Hosted by {meeting.hostName}</span>
+              <span>Hosted by {resolveHostDisplayName(meeting)}</span>
             </div>
 
             <Button 

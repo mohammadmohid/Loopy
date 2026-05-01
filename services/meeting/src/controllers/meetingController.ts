@@ -1,11 +1,19 @@
 import Meeting from "../models/Meeting.js";
 import { generateJitsiToken } from "../utils/jitsiToken.js";
 import { Request, Response } from "express";
+import { User } from "@loopy/shared";
+
+void User;
+
+const HOST_POPULATE = {
+  path: "hostId" as const,
+  select: "profile.firstName profile.lastName email",
+};
 
 // @route   POST /api/meetings/
 export const createMeeting = async (req: Request, res: Response) => {
   try {
-    const { projectId, title, participants, scheduledAt } = req.body;
+    const { projectId, title, participants, scheduledAt, agenda } = req.body;
     const hostId = req.user.id;
 
     if (!projectId) {
@@ -23,13 +31,15 @@ export const createMeeting = async (req: Request, res: Response) => {
       hostId,
       status: scheduledAt ? "scheduled" : "active",
       ...(scheduledAt && { scheduledAt }),
+      ...(typeof agenda === "string" && agenda.trim() ? { agenda: agenda.trim() } : {}),
     });
 
     // Format: Loopy-<ProjectID>-<MeetingID>
     meeting.roomName = `Loopy-${projectId}-${meeting._id}`;
 
     await meeting.save();
-    res.status(201).json(meeting);
+    const created = await Meeting.findById(meeting._id).populate(HOST_POPULATE).lean();
+    res.status(201).json(created ?? meeting);
 
   } catch (error: any) {
     console.error("Create Meeting Error:", error);
@@ -52,7 +62,10 @@ export const getMyMeetings = async (req: Request, res: Response) => {
 
     const meetings = await Meeting.find({
       $or: [{ hostId: userId }, { participants: userId }],
-    }).sort({ createdAt: -1 });
+    })
+      .populate(HOST_POPULATE)
+      .sort({ createdAt: -1 })
+      .lean();
 
     res.json(meetings);
   } catch (error: any) {
@@ -74,7 +87,13 @@ export const endMeeting = async (req: Request, res: Response) => {
 
     if (!meeting) return res.status(404).json({ message: "Meeting not found" });
 
-    res.json(meeting);
+    const ended = await Meeting.findById(meeting._id).populate(HOST_POPULATE).lean();
+
+    console.log(
+      `[Meeting] Ended room=${roomName}. R2 + transcript run only after JaaS sends RECORDING_UPLOADED to POST /api/meetings/webhook (public HTTPS URL — not localhost unless tunneled).`
+    );
+
+    res.json(ended ?? meeting);
   } catch (error) {
     console.error("Error ending meeting:", error);
     res.status(500).json({ message: "Server Error" });
@@ -107,7 +126,7 @@ export const getMeetingById = async (req: Request, res: Response) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ message: "Invalid Meeting ID format" });
     }
-    const meeting = await Meeting.findById(id);
+    const meeting = await Meeting.findById(id).populate(HOST_POPULATE).lean();
 
     if (!meeting) {
       return res.status(404).json({ message: "Meeting not found in DB" });
@@ -123,7 +142,7 @@ export const getMeetingById = async (req: Request, res: Response) => {
 export const updateMeeting = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const allowedUpdates = ["status", "title", "participants", "scheduledAt", "recordingUrl"];
+    const allowedUpdates = ["status", "title", "participants", "scheduledAt", "recordingUrl", "agenda"];
     const updates: any = {};
     
     for (const key of Object.keys(req.body)) {
@@ -142,7 +161,8 @@ export const updateMeeting = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Meeting not found" });
     }
 
-    res.status(200).json(meeting);
+    const updated = await Meeting.findById(meeting._id).populate(HOST_POPULATE).lean();
+    res.status(200).json(updated ?? meeting);
   } catch (error) {
     console.error("Update Meeting Error:", error);
     res.status(500).json({ message: "Failed to update meeting" });

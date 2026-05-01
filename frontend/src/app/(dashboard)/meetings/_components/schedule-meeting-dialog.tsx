@@ -47,6 +47,7 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
   const [date, setDate] = useState(""); // YYYY-MM-DD
   const [time, setTime] = useState(""); // HH:mm
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [agenda, setAgenda] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
   // Dropdown State
@@ -90,6 +91,7 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
 
       // Reset form
       setTitle("");
+      setAgenda("");
       setDate("");
       setTime("");
       setSelectedUsers([]);
@@ -126,6 +128,7 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
             scheduledAt, // Pass scheduled date to backend!
             participants: selectedUsers, // Selected participants from UI
             hostName: hostName,
+            agenda: agenda.trim() || undefined,
           },
         }
       );
@@ -199,6 +202,17 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
               className="w-full p-2.5 border border-neutral-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary/20"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+
+          {/* Agenda */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-neutral-700">Agenda</label>
+            <textarea
+              placeholder="Topics to cover (shown on the meeting page and in minutes)"
+              className="w-full min-h-[88px] p-2.5 border border-neutral-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary/20 resize-y text-neutral-800 placeholder:text-neutral-400"
+              value={agenda}
+              onChange={(e) => setAgenda(e.target.value)}
             />
           </div>
 

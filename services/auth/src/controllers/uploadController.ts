@@ -40,7 +40,8 @@ export const signAvatarUpload = async (req: Request, res: Response) => {
 // @route   GET /api/auth/avatars/*
 export const getAvatar = async (req: Request, res: Response) => {
   try {
-    const key = req.params[0]; // Gets the wildcard match
+    const raw = (req.params as Record<string, string | string[] | undefined>).path;
+    const key = Array.isArray(raw) ? raw.join("/") : raw ? String(raw) : "";
     if (!key) {
       return res.status(400).json({ message: "Key is required" });
     }

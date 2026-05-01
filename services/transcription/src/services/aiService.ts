@@ -1,55 +1,110 @@
 import { OpenRouter } from "@openrouter/sdk";
 
-interface SummaryMetadata {
+export interface SummaryMetadata {
   title?: string;
   date?: string;
+  /** Host-provided agenda — reproduced verbatim in minutes; do not infer from transcript. */
+  agenda?: string;
+  /** Markdown lines for invited participants (e.g. "- Jane Doe") from the meeting record. */
+  participantLines?: string[];
+  hostDisplayName?: string;
 }
 
-const SUMMARY_MODEL = "google/gemma-3-27b-it:free";
-const CHAT_MODEL = "google/gemma-3-27b-it:free";
 const MIN_TRANSCRIPT_LENGTH = 50;
+
+/** Paid route avoids upstream 429s on `:free` models (e.g. gemma-3-27b-it:free). Override with OPENROUTER_SUMMARY_MODEL. */
+function summaryModel(): string {
+  return (
+    process.env.OPENROUTER_SUMMARY_MODEL?.trim() || "openai/gpt-4o-mini"
+  );
+}
+
+function chatModel(): string {
+  return process.env.OPENROUTER_CHAT_MODEL?.trim() || summaryModel();
+}
 
 let _client: OpenRouter | null = null;
 
+function getOpenRouterApiKey(): string {
+  const key =
+    process.env.OPENROUTER_API?.trim() || process.env.OPENROUTER_API_KEY?.trim();
+  if (!key) {
+    throw new Error("Set OPENROUTER_API (or OPENROUTER_API_KEY) in services/transcription/.env");
+  }
+  return key;
+}
+
 function getClient(): OpenRouter {
   if (!_client) {
-    const apiKey = process.env.OPENROUTER_API;
-    if (!apiKey) {
-      throw new Error("OPENROUTER_API key is not configured.");
-    }
-    _client = new OpenRouter({ apiKey });
+    _client = new OpenRouter({ apiKey: getOpenRouterApiKey() });
   }
   return _client;
+}
+
+function logOpenRouterFailure(label: string, error: unknown): void {
+  if (error instanceof Error) {
+    const anyErr = error as Error & { status?: number; body?: unknown };
+    console.error(
+      `[${label}] OpenRouter error:`,
+      error.message,
+      anyErr.status != null ? `status=${anyErr.status}` : "",
+      anyErr.body != null ? `body=${JSON.stringify(anyErr.body).slice(0, 500)}` : ""
+    );
+    if (error.cause) console.error(`[${label}] cause:`, error.cause);
+    return;
+  }
+  console.error(`[${label}] OpenRouter error:`, error);
 }
 
 function buildSummaryPrompt(fullText: string, meta: SummaryMetadata): string {
   const title = meta.title || "Untitled Meeting";
   const date = meta.date || new Date().toLocaleString();
+  const agendaText = (meta.agenda ?? "").trim();
+  const host = (meta.hostDisplayName ?? "").trim();
+  const participantBlock =
+    meta.participantLines && meta.participantLines.length > 0
+      ? meta.participantLines.join("\n")
+      : "None listed on the meeting invite.";
 
-  return `You are an expert professional meeting secretary. 
-Generate formal Meeting Minutes based on the transcript below.
+  const agendaSection =
+    agendaText.length > 0
+      ? agendaText
+      : "No agenda was provided before this meeting.";
 
-Metadata provided:
+  return `You are an expert professional meeting secretary.
+Generate formal Meeting Minutes from the transcript below.
+
+Fixed metadata (use exactly as given — do NOT invent or change invited participants or agenda topics):
 - Meeting Title: ${title}
 - Date: ${date}
+- Host: ${host || "Unknown"}
+- Invited participants (list under "## Participants" exactly as below, one per line):
+${participantBlock}
 
-Please strictly format the output using the following Markdown structure:
+- Planned agenda (reproduce under "## Agenda" verbatim; do NOT infer agenda from the transcript; if the text is multi-line, preserve structure):
+${agendaSection}
 
- ${title}
+Output Markdown with this structure:
 
-Date and Time: ${date}
+# ${title}
 
-Participants: - [List participants identified from speech or context. If unknown, write "Unspecified"]
+**Date and time:** ${date}
 
- Agenda
-- [Infer the main agenda items discussed]
+## Participants
+${participantBlock}
+${host ? `\n**Host:** ${host}` : ""}
 
- Meeting Minutes / Key Takeaways
-- [Bulleted list of key discussion points and decisions]
+## Agenda
+(Reproduce the planned agenda text from the fixed metadata above verbatim. If it says no agenda was provided, output that single line only.)
 
- Action Items
-- [ ] [Task 1] (Assignee)
-- [ ] [Task 2] (Assignee)
+## Overview
+(2–4 sentences summarizing what the meeting covered, based only on the transcript.)
+
+## Meeting minutes / key takeaways
+(Bulleted list from the transcript.)
+
+## Action items
+- [ ] Task (assignee when clear from transcript)
 
 TRANSCRIPT:
 ${fullText}`;
@@ -80,15 +135,17 @@ export async function generateSummary(
 
     const result = await client.chat.send({
       chatRequest: {
-        model: SUMMARY_MODEL,
+        model: summaryModel(),
         messages: [{ role: "user", content: buildSummaryPrompt(fullText, meta) }],
       },
     });
 
     return result.choices?.[0]?.message?.content || "Summary generation returned empty.";
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("[Summary] OpenRouter API Error:", message);
+    logOpenRouterFailure("Summary", error);
+    console.error(
+      "[Summary] If you see 429 / rate limits, set OPENROUTER_SUMMARY_MODEL to another model (https://openrouter.ai/models) or wait and retry."
+    );
     return "Summary generation failed. Please try again.";
   }
 }
@@ -102,15 +159,15 @@ export async function answerQuestion(
 
     const result = await client.chat.send({
       chatRequest: {
-        model: CHAT_MODEL,
+        model: chatModel(),
         messages: [{ role: "user", content: buildQuestionPrompt(transcript, question) }],
       },
     });
 
     return result.choices?.[0]?.message?.content?.trim() || "No answer generated.";
   } catch (error: unknown) {
+    logOpenRouterFailure("AskBot", error);
     const message = error instanceof Error ? error.message : String(error);
-    console.error("[AskBot] OpenRouter API Error:", message);
     throw new Error(`Failed to answer question: ${message}`);
   }
 }

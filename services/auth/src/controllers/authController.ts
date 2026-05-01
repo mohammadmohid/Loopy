@@ -1,8 +1,7 @@
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
-import { User, Workspace } from "@loopy/shared";
-import { TokenBlocklist } from "@loopy/shared";
+import { User, Workspace, TokenBlocklist } from "@loopy/shared";
 import OTPToken from "../models/OTPToken.js";
 import { sendOTPEmail } from "../config/mailer.js";
 

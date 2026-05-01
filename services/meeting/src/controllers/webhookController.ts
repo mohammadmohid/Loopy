@@ -1,9 +1,7 @@
-import dotenv from "dotenv";
-dotenv.config();
-
 import { Upload } from "@aws-sdk/lib-storage";
 import axios from "axios";
 import Meeting from "../models/Meeting.js";
+import JaasWebhookReceipt from "../models/JaasWebhookReceipt.js";
 import { Request, Response } from "express";
 import crypto from "crypto";
 import { getR2Client } from "@loopy/shared";
@@ -12,51 +10,72 @@ const r2 = getR2Client();
 
 const sanitize = (str: string) => str.replace(/[^a-zA-Z0-9-_]/g, "_");
 
+type RequestWithRaw = Request & { rawBody?: Buffer };
+
+/** JaaS signs `timestamp + "." + raw JSON body` (8x8 docs). v1 is base64 and may contain "=" — only split on first "=" per segment. */
 const verifyJaasSignature = (req: Request): boolean => {
   try {
-    const signatureHeader = req.headers['x-jaas-signature'] as string;
+    const signatureHeader = req.headers["x-jaas-signature"] as string;
     if (!signatureHeader) {
       console.log("Missing X-Jaas-Signature header");
       return false;
     }
 
-    const elements = signatureHeader.split(',');
-    let timestamp = '';
-    let v1Signature = '';
-
+    let timestamp = "";
+    let v1Signature = "";
+    const elements = signatureHeader.split(",");
     for (const el of elements) {
-      const [prefix, value] = el.split('=');
-      if (prefix === 't') timestamp = value;
-      if (prefix === 'v1') v1Signature = value;
+      const idx = el.indexOf("=");
+      if (idx === -1) continue;
+      const prefix = el.slice(0, idx).trim();
+      const value = el.slice(idx + 1);
+      if (prefix === "t") timestamp = value;
+      if (prefix === "v1") v1Signature = value;
     }
 
     if (!timestamp || !v1Signature) return false;
 
-    const payloadString = JSON.stringify(req.body);
+    const raw = (req as RequestWithRaw).rawBody;
+    const payloadString =
+      raw !== undefined && raw.length > 0
+        ? raw.toString("utf8")
+        : JSON.stringify(req.body);
     const signedPayload = `${timestamp}.${payloadString}`;
 
-    const webhookSecret = process.env.JAAS_WEBHOOK_SECRET;
+    const webhookSecret = process.env.JAAS_WEBHOOK_SECRET?.trim();
     if (!webhookSecret) {
       console.error("JAAS_WEBHOOK_SECRET not defined in enviroment");
       return false;
     }
 
     const expectedSignature = crypto
-      .createHmac('sha256', webhookSecret)
-      .update(signedPayload, 'utf8')
-      .digest('base64');
+      .createHmac("sha256", webhookSecret)
+      .update(Buffer.from(signedPayload, "utf8"))
+      .digest("base64");
 
-    return v1Signature === expectedSignature;
+    if (expectedSignature.length !== v1Signature.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(v1Signature));
   } catch (err) {
     console.error("Webhook Signature Verification Error:", err);
     return false;
   }
 };
 
+/** Transcription app mounts POST /api/artifacts/transcribe. Env may be service root or .../api/artifacts. */
+function resolveTranscribeUrl(): string {
+  const raw = (process.env.TRANSCRIPTION_SERVICE_URL || "http://localhost:5005")
+    .trim()
+    .replace(/\/$/, "");
+  if (raw.endsWith("/api/artifacts")) {
+    return `${raw}/transcribe`;
+  }
+  return `${raw}/api/artifacts/transcribe`;
+}
+
 const triggerTranscription = async (meeting: any, publicR2Url: string, fileName: string) => {
   try {
-    const transcriptionServiceUrl = `${process.env.TRANSCRIPTION_SERVICE_URL}/transcribe`;
-    console.log(`Triggering Transcription`);
+    const transcriptionServiceUrl = resolveTranscribeUrl();
+    console.log(`[Webhook] Triggering transcription POST ${transcriptionServiceUrl}`);
 
     await axios.post(transcriptionServiceUrl, {
       meetingId: meeting._id,
@@ -174,26 +193,79 @@ const processBackgroundUpload = async (event: any) => {
 };
 
 export const handleJaaSWebhook = async (req: Request, res: Response) => {
+  const event = req.body as {
+    eventType?: string;
+    fqn?: string;
+    idempotencyKey?: string;
+  } | null;
+  const idempotencyKey =
+    typeof event?.idempotencyKey === "string" && event.idempotencyKey.length > 0
+      ? event.idempotencyKey
+      : undefined;
+
+  console.log(
+    `[JaaS webhook] hit eventType=${event?.eventType ?? "(missing)"} fqn=${(event as any)?.fqn ?? ""} idempotencyKey=${idempotencyKey ?? ""}`
+  );
+
   // Validate signature if secret is provided in environment
   if (process.env.JAAS_WEBHOOK_SECRET) {
     const isValid = verifyJaasSignature(req);
     if (!isValid) {
+      // JaaS has (had) a known edge case: retries may send a slightly different body while
+      // keeping the same X-Jaas-Signature, so HMAC never matches on the retry. If we already
+      // accepted this idempotencyKey, ACK so JaaS stops retrying (8x8/jaas_demo#8).
+      if (idempotencyKey) {
+        const already = await JaasWebhookReceipt.findOne({ idempotencyKey }).lean();
+        if (already) {
+          console.warn(
+            "[JaaS webhook] Signature mismatch but idempotencyKey already processed — ACK duplicate (JaaS retry)"
+          );
+          return res.status(200).send("OK");
+        }
+      }
+      console.error("[JaaS webhook] Signature verification failed (check JAAS_WEBHOOK_SECRET and raw body)");
       return res.status(401).json({ message: "Invalid Webhook Signature" });
+    }
+  } else {
+    console.warn("[JaaS webhook] JAAS_WEBHOOK_SECRET not set — skipping signature check (dev only)");
+  }
+
+  // Dedupe: same idempotencyKey must not run R2/transcription twice
+  if (idempotencyKey) {
+    try {
+      await JaasWebhookReceipt.create({
+        idempotencyKey,
+        eventType: event?.eventType,
+      });
+    } catch (e: any) {
+      if (e?.code === 11000) {
+        console.log(
+          `[JaaS webhook] Duplicate idempotencyKey=${idempotencyKey}, skipping background work`
+        );
+        return res.status(200).send("OK");
+      }
+      throw e;
     }
   }
 
-  // Reply first so JaaS knows its is received
+  // Reply so JaaS knows it is received (after we claim idempotency)
   res.status(200).send("OK");
 
   try {
-    const event = req.body;
     if (!event || !event.eventType) return;
 
-    if (event.eventType === "RECORDING_UPLOADED") {
-      console.log(`Processing Background Upload: ${event.eventType}`);
-      processBackgroundUpload(event).catch(err => console.error("Unhandled Background Error:", err));
+    if (
+      event.eventType === "RECORDING_UPLOADED" ||
+      event.eventType === "CERTIFIED_REC_UPLOADED"
+    ) {
+      console.log(`[JaaS webhook] Processing upload: ${event.eventType}`);
+      processBackgroundUpload(event).catch((err) =>
+        console.error("[JaaS webhook] Background upload error:", err)
+      );
+    } else {
+      console.log(`[JaaS webhook] Ignoring event type: ${event.eventType}`);
     }
   } catch (error: any) {
-    console.error(" Webhook Handler Error:", error.message);
+    console.error("[JaaS webhook] Handler error:", error.message);
   }
 };

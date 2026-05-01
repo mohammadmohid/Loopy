@@ -21,6 +21,12 @@ interface TranscriptPlayerProps {
 }
 
 export function TranscriptPlayer({ transcript }: TranscriptPlayerProps) {
+  const plainText =
+    typeof transcript?.text === "string" ? transcript.text.trim() : "";
+  const hasWords = Array.isArray(transcript?.words) && transcript.words.length > 0;
+  /** Deepgram path in UI, or any flat `text` without word-level diarization */
+  const showFlatText =
+    Boolean(transcript?.deepgram) || (plainText.length > 0 && !hasWords);
 
   // 1. Grouping Algorithm (Kept this so it looks structured)
   const segments = useMemo(() => {
@@ -50,8 +56,8 @@ export function TranscriptPlayer({ transcript }: TranscriptPlayerProps) {
       {/* Transcript Scroll Area */}
       <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
         <div className="max-w-3xl mx-auto space-y-8 pb-20">
-          {/* Deepgram Flat Text Support */}
-          {transcript?.deepgram ? (
+          {/* Flat transcript (Deepgram or plain `text` from API) */}
+          {showFlatText ? (
             <div className="flex gap-6 group">
               {/* Generic Speaker Avatar */}
               <div className="w-24 flex-shrink-0 pt-1">
@@ -59,15 +65,19 @@ export function TranscriptPlayer({ transcript }: TranscriptPlayerProps) {
                   SP
                 </div>
                 <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider overflow-hidden text-ellipsis">
-                  SPEAKER
+                  TRANSCRIPT
                 </div>
               </div>
               {/* Text Content */}
               <div className="flex-1 text-base leading-relaxed text-neutral-800 whitespace-pre-wrap">
-                {transcript.text}
+                {plainText || (
+                  <span className="text-neutral-400 italic text-sm">
+                    No spoken text was detected in this recording.
+                  </span>
+                )}
               </div>
             </div>
-          ) : (
+          ) : hasWords ? (
             /* ElevenLabs / Word-Array Support */
             segments.map((segment, sIndex) => (
               <div key={sIndex} className="flex gap-6 group">
@@ -107,6 +117,10 @@ export function TranscriptPlayer({ transcript }: TranscriptPlayerProps) {
                 </div>
               </div>
             ))
+          ) : (
+            <p className="text-center text-sm text-neutral-400 py-12">
+              No transcript content available yet.
+            </p>
           )}
         </div>
       </div>

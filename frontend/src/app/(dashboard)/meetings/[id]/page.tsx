@@ -5,6 +5,7 @@ import Markdown from "react-markdown";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiRequest } from "@/lib/api";
+import { resolveHostDisplayName, type PopulatedMeetingHost } from "@/lib/meeting-host";
 import { TranscriptPlayer } from "../_components/transcript-player";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,21 +31,45 @@ interface Meeting {
   title: string;
   projectId: string;
   roomName: string;
-  status: "active" | "ended";
+  status: "active" | "ended" | "scheduled";
   recordingUrl?: string;
   createdAt: string;
   hostName?: string;
+  hostId?: string | PopulatedMeetingHost;
   participants?: string[];
+  /** Host-provided agenda (not AI-generated). */
+  agenda?: string;
+}
+
+function agendaLinesFromMeeting(agenda: string | undefined): string[] {
+  if (!agenda?.trim()) return [];
+  return agenda
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
+/** Same `## Overview` block as in the Minutes markdown (`artifact.summary`). */
+function overviewFromMinutesMarkdown(markdown: string | undefined): string {
+  if (!markdown?.trim()) return "";
+  const re = /(?:^|\n)##\s*Overview\s*\n([\s\S]*?)(?=\n##\s|$)/i;
+  const m = markdown.match(re);
+  return (m?.[1] ?? "").trim();
 }
 
 interface ArtifactDetail {
   _id: string;
   filename: string;
-  transcriptionStatus: "pending" | "processing" | "COMPLETED" | "FAILED";
+  /** API uses shared enum: PENDING | PROCESSING | COMPLETED | FAILED */
+  transcriptionStatus: string;
   transcriptJson?: any;
   summary?: string;
   createdAt: string;
   error?: string;
+}
+
+function artifactStatus(a: ArtifactDetail | null): string {
+  return (a?.transcriptionStatus ?? "").toUpperCase();
 }
 
 interface User {
@@ -128,9 +153,10 @@ export default function MeetingDetailPage() {
 
   // 2. Poll for updates (Handles both Transcription and Summary)
   useEffect(() => {
+    const st = artifactStatus(artifact);
     if (
-      artifact?.transcriptionStatus === "processing" ||
-      artifact?.transcriptionStatus === "pending" ||
+      st === "PROCESSING" ||
+      st === "PENDING" ||
       isPollingSummary // 👈 Poll if we are explicitly waiting for summary
     ) {
       const interval = setInterval(async () => {
@@ -142,8 +168,9 @@ export default function MeetingDetailPage() {
 
           setArtifact(updated);
 
+          const ust = artifactStatus(updated);
           // Stop polling if Transcription is done (and we aren't waiting for summary)
-          if (!isPollingSummary && (updated.transcriptionStatus === "COMPLETED" || updated.transcriptionStatus === "FAILED")) {
+          if (!isPollingSummary && (ust === "COMPLETED" || ust === "FAILED")) {
             clearInterval(interval);
           }
 
@@ -161,8 +188,8 @@ export default function MeetingDetailPage() {
     }
   }, [artifact, id, isPollingSummary]);
 
-  // 3. Manual Trigger (Full Transcription)
-  const handleGenerateSummary = async () => {
+  // 3. Manual trigger: full pipeline (Deepgram + summary). Pass forceRetry after a completed run to re-process from the recording.
+  const handleGenerateSummary = async (forceRetry = false) => {
     if (!meeting || !meeting.recordingUrl) return;
     try {
       setGenerating(true);
@@ -172,17 +199,21 @@ export default function MeetingDetailPage() {
           meetingId: meeting._id,
           projectId: meeting.projectId,
           recordingUrl: meeting.recordingUrl,
-          filename: meeting.title
-        }
+          filename: meeting.title,
+          ...(forceRetry ? { forceRetry: true } : {}),
+        },
       });
 
-      setArtifact({
-        _id: "temp",
-        transcriptionStatus: "processing",
+      setArtifact((prev) => ({
+        ...(prev ?? ({} as ArtifactDetail)),
+        _id: prev?._id ?? "temp",
+        transcriptionStatus: "PROCESSING",
         filename: meeting.title,
-        createdAt: new Date().toISOString()
-      } as ArtifactDetail);
-
+        createdAt: prev?.createdAt ?? new Date().toISOString(),
+        ...(forceRetry
+          ? { summary: undefined, transcriptJson: undefined, error: undefined }
+          : {}),
+      }));
     } catch (err) {
       console.error("Failed to start generation", err);
       alert("Failed to start transcription.");
@@ -368,6 +399,13 @@ export default function MeetingDetailPage() {
     artifact?.summary === "Transcript too short to summarize." ||
     artifact?.summary === "System Error: API Key missing.";
 
+  const hostProvidedAgenda = agendaLinesFromMeeting(meeting.agenda);
+  const hostDisplayName = resolveHostDisplayName(meeting, users);
+
+  const overviewDisplay =
+    (parsedSummary.overview || "").trim() ||
+    overviewFromMinutesMarkdown(artifact?.summary);
+
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-white -mx-6 -mt-6">
 
@@ -399,7 +437,7 @@ export default function MeetingDetailPage() {
               <div>
                 <h1 className="text-2xl font-bold text-neutral-900">{meeting.title}</h1>
                 <div className="flex items-center gap-4 text-sm text-neutral-500 mt-2">
-                  <span className="flex items-center gap-1.5"><Users className="w-4 h-4" /> Host: {meeting.hostName || "Unknown"}</span>
+                  <span className="flex items-center gap-1.5"><Users className="w-4 h-4" /> Host: {hostDisplayName}</span>
                   <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" />
                     {new Date(meeting.createdAt).toLocaleDateString(undefined, {
                       weekday: "short", year: "numeric", month: "short", day: "numeric",
@@ -428,23 +466,39 @@ export default function MeetingDetailPage() {
 
             <div className="space-y-4">
               <h3 className="font-semibold text-sm text-neutral-900">Overview</h3>
-              <p className="text-sm leading-relaxed text-neutral-600">
-                {parsedSummary.overview || "No overview available for this meeting yet. Try generating AI Minutes."}
-              </p>
+              {overviewDisplay ? (
+                <div className="text-sm leading-relaxed text-neutral-600 prose prose-sm prose-neutral max-w-none">
+                  <Markdown
+                    components={{
+                      p: ({ node, ...props }) => <p className="mb-3 last:mb-0" {...props} />,
+                      ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-3 space-y-1" {...props} />,
+                      strong: ({ node, ...props }) => <strong className="font-semibold text-neutral-800" {...props} />,
+                    }}
+                  >
+                    {overviewDisplay}
+                  </Markdown>
+                </div>
+              ) : (
+                <p className="text-sm leading-relaxed text-neutral-600">
+                  No overview available for this meeting yet. Try generating AI Minutes.
+                </p>
+              )}
             </div>
 
             <div className="space-y-4">
               <h3 className="font-semibold text-sm text-neutral-900 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-primary block"></span> Agenda
               </h3>
-              {parsedSummary.agenda && parsedSummary.agenda.length > 0 ? (
+              {hostProvidedAgenda.length > 0 ? (
                 <ul className="list-disc pl-5 text-sm text-neutral-600 leading-relaxed space-y-1">
-                  {parsedSummary.agenda.map((item: string, i: number) => (
+                  {hostProvidedAgenda.map((item: string, i: number) => (
                     <li key={i}>{item}</li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-neutral-500 italic">No agenda detected.</p>
+                <p className="text-sm text-neutral-500 italic">
+                  No agenda was added when this meeting was scheduled or hosted.
+                </p>
               )}
             </div>
           </div>
@@ -474,34 +528,80 @@ export default function MeetingDetailPage() {
           {/* Tabs Content */}
           <div className="flex-1 overflow-y-auto w-full px-2 py-4">
 
-            {activeTab === "Transcript" && (
-              <div className="h-full">
-                {!artifact || artifact.transcriptionStatus !== "COMPLETED" ? (
-                  <div className="h-full flex flex-col items-center justify-center bg-neutral-50 rounded-xl border border-dashed border-neutral-200 text-neutral-400 p-8 text-center space-y-4">
-                    {artifact?.transcriptionStatus === "processing" ? (
-                      <>
-                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                        <p className="text-neutral-900 font-medium">Generating Transcript...</p>
-                      </>
-                    ) : (
-                      <>
-                        <AlignLeft className="h-10 w-10 mb-2 text-neutral-300" />
-                        <p className="font-semibold text-neutral-700">Transcript Not Available</p>
-                        <Button onClick={handleGenerateSummary} disabled={generating} size="sm" className="mt-2">
-                          {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Bot className="w-4 h-4 mr-2" />}
-                          Generate Now
+            {activeTab === "Transcript" && (() => {
+              const st = artifactStatus(artifact);
+              const isComplete = st === "COMPLETED";
+              const isProcessing = st === "PROCESSING" || st === "PENDING";
+              const isFailed = st === "FAILED";
+              const hasRecording = Boolean(meeting.recordingUrl);
+
+              return (
+                <div className="h-full min-h-[320px] flex flex-col">
+                  {isProcessing ? (
+                    <div className="flex-1 flex flex-col items-center justify-center bg-neutral-50 rounded-xl border border-dashed border-neutral-200 p-8 text-center space-y-4">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                      <p className="text-neutral-900 font-medium">Generating transcript & minutes…</p>
+                      <p className="text-xs text-neutral-500 max-w-xs">
+                        This can take a few minutes. You can switch tabs; this page will refresh when finished.
+                      </p>
+                    </div>
+                  ) : !hasRecording ? (
+                    <div className="flex-1 flex flex-col items-center justify-center rounded-xl border border-dashed border-neutral-200 p-8 text-center text-neutral-500 text-sm">
+                      No recording is linked to this meeting, so transcription cannot run.
+                    </div>
+                  ) : isFailed ? (
+                    <div className="flex-1 flex flex-col items-center justify-center bg-neutral-50 rounded-xl border border-dashed border-red-200 p-8 text-center space-y-3">
+                      <FileWarning className="h-10 w-10 text-red-500" />
+                      <p className="font-semibold text-neutral-800">Transcription failed</p>
+                      {artifact?.error ? (
+                        <p className="text-xs text-red-600 max-w-sm break-words">{artifact.error}</p>
+                      ) : null}
+                      <Button onClick={() => void handleGenerateSummary(false)} disabled={generating} size="sm">
+                        {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCcw className="w-4 h-4 mr-2" />}
+                        Retry transcription
+                      </Button>
+                    </div>
+                  ) : !isComplete ? (
+                    <div className="flex-1 flex flex-col items-center justify-center bg-neutral-50 rounded-xl border border-dashed border-neutral-200 text-neutral-400 p-8 text-center space-y-4">
+                      <AlignLeft className="h-10 w-10 mb-2 text-neutral-300" />
+                      <p className="font-semibold text-neutral-700">Transcript not started yet</p>
+                      <p className="text-xs text-neutral-500 max-w-xs">
+                        Run Deepgram on your recording, then generate meeting minutes with AI.
+                      </p>
+                      <Button onClick={() => void handleGenerateSummary(false)} disabled={generating} size="sm" className="mt-2">
+                        {generating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Bot className="w-4 h-4 mr-2" />}
+                        Generate transcript
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex-1 min-h-0">
+                        <TranscriptPlayer
+                          transcript={artifact?.transcriptJson ?? {}}
+                          audioUrl={meeting.recordingUrl || ""}
+                        />
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2 px-2 py-3 border-t border-neutral-100 shrink-0 bg-white">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void handleGenerateSummary(true)}
+                          disabled={generating}
+                        >
+                          {generating ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <RefreshCcw className="w-4 h-4 mr-2" />
+                          )}
+                          Regenerate from recording
                         </Button>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <TranscriptPlayer
-                    transcript={artifact.transcriptJson}
-                    audioUrl={meeting.recordingUrl || ""}
-                  />
-                )}
-              </div>
-            )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             {activeTab === "Participants" && (
               <div className="p-4 space-y-4">

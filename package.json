@@ -2,6 +2,9 @@
   "name": "loopy",
   "private": true,
   "packageManager": "pnpm@10.15.1",
+  "scripts": {
+    "postinstall": "pnpm --filter @loopy/shared build"
+  },
   "workspaces": [
     "services/*",
     "frontend"

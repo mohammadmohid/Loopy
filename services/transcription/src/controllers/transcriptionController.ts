@@ -3,11 +3,18 @@ import { Artifact, TranscriptionStatus } from "@loopy/shared";
 import { findByMeetingId } from "../repositories/artifactRepository.js";
 import { transcribeFromUrl } from "../services/transcriptionService.js";
 import { generateSummary, answerQuestion } from "../services/aiService.js";
+import { loadMeetingSummaryContext } from "../lib/meetingSummaryContext.js";
 
 // Trigger Transcription
 export const startTranscription = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { meetingId, projectId, recordingUrl, filename } = req.body;
+    const { meetingId, projectId, recordingUrl, filename, forceRetry } = req.body as {
+      meetingId?: string;
+      projectId?: string;
+      recordingUrl?: string;
+      filename?: string;
+      forceRetry?: boolean;
+    };
 
     if (!meetingId || !projectId || !recordingUrl) {
       res.status(400).json({ message: "meetingId, projectId, and recordingUrl are required." });
@@ -18,12 +25,17 @@ export const startTranscription = async (req: Request, res: Response): Promise<v
     let artifact = await findByMeetingId(meetingId);
 
     if (artifact) {
-      if (artifact.transcriptionStatus === TranscriptionStatus.COMPLETED) {
+      if (artifact.transcriptionStatus === TranscriptionStatus.COMPLETED && !forceRetry) {
         res.status(200).json({ message: "Already completed", artifact });
         return;
       }
-      // Retry: reset status for failed/pending
+      // Retry / force re-run: reset status (and clear stale output when forcing from COMPLETED)
       artifact.transcriptionStatus = TranscriptionStatus.PROCESSING;
+      if (forceRetry) {
+        artifact.transcriptJson = undefined;
+        artifact.summary = undefined;
+        artifact.error = undefined;
+      }
       await artifact.save();
     } else {
       artifact = await Artifact.create({
@@ -43,13 +55,21 @@ export const startTranscription = async (req: Request, res: Response): Promise<v
       try {
         const transcript = await transcribeFromUrl(recordingUrl);
 
-        const summaryText = await generateSummary(transcript.raw.text, {
-          title: filename,
+        // Persist transcript before OpenRouter so a flaky free-tier summary does not lose Deepgram output.
+        artifact!.transcriptJson = transcript.raw;
+        artifact!.transcriptionStatus = TranscriptionStatus.PROCESSING;
+        await artifact!.save();
+
+        const ctx = await loadMeetingSummaryContext(String(meetingId));
+        const summaryText = await generateSummary(String(transcript.raw?.text ?? ""), {
+          title: ctx.meetingTitle || String(filename || "Meeting"),
           date: new Date().toLocaleString(),
+          agenda: ctx.agenda,
+          participantLines: ctx.participantLines,
+          hostDisplayName: ctx.hostDisplayName,
         });
 
         artifact!.transcriptionStatus = TranscriptionStatus.COMPLETED;
-        artifact!.transcriptJson = transcript.raw;
         artifact!.summary = summaryText;
         await artifact!.save();
 
@@ -110,7 +130,14 @@ export const triggerSummary = async (req: Request, res: Response): Promise<void>
     (async () => {
       try {
         const fullText = artifact.transcriptJson!.text as string;
-        const summaryText = await generateSummary(fullText, { title: meetingTitle, date });
+        const ctx = await loadMeetingSummaryContext(String(meetingId));
+        const summaryText = await generateSummary(fullText, {
+          title: meetingTitle || ctx.meetingTitle,
+          date: date || new Date().toISOString(),
+          agenda: ctx.agenda,
+          participantLines: ctx.participantLines,
+          hostDisplayName: ctx.hostDisplayName,
+        });
 
         artifact.summary = summaryText;
         await artifact.save();

@@ -1,5 +1,10 @@
+import path from "path";
+import { fileURLToPath } from "url";
 import dotenv from "dotenv";
-dotenv.config();
+
+dotenv.config({
+  path: path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".env"),
+});
 
 import express from "express";
 import cors from "cors";
@@ -11,13 +16,19 @@ const app = express();
 
 app.use(helmet());
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") ?? [];
+const allowedOrigins =
+  process.env.ALLOWED_ORIGINS?.split(",")
+    .map((o) => o.trim())
+    .filter(Boolean) ?? [];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (server-to-server, curl, etc.)
-      if (!origin || allowedOrigins.includes(origin)) {
+      // No Origin: same-origin / server-to-server (gateway → service)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      // Local dev: empty allowlist would reject the Next app (e.g. http://localhost:3000)
+      if (allowedOrigins.length === 0 && process.env.NODE_ENV !== "production") {
         return callback(null, true);
       }
       return callback(new Error("Not allowed by CORS"));
@@ -45,7 +56,10 @@ mongoose
     process.exit(1);
   });
 
-const PORT = process.env.PORT;
+const rawPort =
+  process.env.TRANSCRIPTION_PORT ?? process.env.PORT ?? "5005";
+const PORT =
+  Number(String(rawPort).replace(/^["']|["']$/g, "")) || 5005;
 if (process.env.NODE_ENV !== "production") {
   app.listen(PORT, () => console.log(`Transcription Service running on port ${PORT}`));
 }

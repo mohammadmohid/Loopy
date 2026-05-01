@@ -13,13 +13,20 @@ const PORT = process.env.PORT || 8000;
 app.use(helmet());
 app.set("trust proxy", 1);
 
-// 100 requests per 15 minutes per IP
+const isProduction = process.env.NODE_ENV === "production";
+const rateLimitDisabled =
+  !isProduction ||
+  process.env.DISABLE_GATEWAY_RATE_LIMIT === "true" ||
+  process.env.DISABLE_GATEWAY_RATE_LIMIT === "1";
+
+// Production: protect the gateway. Local dev: same IP (localhost) + SWR/polling burns 100/15min fast → 429 on meetings/chat.
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_MAX) || 100,
   message: "Too many requests from this IP, please try again after 15 minutes",
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => rateLimitDisabled,
 });
 app.use(limiter as any);
 

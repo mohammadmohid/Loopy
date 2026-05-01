@@ -1,6 +1,15 @@
 import axios from "axios";
 
-const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL;
+/** Read at call time (not module load) so `./env.js` runs before routes import this file. */
+function getChatServiceBase(): string | null {
+  const raw = process.env.CHAT_SERVICE_URL?.trim();
+  if (raw) return raw.replace(/\/$/, "");
+  if (process.env.NODE_ENV === "production") {
+    console.warn("[projectEvents] CHAT_SERVICE_URL is not set; skipping chat webhooks");
+    return null;
+  }
+  return "http://localhost:5004";
+}
 
 const retryAxios = async (fn: () => Promise<any>, retries = 3, delay = 2000) => {
   for (let i = 0; i < retries; i++) {
@@ -20,9 +29,11 @@ export const notifyProjectCreated = async (data: {
   createdBy: string;
   workspaceId: string;
 }): Promise<void> => {
+  const base = getChatServiceBase();
+  if (!base) return;
   try {
     await retryAxios(() =>
-      axios.post(`${CHAT_SERVICE_URL}/api/chat/channels/project-webhook`, data)
+      axios.post(`${base}/api/chat/channels/project-webhook`, data)
     );
     console.log(`[Event] Created chat channel for project ${data.projectId}`);
   } catch (error) {
@@ -31,9 +42,11 @@ export const notifyProjectCreated = async (data: {
 };
 
 export const notifyProjectDeleted = async (projectId: string): Promise<void> => {
+  const base = getChatServiceBase();
+  if (!base) return;
   try {
     await retryAxios(() =>
-      axios.delete(`${CHAT_SERVICE_URL}/api/chat/channels/project-webhook/${projectId}`)
+      axios.delete(`${base}/api/chat/channels/project-webhook/${projectId}`)
     );
     console.log(`[Event] Deleted chat channel for project ${projectId}`);
   } catch (error) {
@@ -48,9 +61,11 @@ export const notifyTeamCreated = async (data: {
   leaderId: string;
   workspaceId: string;
 }): Promise<void> => {
+  const base = getChatServiceBase();
+  if (!base) return;
   try {
     await retryAxios(() =>
-      axios.post(`${CHAT_SERVICE_URL}/api/chat/channels/team-webhook`, data)
+      axios.post(`${base}/api/chat/channels/team-webhook`, data)
     );
     console.log(`[Event] Created chat channel for team ${data.teamId}`);
   } catch (error) {
@@ -65,9 +80,11 @@ export const notifyTeamUpdated = async (data: {
   leaderId: string;
   workspaceId: string;
 }): Promise<void> => {
+  const base = getChatServiceBase();
+  if (!base) return;
   try {
     await retryAxios(() =>
-      axios.post(`${CHAT_SERVICE_URL}/api/chat/channels/team-webhook`, data)
+      axios.post(`${base}/api/chat/channels/team-webhook`, data)
     );
     console.log(`[Event] Updated chat channel for team ${data.teamId}`);
   } catch (error) {
@@ -76,9 +93,11 @@ export const notifyTeamUpdated = async (data: {
 };
 
 export const notifyTeamDeleted = async (teamId: string): Promise<void> => {
+  const base = getChatServiceBase();
+  if (!base) return;
   try {
     await retryAxios(() =>
-      axios.delete(`${CHAT_SERVICE_URL}/api/chat/channels/team-webhook/${teamId}`)
+      axios.delete(`${base}/api/chat/channels/team-webhook/${teamId}`)
     );
     console.log(`[Event] Deleted chat channel for team ${teamId}`);
   } catch (error) {

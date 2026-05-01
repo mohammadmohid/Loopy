@@ -1,7 +1,6 @@
 import Pusher from "pusher";
-import dotenv from "dotenv";
 
-dotenv.config();
+// Env is loaded in src/env.ts (imported first from index.ts). Do not call dotenv here — cwd/root PORT would leak in.
 
 export const pusher = new Pusher({
     appId: process.env.PUSHER_APP_ID as string,

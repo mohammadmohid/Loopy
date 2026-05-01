@@ -5,13 +5,16 @@ import { useRouter } from "next/navigation";
 import { Users, X, Play, FileText, Calendar, Clock, Filter } from "lucide-react"; // 👈 2. Import Filter Icon
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { resolveHostDisplayName, type PopulatedMeetingHost } from "@/lib/meeting-host";
 
 export interface Meeting {
   _id: string;
   title: string;
   roomName: string;
-  hostName: string;
-  projectName: string;
+  /** Backend may omit (e.g. older docs or scheduled stubs). */
+  hostName?: string;
+  hostId?: string | PopulatedMeetingHost;
+  projectName?: string;
   participants: string[];
   createdAt: string;
   status: "active" | "ended" | "scheduled";
@@ -79,15 +82,25 @@ export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
           </div>
         ) : (
           filteredMeetings.map((meeting) => {
-            // Extract initials (e.g., "John Doe" -> "JD")
-            const initials = meeting.hostName
-              .split(" ")
-              .map((n) => n[0])
-              .join("")
-              .substring(0, 2)
-              .toUpperCase();
+            const hostLabel = resolveHostDisplayName(meeting);
+            const initials =
+              hostLabel
+                .split(/\s+/)
+                .filter(Boolean)
+                .map((n) => n[0])
+                .join("")
+                .substring(0, 2)
+                .toUpperCase() || "?";
 
             const isScheduled = meeting.status === "scheduled";
+            const when = meeting.scheduledAt || meeting.createdAt;
+            const whenDate = when ? new Date(when) : new Date();
+            const dateLabel = Number.isNaN(whenDate.getTime())
+              ? "—"
+              : format(whenDate, "eee, MMM d, yyyy");
+            const timeLabel = Number.isNaN(whenDate.getTime())
+              ? "—"
+              : format(whenDate, "hh:mm a");
 
             return (
               <div
@@ -116,11 +129,11 @@ export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
                   <div className="flex flex-col gap-2 min-w-[200px]">
                     <div className="flex items-center gap-2 text-sm text-neutral-500">
                       <Calendar className="w-4 h-4" />
-                      <span>{format(new Date(meeting.scheduledAt || meeting.createdAt), "eee, MMM d, yyyy")}</span>
+                      <span>{dateLabel}</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-neutral-500">
                       <Clock className="w-4 h-4" />
-                      <span>{format(new Date(meeting.scheduledAt || meeting.createdAt), "hh:mm a")}</span>
+                      <span>{timeLabel}</span>
                     </div>
                   </div>
 

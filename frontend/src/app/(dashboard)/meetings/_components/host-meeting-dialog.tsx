@@ -44,6 +44,7 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [title, setTitle] = useState("");
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]); // User IDs
+  const [agenda, setAgenda] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
   // Dropdown State
@@ -87,6 +88,7 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
 
       // Reset form
       setTitle("");
+      setAgenda("");
       setSelectedParticipants([]);
     }
   }, [isOpen]);
@@ -125,6 +127,7 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
             // Send IDs directly (Backend now expects array of User IDs)
             participants: selectedParticipants,
             hostName: hostName,
+            agenda: agenda.trim() || undefined,
           },
         }
       );
@@ -185,6 +188,17 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
               className="w-full p-2.5 border border-neutral-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary/20"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+
+          {/* Agenda */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-neutral-700">Agenda</label>
+            <textarea
+              placeholder="Topics to cover (shown on the meeting page and in minutes)"
+              className="w-full min-h-[88px] p-2.5 border border-neutral-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary/20 resize-y text-neutral-800 placeholder:text-neutral-400"
+              value={agenda}
+              onChange={(e) => setAgenda(e.target.value)}
             />
           </div>
 

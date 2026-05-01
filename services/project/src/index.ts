@@ -31,7 +31,11 @@ app.use(cookieParser());
 app.use(express.json());
 
 mongoose
-  .connect(process.env.MONGO_URI as string)
+  .connect(process.env.MONGO_URI as string, {
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    family: 4,
+  })
   .then(() => console.log("ProjectDB Connected"))
   .catch((err) => console.error(err));
 

@@ -41,7 +41,11 @@ if (!MONGO_URI) {
 }
 
 mongoose
-  .connect(MONGO_URI)
+  .connect(MONGO_URI, {
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    family: 4,
+  })
   .then(() => console.log("Transcription DB Connected"))
   .catch((err) => {
     console.error("DB Connection Error:", err);

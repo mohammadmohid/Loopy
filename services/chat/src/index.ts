@@ -33,7 +33,11 @@ app.use(express.json());
 
 // Connect to MongoDB
 mongoose
-    .connect(process.env.MONGO_URI as string)
+    .connect(process.env.MONGO_URI as string, {
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+        family: 4,
+    })
     .then(() => console.log("ChatDB Connected"))
     .catch((err) => console.error("ChatDB Connection Error:", err));
 

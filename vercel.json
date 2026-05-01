@@ -1,10 +1,9 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/api/auth/:match*", "destination": "/api/auth" },
-    { "source": "/api/projects/:match*", "destination": "/api/projects" },
-    { "source": "/api/meetings/:match*", "destination": "/api/meetings" },
-    { "source": "/api/artifacts/:match*", "destination": "/api/artifacts" },
-    { "source": "/api/chat/:match*", "destination": "/api/chat" }
+    {
+      "source": "/api/:path*",
+      "destination": "http://213.136.67.148:8000/api/:path*"
+    }
   ]
 }

@@ -1,9 +1,24 @@
 FROM node:20-alpine
+
 WORKDIR /app
+
 RUN npm install -g pnpm
-COPY package.json ./
-RUN pnpm install
-COPY . .
-RUN pnpm run build
+
+# Copy root workspace files
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+
+# Copy shared package and the specific service
+COPY services/shared ./services/shared
+COPY services/project ./services/project
+
+# Install all dependencies
+RUN pnpm install --frozen-lockfile
+
+# Build the shared package first, then the service
+RUN pnpm --filter @loopy/shared build
+RUN pnpm --filter loopy-project build
+
 EXPOSE 5002
-CMD ["node", "dist/index.js"]
+
+# Start the service
+CMD ["pnpm", "--filter", "loopy-project", "start"]

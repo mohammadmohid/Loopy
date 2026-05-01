@@ -4,14 +4,21 @@ WORKDIR /app
 
 RUN npm install -g pnpm
 
-COPY package.json pnpm-lock.yaml ./
+# Copy root workspace files
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 
-RUN pnpm install
+# Copy shared package and the specific service
+COPY services/shared ./services/shared
+COPY services/auth ./services/auth
 
-COPY . .
+# Install all dependencies (pnpm will link them correctly)
+RUN pnpm install --frozen-lockfile
 
-RUN pnpm run build
+# Build the shared package first, then the service
+RUN pnpm --filter @loopy/shared build
+RUN pnpm --filter loopy-auth build
 
 EXPOSE 5001
 
-CMD ["node", "dist/index.js"]
+# Start the service
+CMD ["pnpm", "--filter", "loopy-auth", "start"]

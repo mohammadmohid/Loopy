@@ -1,8 +1,24 @@
 FROM node:20-alpine
-RUN corepack enable && corepack prepare pnpm@latest --activate
+
 WORKDIR /app
-COPY package.json pnpm-lock.yaml* ./
+
+RUN npm install -g pnpm
+
+# Copy root workspace files
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+
+# Copy shared package and the specific service
+COPY services/shared ./services/shared
+COPY services/chat ./services/chat
+
+# Install all dependencies
 RUN pnpm install --frozen-lockfile
-COPY . .
-RUN pnpm run build
-CMD ["pnpm", "start"]
+
+# Build the shared package first, then the service
+RUN pnpm --filter @loopy/shared build
+RUN pnpm --filter loopy-chat build
+
+EXPOSE 5003
+
+# Start the service
+CMD ["pnpm", "--filter", "loopy-chat", "start"]

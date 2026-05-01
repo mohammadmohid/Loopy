@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/loopy-gateway:latest
+    container_name: loopy-gateway
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - NODE_ENV=production
+      - AUTH_SERVICE_URL=http://auth:5001
+      - PROJECT_SERVICE_URL=http://project:5002
+      - MEETING_SERVICE_URL=http://meeting:5003
+      - CHAT_SERVICE_URL=http://chat:5004
+      - TRANSCRIPTION_SERVICE_URL=http://transcription:5005
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - FRONTEND_URL=${FRONTEND_URL}
+    networks:
+      - loopy-network
+
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/loopy-auth:latest
+    container_name: loopy-auth
+    restart: always
+    environment:
+      - PORT=5001
+      - NODE_ENV=production
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - CLIENT_URL=${FRONTEND_URL}
+      - GATEWAY_URL=http://gateway:8000
+      - CHAT_SERVICE_URL=http://chat:5004
+      - PROJECT_SERVICE_URL=http://project:5002
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+    networks:
+      - loopy-network
+
+  project:
+    build:
+      context: .
+      dockerfile: services/project/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/loopy-project:latest
+    container_name: loopy-project
+    restart: always
+    environment:
+      - PORT=5002
+      - NODE_ENV=production
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - CHAT_SERVICE_URL=http://chat:5004
+      - GATEWAY_URL=http://gateway:8000
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+    networks:
+      - loopy-network
+
+  chat:
+    build:
+      context: .
+      dockerfile: services/chat/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/loopy-chat:latest
+    container_name: loopy-chat
+    restart: always
+    environment:
+      - PORT=5004
+      - NODE_ENV=production
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL}
+      - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN}
+      - PUSHER_APP_ID=${PUSHER_APP_ID}
+      - PUSHER_KEY=${PUSHER_KEY}
+      - PUSHER_SECRET=${PUSHER_SECRET}
+      - PUSHER_CLUSTER=${PUSHER_CLUSTER}
+    networks:
+      - loopy-network
+
+  meeting:
+    build:
+      context: .
+      dockerfile: services/meeting/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/loopy-meeting:latest
+    container_name: loopy-meeting
+    restart: always
+    environment:
+      - PORT=5003
+      - NODE_ENV=production
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - GATEWAY_URL=http://gateway:8000
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+    networks:
+      - loopy-network
+
+  transcription:
+    build:
+      context: .
+      dockerfile: services/transcription/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/loopy-transcription:latest
+    container_name: loopy-transcription
+    restart: always
+    environment:
+      - PORT=4002
+      - NODE_ENV=production
+      - MONGO_URI=${MONGO_URI}
+      - OPENROUTER_API=${OPENROUTER_API}
+      - DEEPGRAM_API_SECRET=${DEEPGRAM_API_SECRET}
+    networks:
+      - loopy-network
+
+networks:
+  loopy-network:
+    driver: bridge

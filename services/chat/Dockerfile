@@ -18,7 +18,7 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @loopy/shared build
 RUN pnpm --filter loopy-chat build
 
-EXPOSE 5003
+EXPOSE 5004
 
 # Start the service
 CMD ["pnpm", "--filter", "loopy-chat", "start"]

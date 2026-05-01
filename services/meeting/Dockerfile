@@ -18,7 +18,7 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @loopy/shared build
 RUN pnpm --filter loopy-meeting build
 
-EXPOSE 8003
+EXPOSE 5003
 
 # Start the service
 CMD ["pnpm", "--filter", "loopy-meeting", "start"]

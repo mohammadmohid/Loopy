@@ -18,7 +18,7 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @loopy/shared build
 RUN pnpm --filter loopy-transcription build
 
-EXPOSE 4002
+EXPOSE 5005
 
 # Start the service
 CMD ["pnpm", "--filter", "loopy-transcription", "start"]

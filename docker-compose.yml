@@ -117,7 +117,7 @@ services:
     container_name: loopy-transcription
     restart: always
     environment:
-      - PORT=4002
+      - PORT=5005
       - NODE_ENV=production
       - MONGO_URI=${MONGO_URI}
       - OPENROUTER_API=${OPENROUTER_API}

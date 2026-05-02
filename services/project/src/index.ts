@@ -2,6 +2,7 @@ import "./env.js";
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
+import { connectMongoWithRetry } from "@loopy/shared";
 import cookieParser from "cookie-parser";
 import projectRoutes from "./routes/projectRoutes";
 
@@ -25,10 +26,12 @@ app.use(
 app.use(cookieParser());
 app.use(express.json());
 
-mongoose
-  .connect(process.env.MONGO_URI as string)
-  .then(() => console.log("ProjectDB Connected"))
-  .catch((err) => console.error(err));
+void connectMongoWithRetry(process.env.MONGO_URI, { label: "Project" })
+  .then(() => console.log(`ProjectDB Connected (${mongoose.connection.host})`))
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 
 app.use("/api/projects", projectRoutes);
 

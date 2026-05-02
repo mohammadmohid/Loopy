@@ -61,15 +61,28 @@ export function ProjectCalendar({ tasks, milestones, meetings = [] }: ProjectCal
       projectId: m.projectId,
     }));
 
-    const meetingEvents: CalendarEvent[] = meetings.map((m) => ({
-      id: m.id || m._id,
-      title: m.title,
-      type: "meeting" as any,
-      status: "in-progress" as any,
-      startDate: m.scheduledAt,
-      endDate: m.scheduledAt,
-      projectId: m.projectId,
-    }));
+    const meetingEvents: CalendarEvent[] = meetings
+      .map((m) => {
+        const isEnded = m.status === "ended";
+        const dateRaw = isEnded
+          ? m.scheduledAt || m.createdAt
+          : m.scheduledAt;
+        if (!dateRaw) return null;
+        const start = new Date(dateRaw);
+        if (Number.isNaN(start.getTime())) return null;
+        const iso = start.toISOString();
+        const pid = m.projectId?._id ?? m.projectId;
+        return {
+          id: String(m.id || m._id),
+          title: (m.title as string)?.trim() || "Meeting",
+          type: "meeting" as any,
+          status: isEnded ? ("done" as any) : ("in-progress" as any),
+          startDate: iso,
+          endDate: iso,
+          projectId: String(pid ?? ""),
+        } satisfies CalendarEvent;
+      })
+      .filter((e): e is CalendarEvent => e != null);
 
     return [...taskEvents, ...milestoneEvents, ...meetingEvents];
   }, [tasks, milestones, meetings]);
@@ -140,7 +153,12 @@ export function ProjectCalendar({ tasks, milestones, meetings = [] }: ProjectCal
 
   const getEventColor = (event: CalendarEvent) => {
     if (event.type === "milestone") return milestoneColor;
-    if (event.type === "meeting" as any) return "bg-[#fbeaec] text-[#cc2233] border-[#fbeaec]";
+    if (event.type === "meeting" as any) {
+      if (event.status === "done") {
+        return "bg-emerald-100 text-emerald-800 border-emerald-200";
+      }
+      return "bg-[#fbeaec] text-[#cc2233] border-[#fbeaec]";
+    }
     return statusColors[event.status] || defaultColor;
   };
 
@@ -334,8 +352,15 @@ export function ProjectCalendar({ tasks, milestones, meetings = [] }: ProjectCal
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold truncate">{evt.title}</p>
-                            <p className="text-xs opacity-80 mt-1 uppercase tracking-wider font-medium">
-                              {evt.startDate ? formatEventTime(evt.startDate) : 'No time set'}
+                            <p className="text-xs opacity-80 mt-1 font-medium">
+                              {evt.status === "done"
+                                ? `Completed • ${new Date(evt.startDate).toLocaleString(undefined, {
+                                    dateStyle: "medium",
+                                    timeStyle: "short",
+                                  })}`
+                                : evt.startDate
+                                  ? formatEventTime(evt.startDate)
+                                  : "No time set"}
                             </p>
                           </div>
                         </div>

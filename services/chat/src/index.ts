@@ -2,6 +2,7 @@ import "./env.js";
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
+import { connectMongoWithRetry } from "@loopy/shared";
 import cookieParser from "cookie-parser";
 import chatRoutes from "./routes/chatRoutes.js";
 import { getRedisClient } from "./config/redis.js";
@@ -38,8 +39,8 @@ app.get("/health", (req, res) => {
 });
 
 async function connectDB() {
-    await mongoose.connect(process.env.MONGO_URI as string);
-    console.log("ChatDB Connected");
+    await connectMongoWithRetry(process.env.MONGO_URI, { label: "Chat" });
+    console.log(`ChatDB Connected (${mongoose.connection.host})`);
 }
 
 async function start() {

@@ -31,6 +31,9 @@ export interface IArtifact extends Document {
   summary?: string;
   error?: string;
 
+  /** Parsed from minutes; host approves/rejects; see transcription service types. */
+  actionProposals?: unknown[];
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -73,6 +76,7 @@ const ArtifactSchema = new Schema<IArtifact>(
     transcriptJson: { type: Schema.Types.Mixed },
     summary: { type: String, maxlength: 50000 },
     error: { type: String, maxlength: 1000 },
+    actionProposals: { type: [Schema.Types.Mixed], default: undefined },
   },
   { timestamps: true }
 );

@@ -1,12 +1,17 @@
-import { Request, Response } from "express";
-import { Artifact, TranscriptionStatus } from "@loopy/shared";
+import { Response } from "express";
+import { Artifact, TranscriptionStatus, AuthRequest } from "@loopy/shared";
 import { findByMeetingId } from "../repositories/artifactRepository.js";
-import { transcribeFromUrl } from "../services/transcriptionService.js";
+import { syncArtifactActionProposalsFromSummary } from "../lib/syncActionProposals.js";
+import { findMeetingLeanForActions } from "../lib/meetingSummaryContext.js";
+import {
+  transcribeFromUrl,
+  applySpeakerDisplayNamesToText,
+} from "../services/transcriptionService.js";
 import { generateSummary, answerQuestion } from "../services/aiService.js";
 import { loadMeetingSummaryContext } from "../lib/meetingSummaryContext.js";
 
 // Trigger Transcription
-export const startTranscription = async (req: Request, res: Response): Promise<void> => {
+export const startTranscription = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { meetingId, projectId, recordingUrl, filename, forceRetry } = req.body as {
       meetingId?: string;
@@ -35,6 +40,8 @@ export const startTranscription = async (req: Request, res: Response): Promise<v
         artifact.transcriptJson = undefined;
         artifact.summary = undefined;
         artifact.error = undefined;
+        artifact.actionProposals = [];
+        artifact.markModified("actionProposals");
       }
       await artifact.save();
     } else {
@@ -54,23 +61,32 @@ export const startTranscription = async (req: Request, res: Response): Promise<v
     (async () => {
       try {
         const transcript = await transcribeFromUrl(recordingUrl);
+        const ctx = await loadMeetingSummaryContext(String(meetingId));
 
-        // Persist transcript before OpenRouter so a flaky free-tier summary does not lose Deepgram output.
-        artifact!.transcriptJson = transcript.raw;
+        const textForNlp = applySpeakerDisplayNamesToText(
+          transcript.raw,
+          ctx.speakerDisplayNames
+        );
+
+        // Persist transcript before OpenRouter; attach UI speaker labels from the meeting roster.
+        artifact!.transcriptJson = {
+          ...transcript.raw,
+          speakerDisplayNames: ctx.speakerDisplayNames,
+          text: textForNlp || transcript.raw.text,
+        };
         artifact!.transcriptionStatus = TranscriptionStatus.PROCESSING;
         await artifact!.save();
 
-        const ctx = await loadMeetingSummaryContext(String(meetingId));
-        const summaryText = await generateSummary(String(transcript.raw?.text ?? ""), {
+        const summaryText = await generateSummary(textForNlp || String(transcript.raw?.text ?? ""), {
           title: ctx.meetingTitle || String(filename || "Meeting"),
           date: new Date().toLocaleString(),
-          agenda: ctx.agenda,
           participantLines: ctx.participantLines,
           hostDisplayName: ctx.hostDisplayName,
         });
 
         artifact!.transcriptionStatus = TranscriptionStatus.COMPLETED;
         artifact!.summary = summaryText;
+        syncArtifactActionProposalsFromSummary(artifact!);
         await artifact!.save();
 
         console.log(`[Transcription] Pipeline complete for meeting ${meetingId}`);
@@ -89,7 +105,7 @@ export const startTranscription = async (req: Request, res: Response): Promise<v
 };
 
 // Get Artifact
-export const getArtifact = async (req: Request, res: Response): Promise<void> => {
+export const getArtifact = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { meetingId } = req.params;
     const artifact = await findByMeetingId(meetingId);
@@ -99,7 +115,29 @@ export const getArtifact = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    res.status(200).json(artifact);
+    const meeting = await findMeetingLeanForActions(meetingId);
+    const uid = req.user?.id != null ? String(req.user.id) : "";
+    const isHost = Boolean(meeting && uid && String(meeting.hostId) === uid);
+
+    /* Older artifacts or stricter parsers may have left proposals empty; backfill once for hosts. */
+    if (isHost && artifact.summary?.trim()) {
+      const existing = artifact.actionProposals;
+      const isEmpty =
+        !existing || !Array.isArray(existing) || existing.length === 0;
+      if (isEmpty) {
+        syncArtifactActionProposalsFromSummary(artifact);
+        if ((artifact.actionProposals?.length ?? 0) > 0) {
+          await artifact.save();
+        }
+      }
+    }
+
+    const payload = artifact.toObject ? artifact.toObject() : { ...artifact };
+    if (!isHost && payload && typeof payload === "object" && "actionProposals" in payload) {
+      delete (payload as { actionProposals?: unknown }).actionProposals;
+    }
+
+    res.status(200).json(payload);
   } catch (error) {
     console.error("[Transcription] Get Artifact Error:", error);
     res.status(500).json({ message: "Server Error" });
@@ -107,7 +145,7 @@ export const getArtifact = async (req: Request, res: Response): Promise<void> =>
 };
 
 // Manual Summary
-export const triggerSummary = async (req: Request, res: Response): Promise<void> => {
+export const triggerSummary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { meetingId, meetingTitle, date } = req.body;
 
@@ -134,18 +172,19 @@ export const triggerSummary = async (req: Request, res: Response): Promise<void>
         const summaryText = await generateSummary(fullText, {
           title: meetingTitle || ctx.meetingTitle,
           date: date || new Date().toISOString(),
-          agenda: ctx.agenda,
           participantLines: ctx.participantLines,
           hostDisplayName: ctx.hostDisplayName,
         });
 
         artifact.summary = summaryText;
+        syncArtifactActionProposalsFromSummary(artifact);
         await artifact.save();
         console.log(`[Summary] Generated for meeting ${meetingId}`);
       } catch (bgError: unknown) {
         const message = bgError instanceof Error ? bgError.message : String(bgError);
         console.error("[Summary] Background generation failed:", message);
         artifact.summary = "Summary generation failed. Please try again.";
+        syncArtifactActionProposalsFromSummary(artifact);
         await artifact.save();
       }
     })();
@@ -158,7 +197,7 @@ export const triggerSummary = async (req: Request, res: Response): Promise<void>
 };
 
 // Update Summary (Manual Edit)
-export const updateSummary = async (req: Request, res: Response): Promise<void> => {
+export const updateSummary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { meetingId } = req.params;
     const { minutes } = req.body;
@@ -176,6 +215,7 @@ export const updateSummary = async (req: Request, res: Response): Promise<void> 
     }
 
     artifact.summary = minutes;
+    syncArtifactActionProposalsFromSummary(artifact);
     await artifact.save();
 
     res.status(200).json({ message: "Minutes updated successfully", artifact });
@@ -186,7 +226,7 @@ export const updateSummary = async (req: Request, res: Response): Promise<void> 
 };
 
 // Chat with Transcript using NLP
-export const askBot = async (req: Request, res: Response): Promise<void> => {
+export const askBot = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { meetingId } = req.params;
     const { question } = req.body;

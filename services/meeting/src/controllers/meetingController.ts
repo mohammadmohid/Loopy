@@ -2,6 +2,7 @@ import Meeting from "../models/Meeting.js";
 import { generateJitsiToken } from "../utils/jitsiToken.js";
 import { Request, Response } from "express";
 import { User } from "@loopy/shared";
+import { getProjectIdsInWorkspace, isProjectInWorkspace } from "../utils/workspaceProjects.js";
 
 void User;
 
@@ -15,9 +16,21 @@ export const createMeeting = async (req: Request, res: Response) => {
   try {
     const { projectId, title, participants, scheduledAt, agenda } = req.body;
     const hostId = req.user.id;
+    const workspaceId = req.user.workspaceId as string | undefined;
 
     if (!projectId) {
       return res.status(400).json({ message: "Project ID is required" });
+    }
+
+    if (!workspaceId) {
+      return res.status(400).json({ message: "No active workspace" });
+    }
+
+    const projectAllowed = await isProjectInWorkspace(String(projectId), workspaceId);
+    if (!projectAllowed) {
+      return res.status(403).json({
+        message: "Project not found in this workspace",
+      });
     }
 
     if (participants && !Array.isArray(participants)) {
@@ -51,17 +64,32 @@ export const createMeeting = async (req: Request, res: Response) => {
 export const getMyMeetings = async (req: Request, res: Response) => {
   try {
     const userId = req.user.id;
+    const workspaceId = req.user.workspaceId as string | undefined;
 
-    // meeting == "active" && > 24h, mark as ended.
+    if (!workspaceId) {
+      return res.status(400).json({ message: "No active workspace" });
+    }
+
+    const projectIds = await getProjectIdsInWorkspace(workspaceId);
+
+    // meeting == "active" && > 24h, mark as ended — only within this workspace's projects.
     const cutoffDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    await Meeting.updateMany(
-      { hostId: userId, status: "active", createdAt: { $lt: cutoffDate } },
-      { $set: { status: "ended", endedAt: new Date() } }
-    );
+    if (projectIds.length > 0) {
+      await Meeting.updateMany(
+        {
+          hostId: userId,
+          status: "active",
+          createdAt: { $lt: cutoffDate },
+          projectId: { $in: projectIds },
+        },
+        { $set: { status: "ended", endedAt: new Date() } }
+      );
+    }
 
     const meetings = await Meeting.find({
       $or: [{ hostId: userId }, { participants: userId }],
+      projectId: { $in: projectIds },
     })
       .populate(HOST_POPULATE)
       .sort({ createdAt: -1 })

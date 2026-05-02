@@ -3,8 +3,6 @@ import { OpenRouter } from "@openrouter/sdk";
 export interface SummaryMetadata {
   title?: string;
   date?: string;
-  /** Host-provided agenda — reproduced verbatim in minutes; do not infer from transcript. */
-  agenda?: string;
   /** Markdown lines for invited participants (e.g. "- Jane Doe") from the meeting record. */
   participantLines?: string[];
   hostDisplayName?: string;
@@ -59,30 +57,21 @@ function logOpenRouterFailure(label: string, error: unknown): void {
 function buildSummaryPrompt(fullText: string, meta: SummaryMetadata): string {
   const title = meta.title || "Untitled Meeting";
   const date = meta.date || new Date().toLocaleString();
-  const agendaText = (meta.agenda ?? "").trim();
   const host = (meta.hostDisplayName ?? "").trim();
   const participantBlock =
     meta.participantLines && meta.participantLines.length > 0
       ? meta.participantLines.join("\n")
       : "None listed on the meeting invite.";
 
-  const agendaSection =
-    agendaText.length > 0
-      ? agendaText
-      : "No agenda was provided before this meeting.";
-
   return `You are an expert professional meeting secretary.
 Generate formal Meeting Minutes from the transcript below.
 
-Fixed metadata (use exactly as given — do NOT invent or change invited participants or agenda topics):
+Fixed metadata (use exactly as given — do NOT invent invited participants):
 - Meeting Title: ${title}
 - Date: ${date}
 - Host: ${host || "Unknown"}
 - Invited participants (list under "## Participants" exactly as below, one per line):
 ${participantBlock}
-
-- Planned agenda (reproduce under "## Agenda" verbatim; do NOT infer agenda from the transcript; if the text is multi-line, preserve structure):
-${agendaSection}
 
 Output Markdown with this structure:
 
@@ -94,9 +83,6 @@ Output Markdown with this structure:
 ${participantBlock}
 ${host ? `\n**Host:** ${host}` : ""}
 
-## Agenda
-(Reproduce the planned agenda text from the fixed metadata above verbatim. If it says no agenda was provided, output that single line only.)
-
 ## Overview
 (2–4 sentences summarizing what the meeting covered, based only on the transcript.)
 
@@ -104,7 +90,9 @@ ${host ? `\n**Host:** ${host}` : ""}
 (Bulleted list from the transcript.)
 
 ## Action items
-- [ ] Task (assignee when clear from transcript)
+Use two styles only:
+- Work: \`- [ ] Clear description (Assignee Name)\` when someone must do work.
+- Follow-up meeting: \`- [ ] Schedule / book … meeting / sync / call … (tomorrow | next day | date)\` when the outcome is to hold another meeting.
 
 TRANSCRIPT:
 ${fullText}`;

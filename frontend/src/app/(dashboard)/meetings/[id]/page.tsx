@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiRequest } from "@/lib/api";
-import { resolveHostDisplayName, type PopulatedMeetingHost } from "@/lib/meeting-host";
+import { useAuth } from "@/lib/auth-provider";
+import {
+  resolveHostDisplayName,
+  buildSpeakerIndexToDisplayName,
+  type PopulatedMeetingHost,
+} from "@/lib/meeting-host";
 import { TranscriptPlayer } from "../_components/transcript-player";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +27,8 @@ import {
   RefreshCcw,
   Users,
   MessageSquare,
-  Play
+  Play,
+  ListChecks,
 } from "lucide-react";
 
 // 1. Define Interfaces
@@ -57,6 +63,17 @@ function overviewFromMinutesMarkdown(markdown: string | undefined): string {
   return (m?.[1] ?? "").trim();
 }
 
+type ActionProposalItem = {
+  id: string;
+  kind: "assign_task" | "schedule_meeting";
+  title: string;
+  rawLine: string;
+  assigneeNameHint?: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  resolvedAt?: string;
+};
+
 interface ArtifactDetail {
   _id: string;
   filename: string;
@@ -66,6 +83,8 @@ interface ArtifactDetail {
   summary?: string;
   createdAt: string;
   error?: string;
+  /** Present only for the meeting host (parsed from minutes). */
+  actionProposals?: ActionProposalItem[];
 }
 
 function artifactStatus(a: ArtifactDetail | null): string {
@@ -81,6 +100,7 @@ interface User {
 
 export default function MeetingDetailPage() {
   const { id } = useParams();
+  const { user } = useAuth();
 
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [artifact, setArtifact] = useState<ArtifactDetail | null>(null);
@@ -108,6 +128,39 @@ export default function MeetingDetailPage() {
 
   const [error, setError] = useState("");
   const [viewMode, setViewMode] = useState<"summary" | "transcript">("summary");
+
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+
+  const hostIdStr = useMemo(() => {
+    const h = meeting?.hostId;
+    if (typeof h === "string") return h;
+    if (h && typeof h === "object" && "_id" in h && h._id != null) return String(h._id);
+    return "";
+  }, [meeting]);
+
+  const isMeetingHost = Boolean(user?.id && hostIdStr && user.id === hostIdStr);
+
+  const hostDisplayName = useMemo(
+    () => (meeting ? resolveHostDisplayName(meeting, users) : undefined),
+    [meeting, users]
+  );
+
+  const transcriptSpeakerNames = useMemo(
+    () => buildSpeakerIndexToDisplayName(meeting, users),
+    [meeting, users]
+  );
+
+  const actionItemsMeetings = useMemo(() => {
+    const list = artifact?.actionProposals;
+    if (!Array.isArray(list)) return [];
+    return list.filter((p) => p.kind === "schedule_meeting");
+  }, [artifact?.actionProposals]);
+
+  const actionItemsTasks = useMemo(() => {
+    const list = artifact?.actionProposals;
+    if (!Array.isArray(list)) return [];
+    return list.filter((p) => p.kind !== "schedule_meeting");
+  }, [artifact?.actionProposals]);
 
   const activeTabObj = ["Transcript", "Participants", "Comments", "Ask Bot", "Minutes"];
   const [activeTab, setActiveTab] = useState("Transcript");
@@ -256,17 +309,54 @@ export default function MeetingDetailPage() {
     if (!meeting) return;
     try {
       setIsSavingMinutes(true);
-      await apiRequest(`/artifacts/summary/${meeting._id}`, {
-        method: "PUT",
-        data: { minutes: editedMinutes }
-      });
-      setArtifact(prev => prev ? { ...prev, summary: editedMinutes } : null);
+      const res = await apiRequest<{ message: string; artifact: ArtifactDetail }>(
+        `/artifacts/summary/${meeting._id}`,
+        {
+          method: "PUT",
+          data: { minutes: editedMinutes },
+        }
+      );
+      setArtifact(res.artifact);
       setIsEditing(false);
     } catch (err) {
       console.error(err);
       alert("Failed to save edited minutes.");
     } finally {
       setIsSavingMinutes(false);
+    }
+  };
+
+  const handleApproveActionProposal = async (proposalId: string) => {
+    if (!meeting?._id) return;
+    try {
+      setActionBusyId(proposalId);
+      const res = await apiRequest<{ artifact: ArtifactDetail }>(
+        `/artifacts/${meeting._id}/action-proposals/${proposalId}/approve`,
+        { method: "POST" }
+      );
+      setArtifact(res.artifact);
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Could not approve this action item.");
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  const handleRejectActionProposal = async (proposalId: string) => {
+    if (!meeting?._id) return;
+    try {
+      setActionBusyId(proposalId);
+      const res = await apiRequest<{ artifact: ArtifactDetail }>(
+        `/artifacts/${meeting._id}/action-proposals/${proposalId}/reject`,
+        { method: "POST" }
+      );
+      setArtifact(res.artifact);
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Could not reject this action item.");
+    } finally {
+      setActionBusyId(null);
     }
   };
 
@@ -376,10 +466,9 @@ export default function MeetingDetailPage() {
     );
   }
 
-  let parsedSummary: { overview: string, agenda: string[], minutes: string } = {
+  let parsedSummary: { overview: string; minutes: string } = {
     overview: "",
-    agenda: [],
-    minutes: artifact?.summary || ""
+    minutes: artifact?.summary || "",
   };
 
   // Fallback for older database entries where 'summary' was entirely a JSON string
@@ -387,7 +476,6 @@ export default function MeetingDetailPage() {
     try {
       const parsed = JSON.parse(artifact.summary);
       if (parsed.overview) parsedSummary.overview = parsed.overview;
-      if (parsed.agenda) parsedSummary.agenda = parsed.agenda;
       if (parsed.minutes) parsedSummary.minutes = parsed.minutes;
     } catch (e) {
       // It's just a raw text summary
@@ -400,7 +488,6 @@ export default function MeetingDetailPage() {
     artifact?.summary === "System Error: API Key missing.";
 
   const hostProvidedAgenda = agendaLinesFromMeeting(meeting.agenda);
-  const hostDisplayName = resolveHostDisplayName(meeting, users);
 
   const overviewDisplay =
     (parsedSummary.overview || "").trim() ||
@@ -501,6 +588,165 @@ export default function MeetingDetailPage() {
                 </p>
               )}
             </div>
+
+            {isMeetingHost &&
+              artifact &&
+              Array.isArray(artifact.actionProposals) &&
+              artifact.actionProposals.length > 0 && (
+                <div className="space-y-4 rounded-xl border border-amber-200/80 bg-amber-50/40 p-4">
+                  <div>
+                    <h3 className="font-semibold text-sm text-neutral-900 flex items-center gap-2">
+                      <ListChecks className="w-4 h-4 text-amber-800 shrink-0" />
+                      Action items
+                    </h3>
+                    <p className="text-xs text-neutral-600 leading-relaxed mt-1">
+                      Tasks create board items; follow-up meetings create a scheduled meeting on this
+                      project with everyone from this meeting&apos;s roster. Only you see this section.
+                    </p>
+                  </div>
+
+                  {actionItemsMeetings.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-semibold text-violet-900 flex items-center gap-1.5 uppercase tracking-wide">
+                        <Calendar className="w-3.5 h-3.5" />
+                        Follow-up meetings
+                      </h4>
+                      <ul className="space-y-3">
+                        {actionItemsMeetings.map((p) => (
+                          <li
+                            key={p.id}
+                            className="rounded-lg border border-violet-200/90 bg-white p-3 text-sm shadow-sm"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+                                  Schedule meeting
+                                </span>
+                                <p className="text-neutral-900 font-medium leading-snug">{p.title}</p>
+                                <p className="text-xs text-neutral-500 line-clamp-3">{p.rawLine}</p>
+                              </div>
+                              {p.status === "pending" ? (
+                                <div className="flex shrink-0 gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 text-xs"
+                                    disabled={actionBusyId === p.id}
+                                    onClick={() => void handleRejectActionProposal(p.id)}
+                                  >
+                                    {actionBusyId === p.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      "Reject"
+                                    )}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-8 text-xs"
+                                    disabled={actionBusyId === p.id}
+                                    onClick={() => void handleApproveActionProposal(p.id)}
+                                  >
+                                    {actionBusyId === p.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      "Approve"
+                                    )}
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span
+                                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                    p.status === "approved"
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : "bg-neutral-200 text-neutral-600"
+                                  }`}
+                                >
+                                  {p.status}
+                                </span>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {actionItemsTasks.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-semibold text-amber-900 flex items-center gap-1.5 uppercase tracking-wide">
+                        <ListChecks className="w-3.5 h-3.5" />
+                        Tasks
+                      </h4>
+                      <ul className="space-y-3">
+                        {actionItemsTasks.map((p) => (
+                          <li
+                            key={p.id}
+                            className="rounded-lg border border-neutral-200/90 bg-white p-3 text-sm shadow-sm"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <span className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600">
+                                  Assign task
+                                </span>
+                                <p className="text-neutral-900 font-medium leading-snug">{p.title}</p>
+                                {p.assigneeNameHint ? (
+                                  <p className="text-xs text-neutral-500">
+                                    Assignee hint: {p.assigneeNameHint}
+                                  </p>
+                                ) : null}
+                                <p className="text-xs text-neutral-500 line-clamp-3">{p.rawLine}</p>
+                              </div>
+                              {p.status === "pending" ? (
+                                <div className="flex shrink-0 gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 text-xs"
+                                    disabled={actionBusyId === p.id}
+                                    onClick={() => void handleRejectActionProposal(p.id)}
+                                  >
+                                    {actionBusyId === p.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      "Reject"
+                                    )}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-8 text-xs"
+                                    disabled={actionBusyId === p.id}
+                                    onClick={() => void handleApproveActionProposal(p.id)}
+                                  >
+                                    {actionBusyId === p.id ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      "Approve"
+                                    )}
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span
+                                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                    p.status === "approved"
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : "bg-neutral-200 text-neutral-600"
+                                  }`}
+                                >
+                                  {p.status}
+                                </span>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
           </div>
         </div>
 
@@ -578,6 +824,8 @@ export default function MeetingDetailPage() {
                       <div className="flex-1 min-h-0">
                         <TranscriptPlayer
                           transcript={artifact?.transcriptJson ?? {}}
+                          hostDisplayName={hostDisplayName}
+                          speakerNames={transcriptSpeakerNames}
                           audioUrl={meeting.recordingUrl || ""}
                         />
                       </div>

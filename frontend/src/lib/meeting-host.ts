@@ -8,6 +8,7 @@ export type PopulatedMeetingHost = {
 export type MeetingHostSource = {
   hostName?: string;
   hostId?: string | PopulatedMeetingHost | null;
+  participants?: string[];
 };
 
 export type UserForHostLookup = {
@@ -56,4 +57,35 @@ export function resolveHostDisplayName(
   }
 
   return id ? "Unknown host" : "Unknown";
+}
+
+/**
+ * Best-effort map from Deepgram speaker index → display name.
+ * Index `0` is labeled as the meeting host; `1..` follow invitees (excluding duplicate of host).
+ * This cannot perfectly match voice clusters to people without extra signaling from the client.
+ */
+export function buildSpeakerIndexToDisplayName(
+  meeting: MeetingHostSource | null | undefined,
+  users: UserForHostLookup[] = []
+): Record<number, string> {
+  const host = resolveHostDisplayName(meeting, users);
+  const map: Record<number, string> = { 0: host };
+
+  const participants = meeting?.participants ?? [];
+
+  let idx = 1;
+  for (const pid of participants) {
+    const idStr = String(pid);
+    const u = users.find((x) => String(x.id) === idStr);
+    const name =
+      u != null
+        ? `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.email?.trim() || ""
+        : "";
+    if (!name || name === host) continue;
+    map[idx] = name;
+    idx += 1;
+    if (idx > 24) break;
+  }
+
+  return map;
 }

@@ -7,7 +7,7 @@ void User; // register User model for populate()
 const meetingTxSchema = new Schema(
   {
     title: { type: String },
-    agenda: { type: String },
+    projectId: { type: Schema.Types.ObjectId, ref: "Project" },
     participants: [{ type: Schema.Types.ObjectId, ref: "User" }],
     hostId: { type: Schema.Types.ObjectId, ref: "User" },
   },
@@ -32,20 +32,21 @@ function displayName(u: PopUser): string {
 }
 
 export type MeetingSummaryContext = {
-  agenda: string;
   participantLines: string[];
   hostDisplayName: string;
   meetingTitle: string;
+  /** Deepgram diarization index → name (0 = host, 1+ = invitees, skipping duplicate of host). */
+  speakerDisplayNames: Record<number, string>;
 };
 
 export async function loadMeetingSummaryContext(
   meetingId: string
 ): Promise<MeetingSummaryContext> {
   const empty: MeetingSummaryContext = {
-    agenda: "",
     participantLines: [],
     hostDisplayName: "",
     meetingTitle: "",
+    speakerDisplayNames: {},
   };
 
   if (!meetingId || !mongoose.Types.ObjectId.isValid(meetingId)) {
@@ -57,7 +58,6 @@ export async function loadMeetingSummaryContext(
     .populate("hostId", "profile email")
     .lean()) as {
     title?: string;
-    agenda?: string;
     participants?: PopUser[];
     hostId?: PopUser;
   } | null;
@@ -69,10 +69,60 @@ export async function loadMeetingSummaryContext(
     .filter(Boolean)
     .map((p) => `- ${displayName(p as PopUser)}`);
 
+  const speakerDisplayNames: Record<number, string> = {};
+  const hostLabel = hostDisplayName.trim() || "Speaker 1";
+  speakerDisplayNames[0] = hostLabel;
+  let sp = 1;
+  for (const p of doc.participants || []) {
+    const name = displayName(p as PopUser).trim();
+    if (!name || name === hostLabel) continue;
+    speakerDisplayNames[sp] = name;
+    sp += 1;
+    if (sp > 24) break;
+  }
+
   return {
-    agenda: typeof doc.agenda === "string" ? doc.agenda : "",
     participantLines,
     hostDisplayName,
     meetingTitle: typeof doc.title === "string" ? doc.title : "",
+    speakerDisplayNames,
   };
+}
+
+export type LeanMeetingForActions = {
+  _id: mongoose.Types.ObjectId;
+  projectId?: mongoose.Types.ObjectId;
+  hostId: mongoose.Types.ObjectId;
+  participants?: mongoose.Types.ObjectId[];
+  title?: string;
+};
+
+export async function findMeetingLeanForActions(
+  meetingId: string
+): Promise<LeanMeetingForActions | null> {
+  if (!mongoose.Types.ObjectId.isValid(meetingId)) return null;
+  const doc = await MeetingTx.findById(meetingId)
+    .select("projectId hostId participants title")
+    .lean();
+  return doc as LeanMeetingForActions | null;
+}
+
+export async function assertUserIsMeetingHost(
+  meetingId: string,
+  userId: string
+): Promise<LeanMeetingForActions> {
+  const meeting = await findMeetingLeanForActions(meetingId);
+  if (!meeting) {
+    const err = new Error("Meeting not found") as Error & { status?: number };
+    err.status = 404;
+    throw err;
+  }
+  if (String(meeting.hostId) !== String(userId)) {
+    const err = new Error("Only the meeting host can manage action items") as Error & {
+      status?: number;
+    };
+    err.status = 403;
+    throw err;
+  }
+  return meeting;
 }

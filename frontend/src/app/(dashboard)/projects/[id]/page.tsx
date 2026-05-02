@@ -10,10 +10,24 @@ import { TimelineTab } from "./_components/timeline-tab";
 import { BoardTab } from "./_components/board-tab";
 import dynamic from "next/dynamic";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { AddProjectMembersDialog } from "./_components/add-project-members-dialog";
 
 const TaskDetailPanel = dynamic(() => import("./_components/task-detail-panel").then(mod => mod.TaskDetailPanel), { ssr: false });
 const UploadDialog = dynamic(() => import("@/components/upload-dialog").then(mod => mod.UploadDialog), { ssr: false });
-import { MoreVertical, Folder, UploadCloud, Loader2, Users } from "lucide-react";
+import {
+  MoreVertical,
+  Folder,
+  UploadCloud,
+  Loader2,
+  Users,
+  UserPlus,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/api";
 import { useAuth } from "@/lib/auth-provider";
@@ -53,6 +67,7 @@ export default function ProjectDetailPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [meetings, setMeetings] = useState<any[]>([]); // New state for meetings
   const [availableTeams, setAvailableTeams] = useState<any[]>([]);
+  const [addMembersOpen, setAddMembersOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -189,10 +204,19 @@ export default function ProjectDetailPage() {
       setMilestones(mappedMilestones);
       setActivities(activityData);
 
-      // Filter upcoming meetings related to this specific project
-      const projectMeetings = allMeetings.filter(
-        (m) => m.projectId === id && m.status === "scheduled" && m.scheduledAt
-      );
+      // Meetings for this project: upcoming (scheduled) + completed (ended), for the calendar
+      const projectMeetings = allMeetings.filter((m) => {
+        const sameProject =
+          String(m.projectId?._id ?? m.projectId) === String(id);
+        if (!sameProject) return false;
+        if (m.status === "scheduled" && m.scheduledAt) return true;
+        if (
+          m.status === "ended" &&
+          (m.scheduledAt || m.createdAt)
+        )
+          return true;
+        return false;
+      });
       setMeetings(projectMeetings);
       setAvailableTeams(teamsData);
     } catch (error) {
@@ -473,9 +497,25 @@ export default function ProjectDetailPage() {
               </PopoverContent>
             </Popover>
 
-            <button className="p-2 hover:bg-neutral-100 rounded-lg transition-colors">
-              <MoreVertical className="w-5 h-5 text-neutral-500" />
-            </button>
+            {canEdit ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="p-2 rounded-lg transition-colors text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+                    aria-label="Project actions"
+                  >
+                    <MoreVertical className="w-5 h-5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-52">
+                  <DropdownMenuItem onSelect={() => setAddMembersOpen(true)}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Add members…
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
           </div>
         </div>
         <div className="flex gap-2">
@@ -582,6 +622,17 @@ export default function ProjectDetailPage() {
           )}
         </div>
       </div>
+
+      <AddProjectMembersDialog
+        open={addMembersOpen}
+        onOpenChange={setAddMembersOpen}
+        projectId={id}
+        existingMembersPayload={project.members.map((m) => ({
+          user: m.id,
+          role: m.role,
+        }))}
+        onSuccess={() => void fetchData()}
+      />
 
       <UploadDialog
         isOpen={isUploadOpen}

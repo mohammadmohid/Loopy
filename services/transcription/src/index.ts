@@ -9,7 +9,9 @@ dotenv.config({
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import mongoose from "mongoose";
+import { connectMongoWithRetry } from "@loopy/shared";
 import transcriptionRoutes from "./routes/transcriptionRoutes.js";
 
 const app = express();
@@ -39,6 +41,7 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 app.use("/api/artifacts", transcriptionRoutes);
 
@@ -48,9 +51,10 @@ if (!MONGO_URI) {
   process.exit(1);
 }
 
-mongoose
-  .connect(MONGO_URI)
-  .then(() => console.log("Transcription DB Connected"))
+void connectMongoWithRetry(MONGO_URI, { label: "Transcription" })
+  .then(() =>
+    console.log(`Transcription DB Connected (${mongoose.connection.host})`)
+  )
   .catch((err) => {
     console.error("DB Connection Error:", err);
     process.exit(1);

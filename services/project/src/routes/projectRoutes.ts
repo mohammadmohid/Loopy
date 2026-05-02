@@ -73,7 +73,7 @@ router.delete("/workspace-webhook/:workspaceId", deleteWorkspaceProjects); // In
 
 // ID-based Project Routes (Must be at the bottom to prevent swallowing /teams, /artifacts etc)
 router.get("/:id", protect, getProjectById);
-router.patch("/:id", protect, authorize("ADMIN", "PROJECT_MANAGER"), updateProject);
+router.patch("/:id", protect, updateProject);
 router.delete("/:id", protect, authorize("ADMIN", "PROJECT_MANAGER"), deleteProject);
 router.put("/:id/assign-lead", protect, authorize("ADMIN", "PROJECT_MANAGER"), assignTeamLead);
 

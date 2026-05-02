@@ -1,4 +1,5 @@
 import express from "express";
+import { protect } from "@loopy/shared";
 import {
   startTranscription,
   getArtifact,
@@ -6,14 +7,31 @@ import {
   updateSummary,
   askBot,
 } from "../controllers/transcriptionController.js";
+import {
+  approveActionProposal,
+  rejectActionProposal,
+} from "../controllers/actionProposalController.js";
 
 const router = express.Router();
 
-// All routes are mounted under /api/artifacts in index.ts
-router.post("/transcribe", startTranscription);     // Internal: trigger transcription
-router.post("/summary", triggerSummary);             // Frontend: request AI summary
-router.put("/summary/:meetingId", updateSummary);    // Frontend: manual edit
-router.post("/ask/:meetingId", askBot);              // Frontend: chat bot
-router.get("/:meetingId", getArtifact);              // Frontend: fetch artifact
+// Webhook / internal: no JWT (meeting service POSTs here).
+router.post("/transcribe", startTranscription);
+
+router.post("/summary", protect, triggerSummary);
+router.put("/summary/:meetingId", protect, updateSummary);
+router.post("/ask/:meetingId", protect, askBot);
+
+router.post(
+  "/:meetingId/action-proposals/:proposalId/approve",
+  protect,
+  approveActionProposal
+);
+router.post(
+  "/:meetingId/action-proposals/:proposalId/reject",
+  protect,
+  rejectActionProposal
+);
+
+router.get("/:meetingId", protect, getArtifact);
 
 export default router;

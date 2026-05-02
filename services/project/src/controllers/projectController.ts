@@ -1,6 +1,6 @@
 import { Response } from "express";
 import mongoose from "mongoose";
-import { AuthRequest, getR2Client } from "@loopy/shared";
+import { AuthRequest, getR2Client, Workspace } from "@loopy/shared";
 import Project from "../models/Project";
 import Task from "../models/Task";
 import Milestone from "../models/Milestone";
@@ -229,6 +229,8 @@ export const updateProject = async (req: AuthRequest, res: Response) => {
 
     const isOwner = project.owner.toString() === req.user!.id;
     const isAdmin = req.user!.role === "ADMIN";
+    const isWorkspacePM = req.user!.role === "PROJECT_MANAGER";
+    const canManageProjectDetails = isOwner || isAdmin || isWorkspacePM;
 
     const isMember = project.members.some(
       (m) => m.user.toString() === req.user!.id
@@ -238,11 +240,15 @@ export const updateProject = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
+    if (String(project.workspaceId) !== String(req.user!.workspaceId)) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
     // Board Columns (all members)
     if (req.body.boardColumns) project.boardColumns = req.body.boardColumns;
 
-    // Owner/Admin only updates
-    if (isOwner || isAdmin) {
+    // Owner, workspace admin, or workspace project manager
+    if (canManageProjectDetails) {
       if (req.body.name) project.name = req.body.name;
       if (req.body.description !== undefined) project.description = req.body.description;
       if (req.body.startDate !== undefined) project.startDate = req.body.startDate;
@@ -275,6 +281,26 @@ export const updateProject = async (req: AuthRequest, res: Response) => {
           user: new mongoose.Types.ObjectId(m.user || m.id),
           role: m.role || "VIEWER",
         }));
+
+        const wsLean = await Workspace.findById(project.workspaceId)
+          .select("members.user")
+          .lean();
+        const wsDoc = wsLean as {
+          members?: { user: mongoose.Types.ObjectId }[];
+        } | null;
+        if (!wsDoc) {
+          return res.status(400).json({ message: "Workspace not found" });
+        }
+        const workspaceUserIds = new Set(
+          (wsDoc.members || []).map((m) => String(m.user))
+        );
+        for (const nm of newMembers) {
+          if (!workspaceUserIds.has(nm.user.toString())) {
+            return res.status(400).json({
+              message: "All project members must be members of the workspace",
+            });
+          }
+        }
 
         const ownerExists = newMembers.find(
           (m: any) => m.user.toString() === project.owner.toString()

@@ -243,12 +243,59 @@ function getClient(): DeepgramClient {
   return _client;
 }
 
+/**
+ * Deepgram rejects payloads where `url` is not an absolute http(s) URL (err_code PAYLOAD_ERROR).
+ * Handles missing schemes (e.g. `pub-xxx.r2.dev/key`), scheme-relative `//host/path`, and trims whitespace.
+ */
+export function normalizeRecordingUrlForDeepgram(raw: string): string {
+  let s = raw.trim();
+  if (!s) {
+    throw new Error("recordingUrl is empty.");
+  }
+  const lower = s.toLowerCase();
+  if (lower.startsWith("blob:") || lower.startsWith("data:")) {
+    throw new Error(
+      "recordingUrl must be a public http(s) URL; blob/data URLs cannot be fetched by the transcription service."
+    );
+  }
+  // App-relative paths play in the browser but are invalid for Deepgram.
+  if (s.startsWith("/") && !s.startsWith("//")) {
+    throw new Error(
+      "recordingUrl must be an absolute http(s) URL (got a site-relative path)."
+    );
+  }
+  if (s.startsWith("//")) {
+    s = `https:${s}`;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(s);
+  } catch {
+    const withScheme = `https://${s.replace(/^\/+/, "")}`;
+    try {
+      parsed = new URL(withScheme);
+    } catch {
+      throw new Error(
+        "recordingUrl is not a valid URL. Use a full https:// link to the recording file."
+      );
+    }
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`recordingUrl must use http or https (got ${parsed.protocol}).`);
+  }
+
+  return parsed.href;
+}
+
 export async function transcribeFromUrl(recordingUrl: string): Promise<TranscriptResult> {
   try {
     const client = getClient();
+    const url = normalizeRecordingUrlForDeepgram(recordingUrl);
 
     const result = await client.listen.v1.media.transcribeUrl({
-      url: recordingUrl,
+      url,
       model: "nova-3",
       smart_format: true,
       diarize: true,

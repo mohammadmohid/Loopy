@@ -14,3 +14,16 @@ export async function findByMeetingId(meetingId: string): Promise<IArtifact | nu
 
   return Artifact.findOne({ $or: conditions });
 }
+
+/** Includes `recordingUrl` (normally select:false) for regenerate / URL fallback. */
+export async function findByMeetingIdWithRecordingUrl(
+  meetingId: string
+): Promise<IArtifact | null> {
+  const conditions: mongoose.FilterQuery<IArtifact>[] = [{ meetingId }];
+
+  if (mongoose.isValidObjectId(meetingId)) {
+    conditions.push({ meetingId: new mongoose.Types.ObjectId(meetingId) as unknown as string });
+  }
+
+  return Artifact.findOne({ $or: conditions }).select("+recordingUrl");
+}

@@ -178,7 +178,16 @@ const processBackgroundUpload = async (event: any) => {
     await upload.done();
     console.log(`Bridge Complete: Uploaded to "${r2Key}"`);
 
-    const publicR2Url = `${process.env.R2_PUBLIC_DOMAIN}/${r2Key}`;
+    const domainRaw = (process.env.R2_PUBLIC_DOMAIN ?? "").trim();
+    if (!domainRaw) {
+      console.error("[Webhook] R2_PUBLIC_DOMAIN is not set; cannot publish recording URL.");
+      return;
+    }
+    const keyClean = r2Key.replace(/^\/+/, "");
+    const base = domainRaw.includes("://")
+      ? domainRaw.replace(/\/+$/, "")
+      : `https://${domainRaw.replace(/^\/+/, "").replace(/\/+$/, "")}`;
+    const publicR2Url = `${base}/${keyClean}`;
 
     if (meeting) {
       meeting.recordingUrl = publicR2Url;

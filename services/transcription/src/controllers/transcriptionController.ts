@@ -1,11 +1,15 @@
 import { Response } from "express";
 import { Artifact, TranscriptionStatus, AuthRequest } from "@loopy/shared";
-import { findByMeetingId } from "../repositories/artifactRepository.js";
+import {
+  findByMeetingId,
+  findByMeetingIdWithRecordingUrl,
+} from "../repositories/artifactRepository.js";
 import { syncArtifactActionProposalsFromSummary } from "../lib/syncActionProposals.js";
 import { findMeetingLeanForActions } from "../lib/meetingSummaryContext.js";
 import {
   transcribeFromUrl,
   applySpeakerDisplayNamesToText,
+  normalizeRecordingUrlForDeepgram,
 } from "../services/transcriptionService.js";
 import { generateSummary, answerQuestion } from "../services/aiService.js";
 import { loadMeetingSummaryContext } from "../lib/meetingSummaryContext.js";
@@ -26,6 +30,45 @@ export const startTranscription = async (req: AuthRequest, res: Response): Promi
       return;
     }
 
+    let resolvedRecordingUrl: string;
+    try {
+      resolvedRecordingUrl = normalizeRecordingUrlForDeepgram(recordingUrl);
+    } catch (normErr) {
+      if (forceRetry) {
+        const withStored = await findByMeetingIdWithRecordingUrl(String(meetingId));
+        const fallback = withStored?.recordingUrl?.trim();
+        if (fallback) {
+          try {
+            resolvedRecordingUrl = normalizeRecordingUrlForDeepgram(fallback);
+          } catch {
+            const msg = normErr instanceof Error ? normErr.message : String(normErr);
+            res.status(400).json({
+              message:
+                "recordingUrl from the meeting is invalid for transcription, and the stored artifact URL could not be used either.",
+              detail: msg,
+            });
+            return;
+          }
+        } else {
+          const msg = normErr instanceof Error ? normErr.message : String(normErr);
+          res.status(400).json({
+            message:
+              "recordingUrl must be a full https:// link to the audio/video file (Deepgram could not parse it).",
+            detail: msg,
+          });
+          return;
+        }
+      } else {
+        const msg = normErr instanceof Error ? normErr.message : String(normErr);
+        res.status(400).json({
+          message:
+            "recordingUrl must be a full https:// link to the audio/video file (Deepgram could not parse it).",
+          detail: msg,
+        });
+        return;
+      }
+    }
+
     // Check if already exists
     let artifact = await findByMeetingId(meetingId);
 
@@ -43,12 +86,13 @@ export const startTranscription = async (req: AuthRequest, res: Response): Promi
         artifact.actionProposals = [];
         artifact.markModified("actionProposals");
       }
+      artifact.recordingUrl = resolvedRecordingUrl;
       await artifact.save();
     } else {
       artifact = await Artifact.create({
         meetingId,
         projectId,
-        recordingUrl,
+        recordingUrl: resolvedRecordingUrl,
         filename,
         transcriptionStatus: TranscriptionStatus.PROCESSING,
       });
@@ -60,7 +104,7 @@ export const startTranscription = async (req: AuthRequest, res: Response): Promi
     // Background pipeline
     (async () => {
       try {
-        const transcript = await transcribeFromUrl(recordingUrl);
+        const transcript = await transcribeFromUrl(resolvedRecordingUrl);
         const ctx = await loadMeetingSummaryContext(String(meetingId));
 
         const textForNlp = applySpeakerDisplayNamesToText(

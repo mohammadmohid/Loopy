@@ -13,7 +13,13 @@ export default function UpcomingMeetingsPage() {
         try {
             setIsLoading(true);
             const allMeetings = await apiRequest<Meeting[]>("/meetings");
-            const scheduled = allMeetings.filter((m) => m.status === "scheduled");
+            const scheduled = allMeetings
+                .filter((m) => m.status === "scheduled")
+                .sort((a, b) => {
+                    const ta = a.scheduledAt ? new Date(a.scheduledAt).getTime() : 0;
+                    const tb = b.scheduledAt ? new Date(b.scheduledAt).getTime() : 0;
+                    return ta - tb;
+                });
             setUpcomingMeetings(scheduled);
         } catch (error) {
             console.error("Failed to fetch upcoming meetings:", error);

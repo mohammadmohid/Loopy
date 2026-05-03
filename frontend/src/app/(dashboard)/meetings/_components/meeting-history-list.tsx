@@ -2,10 +2,12 @@
 
 import { useState, useMemo } from "react"; // 👈 1. Import useMemo
 import { useRouter } from "next/navigation";
-import { Users, X, Play, FileText, Calendar, Clock, Filter } from "lucide-react"; // 👈 2. Import Filter Icon
+import { Calendar, Clock, Pencil } from "lucide-react"; // 👈 2. Import Filter Icon
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { resolveHostDisplayName, type PopulatedMeetingHost } from "@/lib/meeting-host";
+import { useAuth } from "@/lib/auth-provider";
+import { EditScheduledMeetingDialog } from "./edit-scheduled-meeting-dialog";
 
 export interface Meeting {
   _id: string;
@@ -15,20 +17,36 @@ export interface Meeting {
   hostName?: string;
   hostId?: string | PopulatedMeetingHost;
   projectName?: string;
-  participants: string[];
+  participants?: string[];
   createdAt: string;
   status: "active" | "ended" | "scheduled";
   endedAt?: string;
   scheduledAt?: string;
 }
 
-interface MeetingHistoryListProps {
-  meetings: Meeting[];
+function meetingHostId(meeting: Meeting): string {
+  const h = meeting.hostId;
+  if (typeof h === "string") return h;
+  if (h && typeof h === "object" && "_id" in h && h._id != null) return String(h._id);
+  return "";
 }
 
-export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
+interface MeetingHistoryListProps {
+  meetings: Meeting[];
+  /** When true, scheduled meetings show an edit control for the host (title, date/time, participants). */
+  editableScheduled?: boolean;
+  onScheduledMeetingUpdated?: () => void;
+}
+
+export function MeetingHistoryList({
+  meetings,
+  editableScheduled = false,
+  onScheduledMeetingUpdated,
+}: MeetingHistoryListProps) {
   const [filterProject, setFilterProject] = useState("all"); // 👈 3. New State for Filter
+  const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
   const router = useRouter();
+  const { user } = useAuth();
 
   // 👈 4. Extract Unique Project Names automatically
   const uniqueProjects = useMemo(() => {
@@ -44,6 +62,8 @@ export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
   });
 
   if (meetings.length === 0) return null;
+
+  const uid = user?.id ?? "";
 
   return (
     <div className="mb-8">
@@ -93,6 +113,9 @@ export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
                 .toUpperCase() || "?";
 
             const isScheduled = meeting.status === "scheduled";
+            const isHost = Boolean(uid && meetingHostId(meeting) === uid);
+            const showEdit =
+              editableScheduled && isScheduled && isHost;
             const when = meeting.scheduledAt || meeting.createdAt;
             const whenDate = when ? new Date(when) : new Date();
             const dateLabel = Number.isNaN(whenDate.getTime())
@@ -105,8 +128,12 @@ export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
             return (
               <div
                 key={meeting._id}
-                onClick={isScheduled ? undefined : () => router.push(`/meetings/${meeting._id}`)}
-                className={`group flex flex-col sm:flex-row sm:items-center justify-between py-5 bg-white transition-colors px-4 -mx-4 rounded-lg ${isScheduled ? "cursor-default" : "hover:bg-neutral-50 cursor-pointer"
+                onClick={
+                  isScheduled
+                    ? undefined
+                    : () => router.push(`/meetings/${meeting._id}`)
+                }
+                className={`group flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-5 bg-white transition-colors px-4 -mx-4 rounded-lg ${isScheduled ? "cursor-default" : "hover:bg-neutral-50 cursor-pointer"
                   }`}
               >
                 <div className="flex items-start sm:items-center gap-16 w-full max-w-2xl">
@@ -139,15 +166,38 @@ export function MeetingHistoryList({ meetings }: MeetingHistoryListProps) {
 
                 </div>
 
-                {/* Column 3: Duration */}
-                <div className="mt-3 sm:mt-0 text-sm text-neutral-400 font-medium">
-                  20 mins
+                <div className="flex items-center gap-2 mt-3 sm:mt-0 shrink-0">
+                  {showEdit && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 border-neutral-200 text-neutral-700"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingMeeting(meeting);
+                      }}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit
+                    </Button>
+                  )}
+                  <div className="text-sm text-neutral-400 font-medium whitespace-nowrap">
+                    20 mins
+                  </div>
                 </div>
               </div>
             );
           })
         )}
       </div>
+
+      <EditScheduledMeetingDialog
+        meeting={editingMeeting}
+        isOpen={editingMeeting != null}
+        onClose={() => setEditingMeeting(null)}
+        onSaved={onScheduledMeetingUpdated}
+      />
 
     </div >
   );

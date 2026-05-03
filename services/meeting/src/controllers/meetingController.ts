@@ -3,6 +3,11 @@ import { generateJitsiToken } from "../utils/jitsiToken.js";
 import { Request, Response } from "express";
 import { User } from "@loopy/shared";
 import { getProjectIdsInWorkspace, isProjectInWorkspace } from "../utils/workspaceProjects.js";
+import {
+  formatWhen,
+  notifyMeetingParticipants,
+  notifyMeetingPM,
+} from "../lib/meetingNotifications.js";
 
 void User;
 
@@ -52,6 +57,39 @@ export const createMeeting = async (req: Request, res: Response) => {
 
     await meeting.save();
     const created = await Meeting.findById(meeting._id).populate(HOST_POPULATE).lean();
+
+    const recipientSet = new Set<string>((participants || []).map(String));
+    recipientSet.add(String(hostId));
+    const whenStr = scheduledAt ? formatWhen(scheduledAt) : "Active / time TBD";
+    const meetTitle = meeting.title || "Untitled Meeting";
+
+    await notifyMeetingParticipants({
+      workspaceId,
+      userIds: [...recipientSet],
+      kind: scheduledAt ? "MEETING_ADDED" : "MEETING_ADDED",
+      title: scheduledAt ? "Meeting scheduled" : "Added to meeting",
+      body: `"${meetTitle}" — ${whenStr}`,
+      metadata: {
+        meetingId: meeting._id.toString(),
+        projectId: String(projectId),
+      },
+      dedupeKey: `meet-create-${meeting._id}`,
+    });
+
+    if (scheduledAt) {
+      await notifyMeetingPM({
+        workspaceId,
+        projectId: String(projectId),
+        title: "Meeting scheduled",
+        body: `"${meetTitle}" — ${whenStr}`,
+        metadata: {
+          meetingId: meeting._id.toString(),
+          projectId: String(projectId),
+        },
+        dedupeKey: `pm-meet-${meeting._id}`,
+      });
+    }
+
     res.status(201).json(created ?? meeting);
 
   } catch (error: any) {
@@ -170,23 +208,101 @@ export const getMeetingById = async (req: Request, res: Response) => {
 export const updateMeeting = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const workspaceId = req.user.workspaceId as string | undefined;
+
+    if (!workspaceId) {
+      return res.status(400).json({ message: "No active workspace" });
+    }
+
+    const existing = await Meeting.findById(id);
+    if (!existing) {
+      return res.status(404).json({ message: "Meeting not found" });
+    }
+
+    if (String(existing.hostId) !== String(req.user.id)) {
+      return res.status(403).json({ message: "Only the meeting host can update this meeting" });
+    }
+
+    const projectAllowed = await isProjectInWorkspace(String(existing.projectId), workspaceId);
+    if (!projectAllowed) {
+      return res.status(403).json({ message: "Project not found in this workspace" });
+    }
+
     const allowedUpdates = ["status", "title", "participants", "scheduledAt", "recordingUrl", "agenda"];
-    const updates: any = {};
-    
+    const updates: Record<string, unknown> = {};
+
     for (const key of Object.keys(req.body)) {
       if (allowedUpdates.includes(key)) {
         updates[key] = req.body[key];
       }
     }
 
+    if (updates.participants !== undefined && !Array.isArray(updates.participants)) {
+      return res.status(400).json({ message: "participants must be an array of user ids" });
+    }
+
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ message: "No valid fields provided for update" });
     }
+
+    const prevParticipants = new Set(
+      (existing.participants || []).map((p: unknown) => String(p))
+    );
+    const prevTitle = existing.title;
+    const prevSched = existing.scheduledAt
+      ? new Date(existing.scheduledAt).getTime()
+      : null;
 
     const meeting = await Meeting.findByIdAndUpdate(id, updates, { new: true });
 
     if (!meeting) {
       return res.status(404).json({ message: "Meeting not found" });
+    }
+
+    const nextParticipants = new Set(
+      (meeting.participants || []).map((p: unknown) => String(p))
+    );
+    const added = [...nextParticipants].filter((uid) => !prevParticipants.has(uid));
+    if (added.length) {
+      const whenStr = meeting.scheduledAt
+        ? formatWhen(meeting.scheduledAt)
+        : "Time TBD";
+      await notifyMeetingParticipants({
+        workspaceId,
+        userIds: added,
+        kind: "MEETING_ADDED",
+        title: "Added to meeting",
+        body: `"${meeting.title}" — ${whenStr}`,
+        metadata: {
+          meetingId: meeting._id.toString(),
+          projectId: String(meeting.projectId),
+        },
+      });
+    }
+
+    const schedChanged =
+      (meeting.scheduledAt
+        ? new Date(meeting.scheduledAt).getTime()
+        : null) !== prevSched;
+    const titleChanged = meeting.title !== prevTitle;
+
+    if (titleChanged || schedChanged) {
+      const notifySet = new Set<string>([...nextParticipants]);
+      notifySet.add(String(meeting.hostId));
+      const whenStr = meeting.scheduledAt
+        ? formatWhen(meeting.scheduledAt)
+        : "Time TBD";
+      await notifyMeetingParticipants({
+        workspaceId,
+        userIds: [...notifySet],
+        kind: "MEETING_UPDATED",
+        title: "Meeting updated",
+        body: `"${meeting.title}" — ${whenStr}`,
+        metadata: {
+          meetingId: meeting._id.toString(),
+          projectId: String(meeting.projectId),
+        },
+      });
     }
 
     const updated = await Meeting.findById(meeting._id).populate(HOST_POPULATE).lean();

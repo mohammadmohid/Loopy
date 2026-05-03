@@ -61,6 +61,7 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - CHAT_SERVICE_URL=http://chat:5004
       - GATEWAY_URL=http://gateway:8000
+      - INTERNAL_NOTIFICATION_SECRET=${INTERNAL_NOTIFICATION_SECRET:-dev-notification-secret}
       - R2_BUCKET_NAME=${R2_BUCKET_NAME}
       - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
       - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
@@ -102,6 +103,8 @@ services:
       - MONGO_URI=${MONGO_URI}
       - JWT_SECRET=${JWT_SECRET}
       - GATEWAY_URL=http://gateway:8000
+      - PROJECT_SERVICE_URL=http://project:5002
+      - INTERNAL_NOTIFICATION_SECRET=${INTERNAL_NOTIFICATION_SECRET:-dev-notification-secret}
       - R2_BUCKET_NAME=${R2_BUCKET_NAME}
       - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
       - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}

@@ -71,6 +71,7 @@ interface ServiceRoute {
 const SERVICE_ROUTES: ServiceRoute[] = [
   { prefix: "/api/auth", targetEnvVar: "AUTH_SERVICE_URL" },
   { prefix: "/api/projects", targetEnvVar: "PROJECT_SERVICE_URL" },
+  { prefix: "/api/notifications", targetEnvVar: "PROJECT_SERVICE_URL" },
   { prefix: "/api/meetings", targetEnvVar: "MEETING_SERVICE_URL" },
   { prefix: "/api/artifacts", targetEnvVar: "TRANSCRIPTION_SERVICE_URL" },
   { prefix: "/api/chat", targetEnvVar: "CHAT_SERVICE_URL" },

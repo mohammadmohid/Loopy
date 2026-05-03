@@ -44,7 +44,6 @@ export default function MeetingsPage() {
   // Split meetings into categories
   const activeMeetings = allMeetings.filter(m => m.status === "active") as any[];
   const pastMeetings = allMeetings.filter(m => m.status === "ended");
-  const upcomingMeetings = allMeetings.filter(m => m.status === "scheduled");
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] -mt-6 -mx-6 bg-white overflow-hidden">
@@ -124,7 +123,7 @@ export default function MeetingsPage() {
           {/* 1. Live Meetings Section (Only Active) */}
           <LiveMeetingList meetings={activeMeetings} isLoading={isLoading} />
 
-          {/* 3. Past Meetings Section (Only Ended) */}
+          {/* Past Meetings */}
           <div className="mt-4">
             <h2 className="text-lg font-semibold text-neutral-900 mb-4">Past Meetings</h2>
             <MeetingHistoryList meetings={pastMeetings} />

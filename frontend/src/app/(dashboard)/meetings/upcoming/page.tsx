@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { apiRequest } from "@/lib/api";
 import { MeetingHistoryList, type Meeting } from "../_components/meeting-history-list";
 import { Loader2 } from "lucide-react";
@@ -9,22 +9,22 @@ export default function UpcomingMeetingsPage() {
     const [upcomingMeetings, setUpcomingMeetings] = useState<Meeting[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchUpcomingMeetings = async () => {
-            try {
-                setIsLoading(true);
-                const allMeetings = await apiRequest<Meeting[]>("/meetings");
-                const scheduled = allMeetings.filter(m => m.status === "scheduled");
-                setUpcomingMeetings(scheduled);
-            } catch (error) {
-                console.error("Failed to fetch upcoming meetings:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchUpcomingMeetings();
+    const fetchUpcomingMeetings = useCallback(async () => {
+        try {
+            setIsLoading(true);
+            const allMeetings = await apiRequest<Meeting[]>("/meetings");
+            const scheduled = allMeetings.filter((m) => m.status === "scheduled");
+            setUpcomingMeetings(scheduled);
+        } catch (error) {
+            console.error("Failed to fetch upcoming meetings:", error);
+        } finally {
+            setIsLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        fetchUpcomingMeetings();
+    }, [fetchUpcomingMeetings]);
 
     return (
         <div className="flex flex-col h-[calc(100vh-80px)] -mt-6 -mx-6 bg-white overflow-hidden p-6 sm:p-8">
@@ -35,9 +35,15 @@ export default function UpcomingMeetingsPage() {
                     <div className="flex justify-center items-center h-48">
                         <Loader2 className="w-8 h-8 animate-spin text-primary" />
                     </div>
+                ) : upcomingMeetings.length === 0 ? (
+                    <p className="text-neutral-500 text-sm mt-2">No upcoming meetings scheduled.</p>
                 ) : (
                     <div className="mt-4">
-                        <MeetingHistoryList meetings={upcomingMeetings} />
+                        <MeetingHistoryList
+                            meetings={upcomingMeetings}
+                            editableScheduled
+                            onScheduledMeetingUpdated={fetchUpcomingMeetings}
+                        />
                     </div>
                 )}
             </div>

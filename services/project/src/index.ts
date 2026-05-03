@@ -5,6 +5,8 @@ import mongoose from "mongoose";
 import { connectMongoWithRetry } from "@loopy/shared";
 import cookieParser from "cookie-parser";
 import projectRoutes from "./routes/projectRoutes";
+import notificationRoutes from "./routes/notificationRoutes";
+import { startNotificationReminderJobs } from "./jobs/notificationReminders";
 
 const app = express();
 
@@ -27,12 +29,16 @@ app.use(cookieParser());
 app.use(express.json());
 
 void connectMongoWithRetry(process.env.MONGO_URI, { label: "Project" })
-  .then(() => console.log(`ProjectDB Connected (${mongoose.connection.host})`))
+  .then(() => {
+    console.log(`ProjectDB Connected (${mongoose.connection.host})`);
+    startNotificationReminderJobs();
+  })
   .catch((err) => {
     console.error(err);
     process.exit(1);
   });
 
+app.use("/api/notifications", notificationRoutes);
 app.use("/api/projects", projectRoutes);
 
 const PORT = process.env.PORT || 5002;

@@ -13,6 +13,11 @@ import {
   resolveMemberAvatars,
   buildScopedProjectQuery,
 } from "../helpers.js";
+import {
+  dispatchToUsers,
+  getPMRecipientIds,
+  formatWhen,
+} from "../services/notificationDispatch.js";
 
 interface Member {
   user: mongoose.Types.ObjectId;
@@ -97,6 +102,21 @@ export const createProject = async (req: AuthRequest, res: Response) => {
       createdBy: req.user!.id,
       workspaceId: workspaceId,
     });
+
+    const creatorId = String(req.user!.id);
+    for (const m of initialMembers) {
+      const uid = m.user.toString();
+      if (uid === creatorId) continue;
+      await dispatchToUsers({
+        workspaceId: String(workspaceId),
+        userIds: [uid],
+        category: "update",
+        kind: "PROJECT_MEMBER_ADDED",
+        title: "Added to project",
+        body: `You were added to "${project.name}".`,
+        metadata: { projectId: project._id.toString() },
+      });
+    }
 
     res.status(201).json(project);
   } catch (error: any) {
@@ -227,6 +247,9 @@ export const updateProject = async (req: AuthRequest, res: Response) => {
     const project = await Project.findById(req.params.id);
     if (!project) return res.status(404).json({ message: "Project not found" });
 
+    const prevMemberIds = new Set(project.members.map((m) => m.user.toString()));
+    const prevEndMs = project.endDate ? new Date(project.endDate).getTime() : null;
+
     const isOwner = project.owner.toString() === req.user!.id;
     const isAdmin = req.user!.role === "ADMIN";
     const isWorkspacePM = req.user!.role === "PROJECT_MANAGER";
@@ -324,6 +347,45 @@ export const updateProject = async (req: AuthRequest, res: Response) => {
 
     await project.save();
 
+    if (req.body.members !== undefined) {
+      const newIds = project.members.map((m) => m.user.toString());
+      for (const uid of newIds) {
+        if (!prevMemberIds.has(uid)) {
+          await dispatchToUsers({
+            workspaceId: String(project.workspaceId),
+            userIds: [uid],
+            category: "update",
+            kind: "PROJECT_MEMBER_ADDED",
+            title: "Added to project",
+            body: `You were added to "${project.name}".`,
+            metadata: { projectId: String(project._id) },
+          });
+        }
+      }
+    }
+
+    if (canManageProjectDetails && req.body.endDate !== undefined) {
+      const nextMs = project.endDate ? new Date(project.endDate).getTime() : null;
+      if (prevEndMs !== nextMs && project.endDate) {
+        const pms = await getPMRecipientIds(
+          String(project.workspaceId),
+          String(project._id),
+          []
+        );
+        if (pms.length) {
+          await dispatchToUsers({
+            workspaceId: String(project.workspaceId),
+            userIds: pms,
+            category: "update",
+            kind: "PROJECT_DEADLINE_CHANGED",
+            title: "Project deadline updated",
+            body: `"${project.name}" deadline is now ${formatWhen(project.endDate)}.`,
+            metadata: { projectId: String(project._id) },
+          });
+        }
+      }
+    }
+
     await project.populate(
       "members.user",
       "profile.firstName profile.lastName email"
@@ -377,6 +439,16 @@ export const assignTeamLead = async (req: AuthRequest, res: Response) => {
     }
 
     await project.save();
+
+    await dispatchToUsers({
+      workspaceId: String(project.workspaceId),
+      userIds: [teamLeadId],
+      category: "update",
+      kind: "PROJECT_LEAD_ASSIGNED",
+      title: "Project role updated",
+      body: `You are now a manager on "${project.name}".`,
+      metadata: { projectId: String(project._id) },
+    });
 
     res.status(200).json(project);
   } catch (error: any) {

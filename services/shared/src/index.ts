@@ -9,6 +9,8 @@ export { default as TokenBlocklist } from './models/TokenBlocklist.js';
 export * from './models/TokenBlocklist.js';
 export { default as Artifact } from './models/Artifact.js';
 export * from './models/Artifact.js';
+export { default as Notification } from './models/Notification.js';
+export * from './models/Notification.js';
 // Export Middleware
 export * from './middleware/auth.js';
 

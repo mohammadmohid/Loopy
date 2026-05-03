@@ -12,6 +12,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-provider";
+import { useNotifications } from "@/contexts/notifications-context";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export function Header({
   onOpenSearch: () => void;
 }) {
   const { user, logout } = useAuth();
+  const { togglePanel, unreadCount } = useNotifications();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [upcomingCount, setUpcomingCount] = useState(0);
@@ -179,9 +181,18 @@ export function Header({
           )}
         </div>
 
-        <button className="p-2 hover:bg-neutral-100 rounded-full text-neutral-500 relative transition-colors">
+        <button
+          type="button"
+          onClick={togglePanel}
+          className="p-2 hover:bg-neutral-100 rounded-full text-neutral-500 relative transition-colors"
+          aria-label="Notifications"
+        >
           <Bell className="w-5 h-5" />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-[#cc2233] text-white text-[10px] font-bold border-2 border-white">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
         </button>
 
         {/* User Menu */}

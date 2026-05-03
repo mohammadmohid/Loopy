@@ -2,6 +2,12 @@ import { Response } from "express";
 import { AuthRequest } from "@loopy/shared";
 import Task from "../models/Task";
 import Milestone from "../models/Milestone";
+import Project from "../models/Project.js";
+import {
+  dispatchToUsers,
+  getPMRecipientIds,
+  formatWhen,
+} from "../services/notificationDispatch.js";
 
 // Allowed fields for task creation/updates to prevent mass assignment
 const ALLOWED_TASK_FIELDS = [
@@ -66,6 +72,39 @@ export const createTask = async (req: AuthRequest, res: Response) => {
       { path: "assignees", select: "profile.firstName profile.lastName profile.avatarKey email" },
       { path: "assignedTeams", select: "name" }
     ]);
+
+    const proj = await Project.findById(task.projectId).select("name workspaceId").lean();
+    if (proj) {
+      const ws = String(proj.workspaceId);
+      const assigneeIds = (task.assignees || []).map((a: { _id?: unknown }) =>
+        String(a._id ?? a)
+      );
+      const dueLine = task.dueDate ? ` Due ${formatWhen(task.dueDate)}.` : "";
+
+      await dispatchToUsers({
+        workspaceId: ws,
+        userIds: assigneeIds,
+        category: "task",
+        kind: "TASK_ASSIGNED",
+        title: "New task assigned",
+        body: `"${task.title}"${dueLine}`,
+        metadata: { taskId: String(task._id), projectId: String(task.projectId) },
+      });
+
+      const pms = await getPMRecipientIds(ws, String(task.projectId), assigneeIds);
+      if (pms.length) {
+        await dispatchToUsers({
+          workspaceId: ws,
+          userIds: pms,
+          category: "update",
+          kind: "PM_TASK_ASSIGNED",
+          title: "Task assignment",
+          body: `"${task.title}" assigned in ${proj.name}.${dueLine}`,
+          metadata: { taskId: String(task._id), projectId: String(task.projectId) },
+        });
+      }
+    }
+
     res.status(201).json(task);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -80,6 +119,8 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "No valid fields provided for update" });
     }
 
+    const prev = await Task.findById(req.params.id).lean();
+
     const task = await Task.findByIdAndUpdate(req.params.id, safeUpdates, {
       new: true,
     }).populate([
@@ -88,6 +129,72 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
     ]);
 
     if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const proj = await Project.findById(task.projectId).select("name workspaceId").lean();
+    if (proj && prev) {
+      const ws = String(proj.workspaceId);
+      const pid = String(task.projectId);
+      const prevAssignees = new Set((prev.assignees || []).map(String));
+      const nextAssignees = (task.assignees || []).map((a: { _id?: unknown }) =>
+        String(a._id ?? a)
+      );
+      const addedAssignees = nextAssignees.filter((id) => !prevAssignees.has(id));
+
+      if (addedAssignees.length) {
+        await dispatchToUsers({
+          workspaceId: ws,
+          userIds: addedAssignees,
+          category: "task",
+          kind: "TASK_ASSIGNED",
+          title: "New task assigned",
+          body: `"${task.title}"${task.dueDate ? ` — due ${formatWhen(task.dueDate)}.` : "."}`,
+          metadata: { taskId: String(task._id), projectId: pid },
+        });
+        const pms = await getPMRecipientIds(ws, pid, [...nextAssignees]);
+        if (pms.length) {
+          await dispatchToUsers({
+            workspaceId: ws,
+            userIds: pms,
+            category: "update",
+            kind: "PM_TASK_ASSIGNED",
+            title: "Task assignment",
+            body: `"${task.title}" reassigned in ${proj.name}.`,
+            metadata: { taskId: String(task._id), projectId: pid },
+          });
+        }
+      }
+
+      if (
+        safeUpdates.dueDate !== undefined &&
+        String(prev.dueDate ?? "") !== String(task.dueDate ?? "")
+      ) {
+        await dispatchToUsers({
+          workspaceId: ws,
+          userIds: nextAssignees,
+          category: "task",
+          kind: "TASK_DUE_UPDATED",
+          title: "Task deadline updated",
+          body: `"${task.title}" — new deadline ${task.dueDate ? formatWhen(task.dueDate) : "cleared"}.`,
+          metadata: { taskId: String(task._id), projectId: pid },
+        });
+      }
+
+      if (task.status === "done" && prev.status !== "done") {
+        const pms = await getPMRecipientIds(ws, pid, []);
+        if (pms.length) {
+          await dispatchToUsers({
+            workspaceId: ws,
+            userIds: pms,
+            category: "update",
+            kind: "PM_TASK_COMPLETED",
+            title: "Task completed",
+            body: `"${task.title}" marked done in ${proj.name}.`,
+            metadata: { taskId: String(task._id), projectId: pid },
+          });
+        }
+      }
+    }
+
     res.json(task);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -135,6 +242,26 @@ export const createMilestone = async (req: AuthRequest, res: Response) => {
       projectId: req.params.projectId,
     });
 
+    const proj = await Project.findById(req.params.projectId)
+      .select("name workspaceId")
+      .lean();
+    if (proj) {
+      const ws = String(proj.workspaceId);
+      const pid = String(req.params.projectId);
+      const pms = await getPMRecipientIds(ws, pid, []);
+      if (pms.length) {
+        await dispatchToUsers({
+          workspaceId: ws,
+          userIds: pms,
+          category: "update",
+          kind: "PM_MILESTONE_CREATED",
+          title: "New milestone",
+          body: `"${milestone.name}" added to ${proj.name}${milestone.dueDate ? ` (due ${formatWhen(milestone.dueDate)})` : ""}.`,
+          metadata: { milestoneId: String(milestone._id), projectId: pid },
+        });
+      }
+    }
+
     if (taskIds && Array.isArray(taskIds) && taskIds.length > 0) {
       await Task.updateMany(
         { _id: { $in: taskIds } },
@@ -173,6 +300,36 @@ export const updateMilestone = async (req: AuthRequest, res: Response) => {
         { status: "done" }
       );
     }
+
+    const proj = milestone.projectId
+      ? await Project.findById(milestone.projectId).select("name workspaceId").lean()
+      : null;
+    if (proj) {
+      const ws = String(proj.workspaceId);
+      const pid = String(milestone.projectId);
+      const pms = await getPMRecipientIds(ws, pid, []);
+      if (pms.length) {
+        await dispatchToUsers({
+          workspaceId: ws,
+          userIds: pms,
+          category: "update",
+          kind:
+            safeUpdates.status === "completed"
+              ? "PM_MILESTONE_COMPLETED"
+              : "PM_MILESTONE_UPDATED",
+          title:
+            safeUpdates.status === "completed"
+              ? "Milestone completed"
+              : "Milestone updated",
+          body:
+            safeUpdates.status === "completed"
+              ? `"${milestone.name}" completed on ${proj.name}.`
+              : `"${milestone.name}" updated on ${proj.name}.`,
+          metadata: { milestoneId: String(milestone._id), projectId: pid },
+        });
+      }
+    }
+
     res.json(milestone);
   } catch (error: any) {
     res.status(500).json({ message: error.message });

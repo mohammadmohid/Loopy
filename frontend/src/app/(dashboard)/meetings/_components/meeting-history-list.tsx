@@ -55,12 +55,15 @@ interface MeetingHistoryListProps {
   onScheduledMeetingUpdated?: () => void;
 }
 
+type WorkspaceProject = { _id: string; name: string };
+
 export function MeetingHistoryList({
   meetings,
   editableScheduled = false,
   onScheduledMeetingUpdated,
 }: MeetingHistoryListProps) {
-  const [filterProject, setFilterProject] = useState("all"); // 👈 3. New State for Filter
+  const [filterProjectId, setFilterProjectId] = useState<string>("all");
+  const [workspaceProjects, setWorkspaceProjects] = useState<WorkspaceProject[]>([]);
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [startingId, setStartingId] = useState<string | null>(null);
@@ -68,23 +71,70 @@ export function MeetingHistoryList({
   const { user } = useAuth();
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await apiRequest<unknown[]>("/projects");
+        if (cancelled || !Array.isArray(raw)) return;
+        const mapped: WorkspaceProject[] = raw
+          .map((p) => {
+            const row = p as { _id?: unknown; id?: unknown; name?: unknown };
+            const id = String(row._id ?? row.id ?? "").trim();
+            const name =
+              typeof row.name === "string" && row.name.trim()
+                ? row.name.trim()
+                : "Untitled project";
+            return { _id: id, name };
+          })
+          .filter((p) => /^[a-fA-F0-9]{24}$/.test(p._id));
+        setWorkspaceProjects(mapped);
+      } catch {
+        /* dropdown still works with id fallback labels */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!editableScheduled) return;
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [editableScheduled]);
 
-  // 👈 4. Extract Unique Project Names automatically
-  const uniqueProjects = useMemo(() => {
-    // Get all project names, remove null/undefined, and remove duplicates
-    const names = meetings.map(m => m.projectName).filter(Boolean);
-    return Array.from(new Set(names));
-  }, [meetings]);
+  const projectFilterOptions = useMemo(() => {
+    const idsInMeetings = [
+      ...new Set(meetings.map(meetingProjectId).filter(Boolean)),
+    ];
+    const nameById = new Map(workspaceProjects.map((p) => [p._id, p.name]));
+    return idsInMeetings
+      .map((id) => ({
+        id,
+        name: nameById.get(id) ?? `Project (${id.slice(0, 8)}…)`,
+      }))
+      .sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+      );
+  }, [meetings, workspaceProjects]);
 
-  // 👈 5. Filter the list based on selection
-  const filteredMeetings = meetings.filter(meeting => {
-    if (filterProject === "all") return true;
-    return meeting.projectName === filterProject;
+  useEffect(() => {
+    if (filterProjectId === "all") return;
+    if (!projectFilterOptions.some((o) => o.id === filterProjectId)) {
+      setFilterProjectId("all");
+    }
+  }, [projectFilterOptions, filterProjectId]);
+
+  const filteredMeetings = meetings.filter((meeting) => {
+    if (filterProjectId === "all") return true;
+    return meetingProjectId(meeting) === filterProjectId;
   });
+
+  const filterLabel =
+    filterProjectId === "all"
+      ? null
+      : projectFilterOptions.find((o) => o.id === filterProjectId)?.name ??
+        filterProjectId;
 
   if (meetings.length === 0) return null;
 
@@ -127,15 +177,21 @@ export function MeetingHistoryList({
         </div>
         {/* Filter moved to the right side of the tab row */}
         <div className="ml-auto pb-2">
-          <div className="relative bg-white border border-neutral-200 text-neutral-700 rounded-md px-2 py-0.5 shadow-sm hover:bg-neutral-50 transition-colors flex items-center">
+          <label className="sr-only" htmlFor="meeting-project-filter">
+            Filter by project
+          </label>
+          <div className="relative bg-white border border-neutral-200 text-neutral-700 rounded-md px-2 py-0.5 shadow-sm hover:bg-neutral-50 transition-colors flex items-center min-w-[220px] max-w-[min(100vw-2rem,320px)]">
             <select
-              value={filterProject}
-              onChange={(e) => setFilterProject(e.target.value)}
-              className="pl-2 pr-8 py-1 bg-transparent text-sm font-medium outline-none appearance-none cursor-pointer w-full"
+              id="meeting-project-filter"
+              value={filterProjectId}
+              onChange={(e) => setFilterProjectId(e.target.value)}
+              className="pl-2 pr-8 py-1.5 bg-transparent text-sm font-medium outline-none appearance-none cursor-pointer w-full truncate"
             >
-              <option value="all">All Projects</option>
-              {uniqueProjects.map((name) => (
-                <option key={name} value={name}>{name}</option>
+              <option value="all">All projects</option>
+              {projectFilterOptions.map(({ id, name }) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
               ))}
             </select>
             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-500">
@@ -143,7 +199,7 @@ export function MeetingHistoryList({
             </div>
           </div>
         </div>
-      </div >
+      </div>
 
       <div
         className={
@@ -152,10 +208,11 @@ export function MeetingHistoryList({
             : "flex flex-col divide-y divide-neutral-100"
         }
       >
-        {/* 👈 7. Render filtered list instead of full list */}
         {filteredMeetings.length === 0 ? (
           <div className="p-8 text-center text-neutral-500 bg-neutral-50 border border-dashed border-neutral-200 rounded-xl mt-4">
-            No meetings found for project "{filterProject}"
+            {filterProjectId === "all"
+              ? "No meetings to show."
+              : `No meetings for ${filterLabel ? `“${filterLabel}”` : "this project"}.`}
           </div>
         ) : (
           filteredMeetings.map((meeting) => {
@@ -324,6 +381,6 @@ export function MeetingHistoryList({
         onSaved={onScheduledMeetingUpdated}
       />
 
-    </div >
+    </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   dispatchToUsers,
   getPMRecipientIds,
   formatWhen,
+  formatTaskTypeLabel,
 } from "../services/notificationDispatch.js";
 
 // Allowed fields for task creation/updates to prevent mass assignment
@@ -86,6 +87,8 @@ export const createTask = async (req: AuthRequest, res: Response) => {
         String((a as { _id?: unknown })._id ?? a)
       );
       const dueLine = task.dueDate ? ` Due ${formatWhen(task.dueDate)}.` : "";
+      const typeLabel = formatTaskTypeLabel(task.type);
+      const typeLead = `[${typeLabel}] `;
 
       await dispatchToUsers({
         workspaceId: ws,
@@ -93,8 +96,12 @@ export const createTask = async (req: AuthRequest, res: Response) => {
         category: "task",
         kind: "TASK_ASSIGNED",
         title: "New task assigned",
-        body: `"${task.title}"${dueLine}`,
-        metadata: { taskId: String(task._id), projectId: String(task.projectId) },
+        body: `${typeLead}"${task.title}"${dueLine}`,
+        metadata: {
+          taskId: String(task._id),
+          projectId: String(task.projectId),
+          taskType: task.type ?? "task",
+        },
       });
 
       const pms = await getPMRecipientIds(ws, String(task.projectId), assigneeIds);
@@ -105,8 +112,12 @@ export const createTask = async (req: AuthRequest, res: Response) => {
           category: "update",
           kind: "PM_TASK_ASSIGNED",
           title: "Task assignment",
-          body: `"${task.title}" assigned in ${proj.name}.${dueLine}`,
-          metadata: { taskId: String(task._id), projectId: String(task.projectId) },
+          body: `${typeLead}"${task.title}" assigned in ${proj.name}.${dueLine}`,
+          metadata: {
+            taskId: String(task._id),
+            projectId: String(task.projectId),
+            taskType: task.type ?? "task",
+          },
         });
       }
     }
@@ -147,14 +158,20 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
       const addedAssignees = nextAssignees.filter((id) => !prevAssignees.has(id));
 
       if (addedAssignees.length) {
+        const typeLabel = formatTaskTypeLabel(task.type);
+        const typeLead = `[${typeLabel}] `;
         await dispatchToUsers({
           workspaceId: ws,
           userIds: addedAssignees,
           category: "task",
           kind: "TASK_ASSIGNED",
           title: "New task assigned",
-          body: `"${task.title}"${task.dueDate ? ` — due ${formatWhen(task.dueDate)}.` : "."}`,
-          metadata: { taskId: String(task._id), projectId: pid },
+          body: `${typeLead}"${task.title}"${task.dueDate ? ` — due ${formatWhen(task.dueDate)}.` : "."}`,
+          metadata: {
+            taskId: String(task._id),
+            projectId: pid,
+            taskType: task.type ?? "task",
+          },
         });
         const pms = await getPMRecipientIds(ws, pid, [...nextAssignees]);
         if (pms.length) {
@@ -164,8 +181,12 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
             category: "update",
             kind: "PM_TASK_ASSIGNED",
             title: "Task assignment",
-            body: `"${task.title}" reassigned in ${proj.name}.`,
-            metadata: { taskId: String(task._id), projectId: pid },
+            body: `${typeLead}"${task.title}" reassigned in ${proj.name}.`,
+            metadata: {
+              taskId: String(task._id),
+              projectId: pid,
+              taskType: task.type ?? "task",
+            },
           });
         }
       }
@@ -174,28 +195,40 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
         safeUpdates.dueDate !== undefined &&
         String(prev.dueDate ?? "") !== String(task.dueDate ?? "")
       ) {
+        const typeLabel = formatTaskTypeLabel(task.type);
+        const typeLead = `[${typeLabel}] `;
         await dispatchToUsers({
           workspaceId: ws,
           userIds: nextAssignees,
           category: "task",
           kind: "TASK_DUE_UPDATED",
           title: "Task deadline updated",
-          body: `"${task.title}" — new deadline ${task.dueDate ? formatWhen(task.dueDate) : "cleared"}.`,
-          metadata: { taskId: String(task._id), projectId: pid },
+          body: `${typeLead}"${task.title}" — new deadline ${task.dueDate ? formatWhen(task.dueDate) : "cleared"}.`,
+          metadata: {
+            taskId: String(task._id),
+            projectId: pid,
+            taskType: task.type ?? "task",
+          },
         });
       }
 
       if (task.status === "done" && prev.status !== "done") {
         const pms = await getPMRecipientIds(ws, pid, []);
         if (pms.length) {
+          const typeLabel = formatTaskTypeLabel(task.type);
+          const typeLead = `[${typeLabel}] `;
           await dispatchToUsers({
             workspaceId: ws,
             userIds: pms,
             category: "update",
             kind: "PM_TASK_COMPLETED",
             title: "Task completed",
-            body: `"${task.title}" marked done in ${proj.name}.`,
-            metadata: { taskId: String(task._id), projectId: pid },
+            body: `${typeLead}"${task.title}" marked done in ${proj.name}.`,
+            metadata: {
+              taskId: String(task._id),
+              projectId: pid,
+              taskType: task.type ?? "task",
+            },
           });
         }
       }

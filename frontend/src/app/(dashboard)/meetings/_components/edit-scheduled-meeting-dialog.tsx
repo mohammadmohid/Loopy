@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, Loader2, Users, Check, ChevronsUpDown } from "lucide-react";
+import { X, Loader2, Users, Check, ChevronsUpDown, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
 import {
@@ -13,14 +13,15 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { normalizeAuthUsersForMeeting, type UserForHostLookup } from "@/lib/meeting-host";
 import { format } from "date-fns";
 import type { Meeting } from "./meeting-history-list";
 
-interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
+function lockedMeetingHostId(m: Meeting): string {
+  const h = m.hostId;
+  if (typeof h === "string") return h;
+  if (h && typeof h === "object" && "_id" in h && h._id != null) return String(h._id);
+  return "";
 }
 
 interface EditScheduledMeetingDialogProps {
@@ -36,7 +37,9 @@ export function EditScheduledMeetingDialog({
   onClose,
   onSaved,
 }: EditScheduledMeetingDialogProps) {
-  const [users, setUsers] = useState<User[]>([]);
+  const lockedHostId = meeting ? lockedMeetingHostId(meeting) : "";
+
+  const [users, setUsers] = useState<UserForHostLookup[]>([]);
   const [loadingData, setLoadingData] = useState(false);
 
   const [title, setTitle] = useState("");
@@ -64,8 +67,8 @@ export function EditScheduledMeetingDialog({
     const load = async () => {
       try {
         setLoadingData(true);
-        const usersRes = await apiRequest<User[]>("/auth/users");
-        setUsers(usersRes);
+        const usersRes = await apiRequest<unknown[]>("/auth/users");
+        setUsers(normalizeAuthUsersForMeeting(usersRes));
       } catch (error) {
         console.error("Failed to load users", error);
       } finally {
@@ -80,11 +83,14 @@ export function EditScheduledMeetingDialog({
     setDate(Number.isNaN(when.getTime()) ? "" : format(when, "yyyy-MM-dd"));
     setTime(Number.isNaN(when.getTime()) ? "" : format(when, "HH:mm"));
     const rawParts = Array.isArray(meeting.participants) ? meeting.participants : [];
-    setSelectedUsers(rawParts.map((p) => String(p)));
+    const merged = new Set(rawParts.map((p) => String(p)));
+    if (lockedHostId) merged.add(lockedHostId);
+    setSelectedUsers([...merged]);
     setIsDropdownOpen(false);
-  }, [isOpen, meeting]);
+  }, [isOpen, meeting, lockedHostId]);
 
   const toggleUser = (userId: string) => {
+    if (userId === lockedHostId) return;
     setSelectedUsers((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
@@ -103,7 +109,9 @@ export function EditScheduledMeetingDialog({
         data: {
           title: title.trim(),
           scheduledAt,
-          participants: selectedUsers,
+          participants: lockedHostId
+            ? [...new Set([...selectedUsers, lockedHostId])]
+            : selectedUsers,
         },
       });
 
@@ -195,29 +203,46 @@ export function EditScheduledMeetingDialog({
                       </CommandEmpty>
                       <CommandGroup>
                         {users.map((user) => {
+                          const isLockedHost = Boolean(lockedHostId && user.id === lockedHostId);
                           const isSelected = selectedUsers.includes(user.id);
                           return (
                             <CommandItem
                               key={user.id}
                               value={`${user.firstName} ${user.lastName} ${user.email}`}
-                              onSelect={() => toggleUser(user.id)}
-                              className="flex items-center gap-3 px-3 py-2 cursor-pointer rounded-md hover:bg-neutral-50 aria-selected:bg-neutral-50"
+                              onSelect={() => {
+                                if (!isLockedHost) toggleUser(user.id);
+                              }}
+                              className={cn(
+                                "flex items-center gap-3 px-3 py-2 rounded-md aria-selected:bg-neutral-50",
+                                isLockedHost
+                                  ? "cursor-default bg-neutral-50/90"
+                                  : "cursor-pointer hover:bg-neutral-50"
+                              )}
                             >
                               <div
                                 className={cn(
-                                  "flex items-center justify-center w-4 h-4 rounded border",
+                                  "flex items-center justify-center w-4 h-4 rounded border shrink-0",
                                   isSelected
                                     ? "bg-primary border-primary text-white"
-                                    : "border-neutral-300"
+                                    : "border-neutral-300",
+                                  isLockedHost && "border-primary/60"
                                 )}
                               >
                                 {isSelected && <Check className="w-3 h-3" />}
                               </div>
-                              <div className="flex flex-col">
-                                <span className="text-sm font-medium text-neutral-900">
-                                  {user.firstName} {user.lastName}
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-sm font-medium text-neutral-900 flex items-center gap-2 flex-wrap">
+                                  <span className="truncate">
+                                    {user.firstName} {user.lastName}
+                                  </span>
+                                  {isLockedHost ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-neutral-200/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 shrink-0">
+                                      <Lock className="w-3 h-3" aria-hidden />
+                                      Host
+                                    </span>
+                                  ) : null}
                                 </span>
-                                <span className="text-xs text-neutral-500">{user.email}</span>
+                                <span className="text-xs text-neutral-500 truncate">{user.email}</span>
                               </div>
                             </CommandItem>
                           );

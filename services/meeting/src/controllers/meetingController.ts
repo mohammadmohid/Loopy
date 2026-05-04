@@ -1,7 +1,7 @@
 import Meeting from "../models/Meeting.js";
 import { generateJitsiToken } from "../utils/jitsiToken.js";
 import { Request, Response } from "express";
-import { User } from "@loopy/shared";
+import { User, parseObjectIdArray } from "@loopy/shared";
 import { getProjectIdsInWorkspace, isProjectInWorkspace } from "../utils/workspaceProjects.js";
 import {
   formatWhen,
@@ -45,7 +45,7 @@ export const createMeeting = async (req: Request, res: Response) => {
     const meeting = new Meeting({
       title: title || "Untitled Meeting",
       projectId,
-      participants: participants || [],
+      participants: parseObjectIdArray(participants ?? []),
       hostId,
       status: scheduledAt ? "scheduled" : "active",
       ...(scheduledAt && { scheduledAt }),
@@ -58,7 +58,9 @@ export const createMeeting = async (req: Request, res: Response) => {
     await meeting.save();
     const created = await Meeting.findById(meeting._id).populate(HOST_POPULATE).lean();
 
-    const recipientSet = new Set<string>((participants || []).map(String));
+    const recipientSet = new Set<string>(
+      parseObjectIdArray(participants ?? []).map((id) => id.toString())
+    );
     recipientSet.add(String(hostId));
     const whenStr = scheduledAt ? formatWhen(scheduledAt) : "Active / time TBD";
     const meetTitle = meeting.title || "Untitled Meeting";
@@ -239,6 +241,10 @@ export const updateMeeting = async (req: Request, res: Response) => {
 
     if (updates.participants !== undefined && !Array.isArray(updates.participants)) {
       return res.status(400).json({ message: "participants must be an array of user ids" });
+    }
+
+    if (updates.participants !== undefined) {
+      updates.participants = parseObjectIdArray(updates.participants);
     }
 
     if (Object.keys(updates).length === 0) {

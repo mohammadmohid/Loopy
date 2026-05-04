@@ -25,6 +25,7 @@ export * from './middleware/filePermissions.js';
 export * from './utils/r2.js';
 export * from './utils/configureMongoDns.js';
 export * from './utils/mongoConnect.js';
+export * from './utils/parseObjectIdArray.js';
 export * from './utils/redis.js';
 
 // File coordination services

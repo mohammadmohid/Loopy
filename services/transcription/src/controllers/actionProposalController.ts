@@ -1,19 +1,31 @@
 import { Response } from "express";
-import mongoose from "mongoose";
-import { AuthRequest } from "@loopy/shared";
+import { AuthRequest, parseObjectIdArray } from "@loopy/shared";
 import { findByMeetingId } from "../repositories/artifactRepository.js";
 import { assertUserIsMeetingHost } from "../lib/meetingSummaryContext.js";
 import { resolveUserIdFromNameHint } from "../lib/resolveAssignee.js";
 import type { ActionProposal } from "../lib/parseActionProposals.js";
+
+export type TaskExecutionTaskType = "task" | "bug" | "feature" | "story";
 
 export type TaskExecutionPayload = {
   projectId: string;
   title: string;
   description?: string;
   assignees: string[];
-  type: "task";
+  type: TaskExecutionTaskType;
   priority: "medium";
+  dueDate?: string;
 };
+
+const TASK_TYPE_VALUES = ["task", "bug", "feature", "story"] as const;
+
+function normalizeDraftTaskType(raw: unknown): TaskExecutionTaskType | undefined {
+  if (typeof raw !== "string") return undefined;
+  const s = raw.trim().toLowerCase();
+  return (TASK_TYPE_VALUES as readonly string[]).includes(s)
+    ? (s as TaskExecutionTaskType)
+    : undefined;
+}
 
 export type MeetingExecutionPayload = {
   projectId: string;
@@ -81,15 +93,6 @@ export function suggestScheduledAtIso(rawLine: string): string | undefined {
   return undefined;
 }
 
-function candidateObjectIds(
-  hostId: string,
-  participantIds: string[]
-): mongoose.Types.ObjectId[] {
-  const ids = [hostId, ...participantIds];
-  const uniq = [...new Set(ids.map(String))];
-  return uniq.map((id) => new mongoose.Types.ObjectId(id));
-}
-
 function gatewayAuthHeaders(req: AuthRequest): HeadersInit {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -119,16 +122,21 @@ async function executeApprovedProposal(
 
   if (execution.tasks?.[0]) {
     const t = execution.tasks[0];
+    const taskBody: Record<string, unknown> = {
+      title: t.title,
+      description: t.description,
+      assignees: t.assignees,
+      type: t.type,
+      priority: t.priority,
+    };
+    if (t.dueDate && !Number.isNaN(Date.parse(t.dueDate))) {
+      taskBody.dueDate = t.dueDate;
+    }
+
     const res = await fetch(`${base}/api/projects/${t.projectId}/tasks`, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        title: t.title,
-        description: t.description,
-        assignees: t.assignees,
-        type: t.type,
-        priority: t.priority,
-      }),
+      body: JSON.stringify(taskBody),
     });
     if (!res.ok) {
       const j = (await res.json().catch(() => ({}))) as { message?: string };
@@ -192,8 +200,7 @@ export const approveActionProposal = async (
 
     const projectIdStr = String(meeting.projectId ?? artifact.projectId);
     const hostStr = String(meeting.hostId);
-    const participantStrs = (meeting.participants ?? []).map((id) => String(id));
-    const candidates = candidateObjectIds(hostStr, participantStrs);
+    const candidates = parseObjectIdArray([hostStr, ...(meeting.participants ?? [])]);
 
     let execution: {
       tasks?: TaskExecutionPayload[];
@@ -201,46 +208,69 @@ export const approveActionProposal = async (
     } = {};
 
     if (proposal.kind === "assign_task") {
-      let assigneeId: string | null = null;
-      const hint = proposal.assigneeNameHint?.trim();
-      if (hint) {
-        assigneeId = await resolveUserIdFromNameHint(hint, candidates);
-        if (!assigneeId) {
-          res.status(400).json({
-            message: `Could not match "${hint}" to a meeting participant. Edit the minutes or fix the name.`,
-          });
-          return;
-        }
+      const draftAssignees = parseObjectIdArray(proposal.draftAssigneeIds ?? []);
+      let assignees: string[];
+
+      if (draftAssignees.length > 0) {
+        assignees = draftAssignees.map((id) => id.toString());
       } else {
-        assigneeId = hostStr;
+        let assigneeId: string | null = null;
+        const hint = proposal.assigneeNameHint?.trim();
+        if (hint) {
+          assigneeId = await resolveUserIdFromNameHint(hint, candidates);
+          if (!assigneeId) {
+            res.status(400).json({
+              message: `Could not match "${hint}" to a meeting participant. Select assignees on the action card.`,
+            });
+            return;
+          }
+        } else {
+          assigneeId = hostStr;
+        }
+        assignees = [assigneeId];
       }
 
       const title = stripAssigneeTail(proposal.rawLine);
-      execution.tasks = [
-        {
-          projectId: projectIdStr,
-          title,
-          description: `From meeting action item:\n\n${proposal.rawLine}`,
-          assignees: [assigneeId],
-          type: "task",
-          priority: "medium",
-        },
-      ];
+      const taskPayload: TaskExecutionPayload = {
+        projectId: projectIdStr,
+        title,
+        description: `From meeting action item:\n\n${proposal.rawLine}`,
+        assignees,
+        type: normalizeDraftTaskType(proposal.draftTaskType) ?? "task",
+        priority: "medium",
+      };
+      const dd = proposal.draftDueDate?.trim();
+      if (dd && !Number.isNaN(Date.parse(dd))) {
+        taskPayload.dueDate = new Date(dd).toISOString();
+      }
+      execution.tasks = [taskPayload];
     } else {
-      let when = suggestScheduledAtIso(proposal.rawLine);
+      const draftTitle = proposal.draftMeetingTitle?.trim();
+      const draftWhenRaw = proposal.draftScheduledAt?.trim();
+      const draftParticipants = parseObjectIdArray(proposal.draftParticipantIds ?? []);
+
+      let when =
+        draftWhenRaw && !Number.isNaN(Date.parse(draftWhenRaw))
+          ? new Date(draftWhenRaw).toISOString()
+          : suggestScheduledAtIso(proposal.rawLine);
       if (!when) {
         when = new Date(Date.now() + 86400000).toISOString();
       }
 
-      // Full roster from the source meeting (host + invitees), deduped.
-      const rosterIds = [
-        ...new Set([hostStr, ...participantStrs.map(String)]),
-      ].filter(Boolean);
+      let rosterIds: string[];
+      if (draftParticipants.length > 0) {
+        rosterIds = [
+          ...new Set([hostStr, ...draftParticipants.map((id) => id.toString())]),
+        ].filter(Boolean);
+      } else {
+        rosterIds = [
+          ...new Set([hostStr, ...candidates.map((id) => id.toString())]),
+        ].filter(Boolean);
+      }
 
+      const baseTitle = draftTitle || proposal.title;
       const followUpTitle =
-        proposal.title.length > 200
-          ? `${proposal.title.slice(0, 197)}…`
-          : proposal.title;
+        baseTitle.length > 200 ? `${baseTitle.slice(0, 197)}…` : baseTitle;
 
       execution.meetings = [
         {
@@ -279,6 +309,94 @@ export const approveActionProposal = async (
     }
     console.error("[ActionProposal] approve error:", err);
     res.status(500).json({ message: "Failed to approve proposal" });
+  }
+};
+
+export const patchActionProposal = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { meetingId, proposalId } = req.params;
+    const userId = req.user?.id as string | undefined;
+    if (!userId) {
+      res.status(401).json({ message: "Not authorized" });
+      return;
+    }
+
+    await assertUserIsMeetingHost(meetingId, userId);
+    const artifact = await findByMeetingId(meetingId);
+    if (!artifact) {
+      res.status(404).json({ message: "Artifact not found" });
+      return;
+    }
+
+    const proposals = (artifact.actionProposals ?? []) as unknown[];
+    const idx = proposals.findIndex((p) => isProposal(p) && p.id === proposalId);
+    if (idx === -1) {
+      res.status(404).json({ message: "Proposal not found" });
+      return;
+    }
+
+    const proposal = proposals[idx] as ActionProposal;
+    if (proposal.status !== "pending") {
+      res.status(400).json({ message: "Only pending action items can be edited." });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+
+    if (Array.isArray(body.draftAssigneeIds)) {
+      proposal.draftAssigneeIds = parseObjectIdArray(body.draftAssigneeIds).map((id) =>
+        id.toString()
+      );
+    }
+    if ("draftTaskType" in body && body.draftTaskType !== undefined) {
+      const norm = normalizeDraftTaskType(body.draftTaskType);
+      if (norm) proposal.draftTaskType = norm;
+      else if (body.draftTaskType === null || body.draftTaskType === "") {
+        proposal.draftTaskType = undefined;
+      }
+    }
+    if ("draftDueDate" in body) {
+      const v = body.draftDueDate;
+      if (v === null || v === "") {
+        proposal.draftDueDate = undefined;
+      } else if (typeof v === "string") {
+        proposal.draftDueDate = v;
+      }
+    }
+    if (typeof body.draftMeetingTitle === "string") {
+      const t = body.draftMeetingTitle.trim();
+      proposal.draftMeetingTitle = t || undefined;
+    }
+    if (Array.isArray(body.draftParticipantIds)) {
+      proposal.draftParticipantIds = parseObjectIdArray(body.draftParticipantIds).map(
+        (id) => id.toString()
+      );
+    }
+    if ("draftScheduledAt" in body) {
+      const v = body.draftScheduledAt;
+      if (v === null || v === "") {
+        proposal.draftScheduledAt = undefined;
+      } else if (typeof v === "string" && !Number.isNaN(Date.parse(v))) {
+        proposal.draftScheduledAt = new Date(v).toISOString();
+      }
+    }
+
+    artifact.markModified("actionProposals");
+    await artifact.save();
+
+    const artifactObj = artifact.toObject ? artifact.toObject() : { ...artifact };
+    res.status(200).json({ artifact: artifactObj });
+  } catch (err: unknown) {
+    const e = err as Error & { status?: number };
+    if (e.status === 403 || e.status === 404) {
+      res.status(e.status).json({ message: e.message });
+      return;
+    }
+    console.error("[ActionProposal] patch error:", err);
+    res.status(500).json({ message: "Failed to update action item" });
   }
 };
 

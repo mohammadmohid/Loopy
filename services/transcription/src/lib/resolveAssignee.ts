@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { User } from "@loopy/shared";
+import { User, parseObjectIdArray } from "@loopy/shared";
 
 function norm(s: string): string {
   return s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -10,13 +10,11 @@ function norm(s: string): string {
  */
 export async function resolveUserIdFromNameHint(
   hint: string,
-  candidateIds: mongoose.Types.ObjectId[]
+  candidateIds: mongoose.Types.ObjectId[] | unknown[]
 ): Promise<string | null> {
   const hRaw = hint.trim();
-  if (!hRaw || candidateIds.length === 0) return null;
-
-  const uniq = [...new Set(candidateIds.map((id) => String(id)))];
-  const oids = uniq.map((id) => new mongoose.Types.ObjectId(id));
+  const oids = parseObjectIdArray(candidateIds);
+  if (!hRaw || oids.length === 0) return null;
 
   const users = await User.find({ _id: { $in: oids } })
     .select("profile.firstName profile.lastName email")

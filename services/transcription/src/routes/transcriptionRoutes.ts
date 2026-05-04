@@ -9,6 +9,7 @@ import {
 } from "../controllers/transcriptionController.js";
 import {
   approveActionProposal,
+  patchActionProposal,
   rejectActionProposal,
 } from "../controllers/actionProposalController.js";
 
@@ -30,6 +31,11 @@ router.post(
   "/:meetingId/action-proposals/:proposalId/reject",
   protect,
   rejectActionProposal
+);
+router.patch(
+  "/:meetingId/action-proposals/:proposalId",
+  protect,
+  patchActionProposal
 );
 
 router.get("/:meetingId", protect, getArtifact);

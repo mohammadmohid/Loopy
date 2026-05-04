@@ -15,6 +15,14 @@ export interface ActionProposal {
   status: ActionProposalStatus;
   createdAt: string;
   resolvedAt?: string;
+  /** Host-only overrides before Approve; not updated from minutes text. */
+  draftAssigneeIds?: string[];
+  /** Mirrors project task `type` enum when creating from this action item. */
+  draftTaskType?: "task" | "bug" | "feature" | "story";
+  draftDueDate?: string | null;
+  draftMeetingTitle?: string;
+  draftParticipantIds?: string[];
+  draftScheduledAt?: string | null;
 }
 
 /**

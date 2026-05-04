@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Video, X, Loader2, Users, Check, ChevronsUpDown } from "lucide-react";
+import { Video, X, Loader2, Users, Check, ChevronsUpDown, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
+import { useAuth } from "@/lib/auth-provider";
 import {
   Command,
   CommandEmpty,
@@ -14,17 +15,11 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { normalizeAuthUsersForMeeting, type UserForHostLookup } from "@/lib/meeting-host";
 
 interface Project {
   _id: string;
   name: string;
-}
-
-interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
 }
 
 interface HostMeetingDialogProps {
@@ -34,10 +29,12 @@ interface HostMeetingDialogProps {
 
 export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
   const router = useRouter();
+  const { user: authUser } = useAuth();
+  const hostUserId = authUser?.id ?? "";
 
   // Data State
   const [projects, setProjects] = useState<Project[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserForHostLookup[]>([]);
   const [loadingData, setLoadingData] = useState(false);
 
   // Form State
@@ -71,11 +68,11 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
           // Fetch both lists in parallel
           const [projectsRes, usersRes] = await Promise.all([
             apiRequest<Project[]>("/projects"),
-            apiRequest<User[]>("/auth/users"),
+            apiRequest<unknown[]>("/auth/users"),
           ]);
 
           setProjects(projectsRes);
-          setUsers(usersRes);
+          setUsers(normalizeAuthUsersForMeeting(usersRes));
 
           if (projectsRes.length > 0) setSelectedProjectId(projectsRes[0]._id);
         } catch (error) {
@@ -89,11 +86,16 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
       // Reset form
       setTitle("");
       setAgenda("");
-      setSelectedParticipants([]);
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedParticipants(hostUserId ? [hostUserId] : []);
+  }, [isOpen, hostUserId]);
+
   const toggleParticipant = (userId: string) => {
+    if (userId === hostUserId) return;
     setSelectedParticipants((prev) =>
       prev.includes(userId)
         ? prev.filter((id) => id !== userId)
@@ -125,7 +127,9 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
             projectName: projectName,
             title: title,
             // Send IDs directly (Backend now expects array of User IDs)
-            participants: selectedParticipants,
+            participants: hostUserId
+              ? [...new Set([...selectedParticipants, hostUserId])]
+              : selectedParticipants,
             hostName: hostName,
             agenda: agenda.trim() || undefined,
           },
@@ -234,26 +238,45 @@ export function HostMeetingDialog({ isOpen, onClose }: HostMeetingDialogProps) {
                   <CommandList>
                     <CommandEmpty>No users found.</CommandEmpty>
                     <CommandGroup className="max-h-48 overflow-y-auto">
-                      {users.map((user) => (
-                        <CommandItem
-                          key={user.id}
-                          onSelect={() => toggleParticipant(user.id)}
-                          className="cursor-pointer"
-                        >
-                          <div className={cn(
-                            "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                            selectedParticipants.includes(user.id)
-                              ? "bg-primary text-primary-foreground"
-                              : "opacity-50 [&_svg]:invisible"
-                          )}>
-                            <Check className={cn("h-4 w-4 text-white")} />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{user.firstName} {user.lastName}</span>
-                            <span className="text-xs text-neutral-400">{user.email}</span>
-                          </div>
-                        </CommandItem>
-                      ))}
+                      {users.map((user) => {
+                        const isHostSelf = Boolean(hostUserId && user.id === hostUserId);
+                        const checked = selectedParticipants.includes(user.id);
+                        return (
+                          <CommandItem
+                            key={user.id}
+                            onSelect={() => {
+                              if (!isHostSelf) toggleParticipant(user.id);
+                            }}
+                            className={cn(
+                              isHostSelf ? "cursor-default bg-neutral-50/90" : "cursor-pointer"
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary",
+                                checked ? "bg-primary text-primary-foreground" : "opacity-50 [&_svg]:invisible",
+                                isHostSelf && "border-primary/60"
+                              )}
+                            >
+                              <Check className={cn("h-4 w-4 text-white")} />
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-medium flex items-center gap-2 flex-wrap">
+                                <span className="truncate">
+                                  {user.firstName} {user.lastName}
+                                </span>
+                                {isHostSelf ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-neutral-200/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 shrink-0">
+                                    <Lock className="w-3 h-3" aria-hidden />
+                                    Host
+                                  </span>
+                                ) : null}
+                              </span>
+                              <span className="text-xs text-neutral-400 truncate">{user.email}</span>
+                            </div>
+                          </CommandItem>
+                        );
+                      })}
                     </CommandGroup>
                   </CommandList>
                 </Command>

@@ -6,7 +6,19 @@ import {
   dispatchToUsers,
   getPMRecipientIds,
   formatWhen,
+  formatTaskTypeLabel,
 } from "../services/notificationDispatch.js";
+
+/** Normalize meeting participant / host ids from Mongo documents. */
+function meetingUserIdStrings(ids: unknown[]): string[] {
+  const out = new Set<string>();
+  for (const raw of ids) {
+    if (raw == null) continue;
+    const s = String(raw);
+    if (mongoose.Types.ObjectId.isValid(s)) out.add(s);
+  }
+  return [...out];
+}
 
 function utcDayStart(d: Date): number {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
@@ -39,13 +51,14 @@ export async function runMeetingReminders(): Promise<void> {
     const ws = String(proj.workspaceId);
     const title = typeof m.title === "string" ? m.title : "Meeting";
     const when = formatWhen(m.scheduledAt as Date);
-    const recipients = new Set<string>();
-    if (m.hostId) recipients.add(String(m.hostId));
-    for (const p of (m.participants as unknown[]) || []) recipients.add(String(p));
+    const recipientList = meetingUserIdStrings([
+      ...(m.hostId ? [m.hostId] : []),
+      ...((m.participants as unknown[]) || []),
+    ]);
 
     await dispatchToUsers({
       workspaceId: ws,
-      userIds: [...recipients],
+      userIds: recipientList,
       category: "meeting",
       kind: "MEETING_TODAY",
       title: "Meeting today",
@@ -71,16 +84,17 @@ export async function runMeetingReminders(): Promise<void> {
     const ws = String(proj.workspaceId);
     const title = typeof m.title === "string" ? m.title : "Meeting";
     const when = formatWhen(m.scheduledAt as Date);
-    const recipients = new Set<string>();
-    if (m.hostId) recipients.add(String(m.hostId));
-    for (const p of (m.participants as unknown[]) || []) recipients.add(String(p));
+    const recipientList = meetingUserIdStrings([
+      ...(m.hostId ? [m.hostId] : []),
+      ...((m.participants as unknown[]) || []),
+    ]);
 
     const sch = new Date(m.scheduledAt as Date);
     const dedupeHour = sch.toISOString().slice(0, 13);
 
     await dispatchToUsers({
       workspaceId: ws,
-      userIds: [...recipients],
+      userIds: recipientList,
       category: "meeting",
       kind: "MEETING_1H",
       title: "Meeting starting soon",
@@ -99,7 +113,7 @@ export async function runTaskDueReminders(): Promise<void> {
     dueDate: { $exists: true, $ne: null },
     status: { $ne: "done" },
   })
-    .select("title dueDate assignees projectId")
+    .select("title dueDate assignees projectId type")
     .lean();
 
   for (const t of tasks) {
@@ -111,7 +125,11 @@ export async function runTaskDueReminders(): Promise<void> {
     const proj = await Project.findById(pid).select("workspaceId name").lean();
     if (!proj) continue;
     const ws = String(proj.workspaceId);
-    const assignees = (t.assignees || []).map(String);
+    const assignees = [...new Set((t.assignees || []).map(String))].filter((id) =>
+      mongoose.Types.ObjectId.isValid(id)
+    );
+    const typeLabel = formatTaskTypeLabel(t.type as string | undefined);
+    const typeLead = `[${typeLabel}] `;
 
     if (dayDiff === 3) {
       const recipients = [...new Set(assignees)];
@@ -123,8 +141,12 @@ export async function runTaskDueReminders(): Promise<void> {
         category: "task",
         kind: "TASK_DUE_3D",
         title: "Task due in 3 days",
-        body: `"${t.title}" — deadline ${formatWhen(due)}.`,
-        metadata: { taskId: String(t._id), projectId: pid },
+        body: `${typeLead}"${t.title}" — deadline ${formatWhen(due)}.`,
+        metadata: {
+          taskId: String(t._id),
+          projectId: pid,
+          taskType: (t.type as string | undefined) ?? "task",
+        },
         dedupeKey: `task-3d-${String(t._id)}-${utcDue}`,
       });
     }
@@ -140,8 +162,12 @@ export async function runTaskDueReminders(): Promise<void> {
         category: "task",
         kind: "TASK_DUE_24H",
         title: "Task due within 24 hours",
-        body: `"${t.title}" — deadline ${formatWhen(due)}.`,
-        metadata: { taskId: String(t._id), projectId: pid },
+        body: `${typeLead}"${t.title}" — deadline ${formatWhen(due)}.`,
+        metadata: {
+          taskId: String(t._id),
+          projectId: pid,
+          taskType: (t.type as string | undefined) ?? "task",
+        },
         dedupeKey: `task-24h-${String(t._id)}-${utcDue}`,
       });
     }
@@ -184,7 +210,7 @@ export async function runProjectDeadlineReminders(): Promise<void> {
 }
 
 export function startNotificationReminderJobs(): void {
-  cron.schedule("*/10 * * * *", async () => {
+  cron.schedule("*/5 * * * *", async () => {
     try {
       await runMeetingReminders();
       await runTaskDueReminders();
@@ -193,5 +219,5 @@ export function startNotificationReminderJobs(): void {
       console.error("[notificationReminders]", e);
     }
   });
-  console.log("[notifications] Reminder cron scheduled (every 10 min)");
+  console.log("[notifications] Reminder cron scheduled (every 5 min)");
 }

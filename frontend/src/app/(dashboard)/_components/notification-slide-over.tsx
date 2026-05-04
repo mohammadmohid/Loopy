@@ -2,13 +2,22 @@
 
 import { useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
+import { useRouter } from "next/navigation";
 import { X, Bell, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   useNotifications,
   type NotificationFilter,
 } from "@/contexts/notifications-context";
+import { getNotificationHref } from "@/lib/notification-navigation";
 import { cn } from "@/lib/utils";
+
+const TASK_TYPE_LABELS: Record<string, string> = {
+  task: "Task",
+  bug: "Bug",
+  feature: "Feature",
+  story: "Story",
+};
 
 const filters: { id: NotificationFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -18,6 +27,7 @@ const filters: { id: NotificationFilter; label: string }[] = [
 ];
 
 export function NotificationSlideOver() {
+  const router = useRouter();
   const {
     panelOpen,
     setPanelOpen,
@@ -112,15 +122,32 @@ export function NotificationSlideOver() {
                     type="button"
                     className={cn(
                       "w-full text-left px-4 py-3 hover:bg-neutral-50 transition-colors",
-                      !n.read && "bg-[#fdf6f7]/80"
+                      !n.read && "bg-[#fdf6f7]/80",
+                      getNotificationHref(n) && "cursor-pointer"
                     )}
-                    onClick={() => void markRead(n._id)}
+                    onClick={() => {
+                      void markRead(n._id);
+                      const href = getNotificationHref(n);
+                      if (href) {
+                        setPanelOpen(false);
+                        router.push(href);
+                      }
+                    }}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <p className="font-medium text-neutral-900 text-sm">
-                          {n.title}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-neutral-900 text-sm">
+                            {n.title}
+                          </p>
+                          {typeof n.metadata?.taskType === "string" &&
+                          n.metadata.taskType.trim() !== "" ? (
+                            <span className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600">
+                              {TASK_TYPE_LABELS[n.metadata.taskType] ??
+                                n.metadata.taskType}
+                            </span>
+                          ) : null}
+                        </div>
                         <p className="text-sm text-neutral-600 mt-0.5 whitespace-pre-wrap">
                           {n.body}
                         </p>

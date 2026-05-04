@@ -9,7 +9,9 @@ import { useAuth } from "@/lib/auth-provider";
 import {
   resolveHostDisplayName,
   buildSpeakerIndexToDisplayName,
+  normalizeAuthUsersForMeeting,
   type PopulatedMeetingHost,
+  type UserForHostLookup,
 } from "@/lib/meeting-host";
 import { TranscriptPlayer } from "../_components/transcript-player";
 import { Button } from "@/components/ui/button";
@@ -72,7 +74,28 @@ type ActionProposalItem = {
   status: "pending" | "approved" | "rejected";
   createdAt: string;
   resolvedAt?: string;
+  draftAssigneeIds?: string[];
+  draftTaskType?: "task" | "bug" | "feature" | "story";
+  draftDueDate?: string | null;
+  draftMeetingTitle?: string;
+  draftParticipantIds?: string[];
+  draftScheduledAt?: string | null;
 };
+
+const TASK_ACTION_TYPES = [
+  { value: "task", label: "Task" },
+  { value: "bug", label: "Bug" },
+  { value: "feature", label: "Feature" },
+  { value: "story", label: "Story" },
+] as const;
+
+function toDatetimeLocalValue(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 interface ArtifactDetail {
   _id: string;
@@ -91,20 +114,13 @@ function artifactStatus(a: ArtifactDetail | null): string {
   return (a?.transcriptionStatus ?? "").toUpperCase();
 }
 
-interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-}
-
 export default function MeetingDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
 
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [artifact, setArtifact] = useState<ArtifactDetail | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserForHostLookup[]>([]);
   const [loading, setLoading] = useState(true);
 
   // State for the big transcription button
@@ -130,6 +146,15 @@ export default function MeetingDetailPage() {
   const [viewMode, setViewMode] = useState<"summary" | "transcript">("summary");
 
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const [editingProposalId, setEditingProposalId] = useState<string | null>(null);
+  const [editTaskAssignees, setEditTaskAssignees] = useState<string[]>([]);
+  const [editTaskType, setEditTaskType] = useState<
+    "task" | "bug" | "feature" | "story"
+  >("task");
+  const [editTaskDue, setEditTaskDue] = useState("");
+  const [editMeetTitle, setEditMeetTitle] = useState("");
+  const [editMeetParts, setEditMeetParts] = useState<string[]>([]);
+  const [editMeetAt, setEditMeetAt] = useState("");
 
   const hostIdStr = useMemo(() => {
     const h = meeting?.hostId;
@@ -174,11 +199,11 @@ export default function MeetingDetailPage() {
 
         const [meetingData, usersData] = await Promise.all([
           apiRequest<Meeting>(`/meetings/${id}`),
-          apiRequest<User[]>('/auth/users').catch(() => []) // Fallback in case network fails
+          apiRequest<unknown[]>("/auth/users").catch(() => []),
         ]);
 
         setMeeting(meetingData);
-        setUsers(usersData);
+        setUsers(normalizeAuthUsersForMeeting(usersData));
 
         if (meetingData.status === "active") return;
 
@@ -338,6 +363,27 @@ export default function MeetingDetailPage() {
     } catch (err) {
       console.error(err);
       alert(err instanceof Error ? err.message : "Could not approve this action item.");
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  const handlePatchActionProposal = async (
+    proposalId: string,
+    payload: Record<string, unknown>
+  ) => {
+    if (!meeting?._id) return;
+    try {
+      setActionBusyId(proposalId);
+      const res = await apiRequest<{ artifact: ArtifactDetail }>(
+        `/artifacts/${meeting._id}/action-proposals/${proposalId}`,
+        { method: "PATCH", data: payload }
+      );
+      setArtifact(res.artifact);
+      setEditingProposalId(null);
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Could not save changes.");
     } finally {
       setActionBusyId(null);
     }
@@ -601,7 +647,8 @@ export default function MeetingDetailPage() {
                     </h3>
                     <p className="text-xs text-neutral-600 leading-relaxed mt-1">
                       Tasks create board items; follow-up meetings create a scheduled meeting on this
-                      project with everyone from this meeting&apos;s roster. Only you see this section.
+                      project. Edit assignees, deadlines, or meeting details on each card — editing the
+                      minutes document above does not change these items. Only you see this section.
                     </p>
                   </div>
 
@@ -617,56 +664,156 @@ export default function MeetingDetailPage() {
                             key={p.id}
                             className="rounded-lg border border-violet-200/90 bg-white p-3 text-sm shadow-sm"
                           >
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div className="min-w-0 flex-1 space-y-1">
+                            {p.status === "pending" && editingProposalId === p.id ? (
+                              <div className="space-y-3">
                                 <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-800">
-                                  Schedule meeting
+                                  Schedule meeting · editing
                                 </span>
-                                <p className="text-neutral-900 font-medium leading-snug">{p.title}</p>
-                                <p className="text-xs text-neutral-500 line-clamp-3">{p.rawLine}</p>
-                              </div>
-                              {p.status === "pending" ? (
-                                <div className="flex shrink-0 gap-2">
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-neutral-600">Title</label>
+                                  <input
+                                    type="text"
+                                    className="w-full rounded-md border border-neutral-200 px-2 py-1.5 text-sm"
+                                    value={editMeetTitle}
+                                    onChange={(e) => setEditMeetTitle(e.target.value)}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-neutral-600">Date & time</label>
+                                  <input
+                                    type="datetime-local"
+                                    className="w-full rounded-md border border-neutral-200 px-2 py-1.5 text-sm"
+                                    value={editMeetAt}
+                                    onChange={(e) => setEditMeetAt(e.target.value)}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <span className="text-xs font-medium text-neutral-600">Participants</span>
+                                  <div className="max-h-36 overflow-y-auto rounded-md border border-neutral-100 bg-neutral-50/80 p-2 space-y-1.5">
+                                    {users.map((u) => (
+                                      <label key={u.id} className="flex cursor-pointer items-center gap-2 text-xs">
+                                        <input
+                                          type="checkbox"
+                                          checked={editMeetParts.includes(u.id)}
+                                          onChange={() => {
+                                            setEditMeetParts((prev) =>
+                                              prev.includes(u.id)
+                                                ? prev.filter((x) => x !== u.id)
+                                                : [...prev, u.id]
+                                            );
+                                          }}
+                                        />
+                                        <span>
+                                          {`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.email}
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap justify-end gap-2 pt-1">
                                   <Button
                                     type="button"
-                                    size="sm"
                                     variant="outline"
+                                    size="sm"
                                     className="h-8 text-xs"
-                                    disabled={actionBusyId === p.id}
-                                    onClick={() => void handleRejectActionProposal(p.id)}
+                                    onClick={() => setEditingProposalId(null)}
                                   >
-                                    {actionBusyId === p.id ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      "Reject"
-                                    )}
+                                    Cancel
                                   </Button>
                                   <Button
                                     type="button"
                                     size="sm"
                                     className="h-8 text-xs"
                                     disabled={actionBusyId === p.id}
-                                    onClick={() => void handleApproveActionProposal(p.id)}
+                                    onClick={() =>
+                                      void handlePatchActionProposal(p.id, {
+                                        draftMeetingTitle: editMeetTitle.trim(),
+                                        draftParticipantIds: editMeetParts,
+                                        draftScheduledAt: editMeetAt
+                                          ? new Date(editMeetAt).toISOString()
+                                          : null,
+                                      })
+                                    }
                                   >
                                     {actionBusyId === p.id ? (
                                       <Loader2 className="h-3 w-3 animate-spin" />
                                     ) : (
-                                      "Approve"
+                                      "Save"
                                     )}
                                   </Button>
                                 </div>
-                              ) : (
-                                <span
-                                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                                    p.status === "approved"
-                                      ? "bg-emerald-100 text-emerald-800"
-                                      : "bg-neutral-200 text-neutral-600"
-                                  }`}
-                                >
-                                  {p.status}
-                                </span>
-                              )}
-                            </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1 space-y-1">
+                                  <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+                                    Schedule meeting
+                                  </span>
+                                  <p className="text-neutral-900 font-medium leading-snug">{p.title}</p>
+                                  <p className="text-xs text-neutral-500 line-clamp-3">{p.rawLine}</p>
+                                </div>
+                                {p.status === "pending" ? (
+                                  <div className="flex shrink-0 flex-wrap gap-2">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="secondary"
+                                      className="h-8 text-xs"
+                                      disabled={actionBusyId === p.id}
+                                      onClick={() => {
+                                        setEditingProposalId(p.id);
+                                        setEditMeetTitle(p.draftMeetingTitle?.trim() || p.title);
+                                        setEditMeetParts(
+                                          p.draftParticipantIds?.length
+                                            ? [...p.draftParticipantIds]
+                                            : (meeting?.participants ?? []).map(String)
+                                        );
+                                        setEditMeetAt(toDatetimeLocalValue(p.draftScheduledAt));
+                                      }}
+                                    >
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 text-xs"
+                                      disabled={actionBusyId === p.id}
+                                      onClick={() => void handleRejectActionProposal(p.id)}
+                                    >
+                                      {actionBusyId === p.id ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        "Reject"
+                                      )}
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-8 text-xs"
+                                      disabled={actionBusyId === p.id}
+                                      onClick={() => void handleApproveActionProposal(p.id)}
+                                    >
+                                      {actionBusyId === p.id ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        "Approve"
+                                      )}
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <span
+                                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                      p.status === "approved"
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : "bg-neutral-200 text-neutral-600"
+                                    }`}
+                                  >
+                                    {p.status}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -685,61 +832,178 @@ export default function MeetingDetailPage() {
                             key={p.id}
                             className="rounded-lg border border-neutral-200/90 bg-white p-3 text-sm shadow-sm"
                           >
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div className="min-w-0 flex-1 space-y-1">
+                            {p.status === "pending" && editingProposalId === p.id ? (
+                              <div className="space-y-3">
                                 <span className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600">
-                                  Assign task
+                                  Assign task · editing
                                 </span>
-                                <p className="text-neutral-900 font-medium leading-snug">{p.title}</p>
-                                {p.assigneeNameHint ? (
-                                  <p className="text-xs text-neutral-500">
-                                    Assignee hint: {p.assigneeNameHint}
-                                  </p>
-                                ) : null}
-                                <p className="text-xs text-neutral-500 line-clamp-3">{p.rawLine}</p>
-                              </div>
-                              {p.status === "pending" ? (
-                                <div className="flex shrink-0 gap-2">
+                                <p className="text-xs text-neutral-500 line-clamp-2">{p.rawLine}</p>
+                                <div className="space-y-1">
+                                  <span className="text-xs font-medium text-neutral-600">Assignees</span>
+                                  <div className="max-h-36 overflow-y-auto rounded-md border border-neutral-100 bg-neutral-50/80 p-2 space-y-1.5">
+                                    {users.map((u) => (
+                                      <label key={u.id} className="flex cursor-pointer items-center gap-2 text-xs">
+                                        <input
+                                          type="checkbox"
+                                          checked={editTaskAssignees.includes(u.id)}
+                                          onChange={() => {
+                                            setEditTaskAssignees((prev) =>
+                                              prev.includes(u.id)
+                                                ? prev.filter((x) => x !== u.id)
+                                                : [...prev, u.id]
+                                            );
+                                          }}
+                                        />
+                                        <span>
+                                          {`${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.email}
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-neutral-600">Task type</label>
+                                  <select
+                                    className="w-full rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm"
+                                    value={editTaskType}
+                                    onChange={(e) =>
+                                      setEditTaskType(
+                                        e.target.value as "task" | "bug" | "feature" | "story"
+                                      )
+                                    }
+                                  >
+                                    {TASK_ACTION_TYPES.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-medium text-neutral-600">Due date</label>
+                                  <input
+                                    type="date"
+                                    className="w-full rounded-md border border-neutral-200 px-2 py-1.5 text-sm"
+                                    value={editTaskDue}
+                                    onChange={(e) => setEditTaskDue(e.target.value)}
+                                  />
+                                </div>
+                                <div className="flex flex-wrap justify-end gap-2 pt-1">
                                   <Button
                                     type="button"
-                                    size="sm"
                                     variant="outline"
+                                    size="sm"
                                     className="h-8 text-xs"
-                                    disabled={actionBusyId === p.id}
-                                    onClick={() => void handleRejectActionProposal(p.id)}
+                                    onClick={() => setEditingProposalId(null)}
                                   >
-                                    {actionBusyId === p.id ? (
-                                      <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                      "Reject"
-                                    )}
+                                    Cancel
                                   </Button>
                                   <Button
                                     type="button"
                                     size="sm"
                                     className="h-8 text-xs"
                                     disabled={actionBusyId === p.id}
-                                    onClick={() => void handleApproveActionProposal(p.id)}
+                                    onClick={() =>
+                                      void handlePatchActionProposal(p.id, {
+                                        draftAssigneeIds: editTaskAssignees,
+                                        draftTaskType: editTaskType,
+                                        draftDueDate: editTaskDue
+                                          ? new Date(`${editTaskDue}T12:00:00`).toISOString()
+                                          : null,
+                                      })
+                                    }
                                   >
                                     {actionBusyId === p.id ? (
                                       <Loader2 className="h-3 w-3 animate-spin" />
                                     ) : (
-                                      "Approve"
+                                      "Save"
                                     )}
                                   </Button>
                                 </div>
-                              ) : (
-                                <span
-                                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                                    p.status === "approved"
-                                      ? "bg-emerald-100 text-emerald-800"
-                                      : "bg-neutral-200 text-neutral-600"
-                                  }`}
-                                >
-                                  {p.status}
-                                </span>
-                              )}
-                            </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1 space-y-1">
+                                  <span className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600">
+                                    Assign task
+                                  </span>
+                                  <p className="text-xs text-neutral-500">
+                                    Type:{" "}
+                                    {TASK_ACTION_TYPES.find((t) => t.value === (p.draftTaskType ?? "task"))
+                                      ?.label ?? "Task"}
+                                  </p>
+                                  <p className="text-neutral-900 font-medium leading-snug">{p.title}</p>
+                                  {p.assigneeNameHint ? (
+                                    <p className="text-xs text-neutral-500">
+                                      Assignee hint: {p.assigneeNameHint}
+                                    </p>
+                                  ) : null}
+                                  <p className="text-xs text-neutral-500 line-clamp-3">{p.rawLine}</p>
+                                </div>
+                                {p.status === "pending" ? (
+                                  <div className="flex shrink-0 flex-wrap gap-2">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="secondary"
+                                      className="h-8 text-xs"
+                                      disabled={actionBusyId === p.id}
+                                      onClick={() => {
+                                        setEditingProposalId(p.id);
+                                        setEditTaskAssignees(
+                                          p.draftAssigneeIds?.length ? [...p.draftAssigneeIds] : []
+                                        );
+                                        setEditTaskType(p.draftTaskType ?? "task");
+                                        setEditTaskDue(
+                                          p.draftDueDate && !Number.isNaN(Date.parse(p.draftDueDate))
+                                            ? p.draftDueDate.slice(0, 10)
+                                            : ""
+                                        );
+                                      }}
+                                    >
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8 text-xs"
+                                      disabled={actionBusyId === p.id}
+                                      onClick={() => void handleRejectActionProposal(p.id)}
+                                    >
+                                      {actionBusyId === p.id ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        "Reject"
+                                      )}
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-8 text-xs"
+                                      disabled={actionBusyId === p.id}
+                                      onClick={() => void handleApproveActionProposal(p.id)}
+                                    >
+                                      {actionBusyId === p.id ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        "Approve"
+                                      )}
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <span
+                                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                                      p.status === "approved"
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : "bg-neutral-200 text-neutral-600"
+                                    }`}
+                                  >
+                                    {p.status}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -856,10 +1120,12 @@ export default function MeetingDetailPage() {
                 <h3 className="font-semibold text-sm mb-4">Meeting Participants</h3>
                 {(meeting.participants?.length ?? 0) > 0 ? (
                   meeting.participants?.map((pid: string, idx: number) => {
-                    const user = users.find(u => u.id === pid);
-                    const displayName = user ? `${user.firstName} ${user.lastName}` : pid;
+                    const user = users.find((u) => u.id === pid);
+                    const displayName = user
+                      ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || pid
+                      : pid;
                     const initials = user
-                      ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase()
+                      ? `${(user.firstName ?? "?")[0]}${(user.lastName ?? "?")[0]}`.toUpperCase()
                       : `P${idx + 1}`;
 
                     return (

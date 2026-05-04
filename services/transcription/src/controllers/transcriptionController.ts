@@ -262,7 +262,7 @@ export const updateSummary = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     artifact.summary = minutes;
-    syncArtifactActionProposalsFromSummary(artifact);
+    // Intentionally do not re-parse action items from minutes; host edits are independent of proposal cards.
     await artifact.save();
 
     res.status(200).json({ message: "Minutes updated successfully", artifact });

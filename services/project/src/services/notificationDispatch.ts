@@ -59,6 +59,21 @@ export async function getPMRecipientIds(
   return leaders.filter((id) => !ex.has(id));
 }
 
+const TASK_TYPE_LABELS: Record<string, string> = {
+  task: "Task",
+  bug: "Bug",
+  feature: "Feature",
+  story: "Story",
+};
+
+/** Human-readable task type for notification copy (matches Task schema enum). */
+export function formatTaskTypeLabel(
+  type: string | undefined | null
+): string {
+  if (type == null || type === "") return "Task";
+  return TASK_TYPE_LABELS[type] ?? type;
+}
+
 export async function dispatchToUsers(input: DispatchInput): Promise<void> {
   const {
     workspaceId,
@@ -71,7 +86,13 @@ export async function dispatchToUsers(input: DispatchInput): Promise<void> {
     dedupeKey,
   } = input;
 
-  const unique = [...new Set(userIds.map(String).filter(Boolean))];
+  const unique = [
+    ...new Set(
+      userIds
+        .map(String)
+        .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+    ),
+  ];
   if (!unique.length) return;
   if (!mongoose.Types.ObjectId.isValid(workspaceId)) {
     console.warn("[dispatchToUsers] Invalid workspaceId; skipping.", workspaceId);

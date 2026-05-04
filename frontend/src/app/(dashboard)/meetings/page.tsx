@@ -95,7 +95,7 @@ export default function MeetingsPage() {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-y-auto px-8 pt-6 pb-24">
 
-          {/* Top Action Buttons (Schedule / Capture) */}
+          {/* Top action buttons (Schedule / Host) */}
           <div className="grid grid-cols-2 gap-4 mb-8">
             <Button
               onClick={() => setIsScheduleMeetingOpen(true)}
@@ -116,7 +116,7 @@ export default function MeetingsPage() {
               <span className="p-2 rounded bg-[#cc2233] text-white">
                 <Video className="w-5 h-5" />
               </span>
-              Capture Meeting
+              Host Meeting
             </Button>
           </div>
 

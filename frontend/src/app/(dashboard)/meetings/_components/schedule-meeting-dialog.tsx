@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { Video, X, Loader2, Users, Check, ChevronsUpDown } from "lucide-react";
+import { X, Loader2, Users, Check, ChevronsUpDown, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api";
+import { useAuth } from "@/lib/auth-provider";
 import {
   Command,
   CommandEmpty,
@@ -14,17 +14,11 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { normalizeAuthUsersForMeeting, type UserForHostLookup } from "@/lib/meeting-host";
 
 interface Project {
   _id: string;
   name: string;
-}
-
-interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
 }
 
 interface ScheduleMeetingDialogProps {
@@ -34,11 +28,12 @@ interface ScheduleMeetingDialogProps {
 }
 
 export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: ScheduleMeetingDialogProps) {
-  const router = useRouter();
+  const { user: authUser } = useAuth();
+  const hostUserId = authUser?.id ?? "";
 
   // Data State
   const [projects, setProjects] = useState<Project[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserForHostLookup[]>([]);
   const [loadingData, setLoadingData] = useState(false);
 
   // Form State
@@ -74,11 +69,11 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
           // Fetch both lists in parallel
           const [projectsRes, usersRes] = await Promise.all([
             apiRequest<Project[]>("/projects"),
-            apiRequest<User[]>("/auth/users"),
+            apiRequest<unknown[]>("/auth/users"),
           ]);
 
           setProjects(projectsRes);
-          setUsers(usersRes);
+          setUsers(normalizeAuthUsersForMeeting(usersRes));
 
           if (projectsRes.length > 0) setSelectedProjectId(projectsRes[0]._id);
         } catch (error) {
@@ -94,9 +89,13 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
       setAgenda("");
       setDate("");
       setTime("");
-      setSelectedUsers([]);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedUsers(hostUserId ? [hostUserId] : []);
+  }, [isOpen, hostUserId]);
 
   const handleStartMeeting = async () => {
     if (!selectedProjectId || !title || !date || !time) return;
@@ -126,7 +125,9 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
             projectName: projectName,
             title: title,
             scheduledAt, // Pass scheduled date to backend!
-            participants: selectedUsers, // Selected participants from UI
+            participants: hostUserId
+              ? [...new Set([...selectedUsers, hostUserId])]
+              : selectedUsers,
             hostName: hostName,
             agenda: agenda.trim() || undefined,
           },
@@ -150,6 +151,7 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
   };
 
   const toggleUser = (userId: string) => {
+    if (userId === hostUserId) return;
     setSelectedUsers((prev) =>
       prev.includes(userId)
         ? prev.filter((id) => id !== userId)
@@ -271,25 +273,44 @@ export function ScheduleMeetingDialog({ isOpen, onClose, onScheduleComplete }: S
                       </CommandEmpty>
                       <CommandGroup>
                         {users.map((user) => {
+                          const isHostSelf = Boolean(hostUserId && user.id === hostUserId);
                           const isSelected = selectedUsers.includes(user.id);
                           return (
                             <CommandItem
                               key={user.id}
                               value={`${user.firstName} ${user.lastName} ${user.email}`}
-                              onSelect={() => toggleUser(user.id)}
-                              className="flex items-center gap-3 px-3 py-2 cursor-pointer rounded-md hover:bg-neutral-50 aria-selected:bg-neutral-50"
+                              onSelect={() => {
+                                if (!isHostSelf) toggleUser(user.id);
+                              }}
+                              className={cn(
+                                "flex items-center gap-3 px-3 py-2 rounded-md aria-selected:bg-neutral-50",
+                                isHostSelf
+                                  ? "cursor-default bg-neutral-50/90"
+                                  : "cursor-pointer hover:bg-neutral-50"
+                              )}
                             >
-                              <div className={cn(
-                                "flex items-center justify-center w-4 h-4 rounded border",
-                                isSelected ? "bg-primary border-primary text-white" : "border-neutral-300"
-                              )}>
+                              <div
+                                className={cn(
+                                  "flex items-center justify-center w-4 h-4 rounded border shrink-0",
+                                  isSelected ? "bg-primary border-primary text-white" : "border-neutral-300",
+                                  isHostSelf && "border-primary/60"
+                                )}
+                              >
                                 {isSelected && <Check className="w-3 h-3" />}
                               </div>
-                              <div className="flex flex-col">
-                                <span className="text-sm font-medium text-neutral-900">
-                                  {user.firstName} {user.lastName}
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-sm font-medium text-neutral-900 flex items-center gap-2 flex-wrap">
+                                  <span className="truncate">
+                                    {user.firstName} {user.lastName}
+                                  </span>
+                                  {isHostSelf ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-neutral-200/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 shrink-0">
+                                      <Lock className="w-3 h-3" aria-hidden />
+                                      Host
+                                    </span>
+                                  ) : null}
                                 </span>
-                                <span className="text-xs text-neutral-500">{user.email}</span>
+                                <span className="text-xs text-neutral-500 truncate">{user.email}</span>
                               </div>
                             </CommandItem>
                           );

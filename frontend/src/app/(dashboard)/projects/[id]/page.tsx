@@ -69,6 +69,14 @@ export default function ProjectDetailPage() {
   const [availableTeams, setAvailableTeams] = useState<any[]>([]);
   const [addMembersOpen, setAddMembersOpen] = useState(false);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab && tabs.some((t) => t.id === tab)) {
+      setActiveTab(tab);
+    }
+  }, [id]);
+
   const fetchData = useCallback(async () => {
     try {
       const results = await Promise.allSettled([

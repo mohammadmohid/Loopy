@@ -18,6 +18,28 @@ export type UserForHostLookup = {
   email?: string;
 };
 
+const HEX_OBJECT_ID = /^[a-fA-F0-9]{24}$/;
+
+/**
+ * Maps `GET /api/auth/users` payloads (`_id`, nested `profile`) into `{ id, firstName, lastName, email }`
+ * for participant pickers and speaker / host resolution.
+ */
+export function normalizeAuthUsersForMeeting(raw: unknown): UserForHostLookup[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((u: Record<string, unknown>) => {
+      const id = String(u?._id ?? u?.id ?? "").trim();
+      const profile = u?.profile as { firstName?: string; lastName?: string } | undefined;
+      return {
+        id,
+        email: typeof u?.email === "string" ? u.email : "",
+        firstName: (profile?.firstName ?? u?.firstName) as string | undefined,
+        lastName: (profile?.lastName ?? u?.lastName) as string | undefined,
+      };
+    })
+    .filter((u) => HEX_OBJECT_ID.test(u.id));
+}
+
 /**
  * Prefer legacy `hostName`, then populated `hostId`, then a lookup in `users` by host id.
  */

@@ -10,6 +10,7 @@ export type UserRole =
 
 export interface User {
   id: string;
+  _id?: string;
   name: string;
   email: string;
   avatar: string;
@@ -28,8 +29,8 @@ export interface Task {
   assignees: User[];
   assignedTeams?: { id: string; name: string; _id?: string }[];
   dueDate?: string;
-  milestoneId?: string;
   projectId: string;
+  milestoneId?: string;
   attachments?: string[];
   createdAt: string;
   updatedAt: string;
@@ -42,8 +43,9 @@ export interface Milestone {
   status?: "open" | "completed";
   startDate: string;
   dueDate: string;
-  assignees: User[];
-  assignedTeams?: { id: string; name: string; _id?: string }[];
+  duration?: string;
+  goal?: string;
+  createdBy?: User;
   team?: string;
   tasks: Task[];
   attachments?: string[];
@@ -135,6 +137,7 @@ export interface Reaction {
 }
 
 export interface Attachment {
+  fileId?: string;
   name: string;
   key: string;
   size: number;
@@ -168,3 +171,79 @@ export interface ChatMessage {
   updatedAt: string;
 }
 
+
+export interface Folder {
+  _id: string;
+  workspaceId: string;
+  name: string;
+  parentId?: string | null;
+  isSystem: boolean;
+  systemContext?: "MEETINGS" | "PROJECTS" | "CHAT" | "USERS" | "OTHER";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Artifact {
+  _id: string;
+  artifactType: string;
+  workspaceId: string;
+  folderId?: string;
+  uploadedBy: {
+    _id: string;
+    email: string;
+    profile: {
+      firstName: string;
+      lastName: string;
+    };
+  };
+  originalFilename: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  projectId?: {
+    _id: string;
+    name: string;
+  };
+  meetingId?: string;
+  transcriptionStatus: string;
+  summary?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FilePermission {
+  role: "OWNER" | "MEMBER" | "GUEST" | "PROJECT_MANAGER";
+  access: "VIEW" | "EDIT" | "DELETE";
+}
+
+export interface FileSourceContext {
+  type: "TASK" | "CHAT_MESSAGE" | "CHANNEL" | "CUSTOM" | "RECORDING";
+  id?: string;
+}
+
+export interface File {
+  _id: string;
+  workspaceId: string;
+  folderId?: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  r2Key: string;
+  uploadedBy: {
+    _id: string;
+    email: string;
+    profile: {
+      firstName: string;
+      lastName: string;
+      avatarKey?: string;
+    };
+  };
+  permissions: FilePermission[];
+  sourceContext: FileSourceContext;
+  currentVersionId?: string;
+  isLocked: boolean;
+  lockedBy?: string;
+  lockedUntil?: string;
+  createdAt: string;
+  updatedAt: string;
+}

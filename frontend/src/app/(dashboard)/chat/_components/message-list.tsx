@@ -16,10 +16,14 @@ import {
     Download,
 } from "lucide-react";
 import { ReactionPicker } from "./reaction-picker";
+import { MessageImage } from "./message-image";
 
 interface MessageListProps {
     messages: ChatMessage[];
     loading: boolean;
+    hasMore?: boolean;
+    isLoadingMore?: boolean;
+    onLoadMore?: () => void;
     currentUserId: string;
     onReply: (message: ChatMessage) => void;
     onDelete: (messageId: string) => void;
@@ -30,6 +34,9 @@ interface MessageListProps {
 export function MessageList({
     messages,
     loading,
+    hasMore,
+    isLoadingMore,
+    onLoadMore,
     currentUserId,
     onReply,
     onDelete,
@@ -37,6 +44,7 @@ export function MessageList({
     onReaction,
 }: MessageListProps) {
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const topObserverRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
     const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -45,10 +53,41 @@ export function MessageList({
         null
     );
 
-    // Auto-scroll to bottom on new messages
+    // Auto-scroll to bottom on new messages (if we are already at the bottom or it's our own message)
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage?.sender._id === currentUserId) {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        } else if (messages.length > 0 && !isLoadingMore) {
+            // Only scroll to bottom on initial load
+            messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        }
+    }, [messages, currentUserId, isLoadingMore]);
+
+    // Intersection Observer for infinite loading (scroll up)
+    useEffect(() => {
+        if (!hasMore || isLoadingMore || !onLoadMore) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting) {
+                    onLoadMore();
+                }
+            },
+            { threshold: 0.5 }
+        );
+
+        const currentTarget = topObserverRef.current;
+        if (currentTarget) {
+            observer.observe(currentTarget);
+        }
+
+        return () => {
+            if (currentTarget) {
+                observer.unobserve(currentTarget);
+            }
+        };
+    }, [hasMore, isLoadingMore, onLoadMore]);
 
     if (loading) {
         return (
@@ -108,8 +147,18 @@ export function MessageList({
     return (
         <div
             ref={containerRef}
-            className="flex-1 overflow-y-auto px-4 py-2 space-y-0.5"
+            className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide"
         >
+            {/* Scroll Sentinel for Load More */}
+            <div ref={topObserverRef} className="h-1" />
+
+            {/* Loading More Indicator */}
+            {isLoadingMore && (
+                <div className="flex justify-center py-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />
+                </div>
+            )}
+
             {messages.map((msg, idx) => {
                 const showDate = shouldShowDateSeparator(idx);
                 const grouped = shouldGroupWithPrevious(idx);
@@ -235,29 +284,33 @@ export function MessageList({
                                     {/* Attachments */}
                                     {msg.attachments && msg.attachments.length > 0 && (
                                         <div className="mt-1.5 space-y-1">
-                                            {msg.attachments.map((att, i) => (
-                                                <a
-                                                    key={i}
-                                                    href={att.url || "#"}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    download
-                                                    className="inline-flex items-center gap-2 bg-neutral-50 border border-neutral-200 hover:bg-neutral-100 hover:border-neutral-300 transition-colors rounded-md px-2.5 py-1.5 text-xs group cursor-pointer"
-                                                >
-                                                    {att.mimeType?.startsWith("image/") ? (
-                                                        <FileText className="w-3.5 h-3.5 text-neutral-400 group-hover:text-primary transition-colors" />
-                                                    ) : (
+                                            {msg.attachments.map((att, i) => {
+                                                const isImage = att.mimeType?.startsWith("image/");
+
+                                                if (isImage) {
+                                                    return <MessageImage key={i} attachment={att} />;
+                                                }
+
+                                                return (
+                                                    <a
+                                                        key={i}
+                                                        href={att.fileId ? `/api/files/files/${att.fileId}/download` : (att.url || "#")}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        download
+                                                        className="inline-flex items-center gap-2 bg-neutral-50 border border-neutral-200 hover:bg-neutral-100 hover:border-neutral-300 transition-colors rounded-md px-2.5 py-1.5 text-xs group cursor-pointer"
+                                                    >
                                                         <Paperclip className="w-3.5 h-3.5 text-neutral-400 group-hover:text-primary transition-colors" />
-                                                    )}
-                                                    <span className="text-foreground truncate max-w-[200px] group-hover:text-primary transition-colors">
-                                                        {att.name}
-                                                    </span>
-                                                    <span className="text-neutral-400">
-                                                        {(att.size / 1024).toFixed(0)}KB
-                                                    </span>
-                                                    <Download className="w-3.5 h-3.5 text-neutral-400 opacity-0 group-hover:opacity-100 group-hover:text-primary transition-all ml-1" />
-                                                </a>
-                                            ))}
+                                                        <span className="text-foreground truncate max-w-[200px] group-hover:text-primary transition-colors">
+                                                            {att.name}
+                                                        </span>
+                                                        <span className="text-neutral-400">
+                                                            {(att.size / 1024).toFixed(0)}KB
+                                                        </span>
+                                                        <Download className="w-3.5 h-3.5 text-neutral-400 opacity-0 group-hover:opacity-100 group-hover:text-primary transition-all ml-1" />
+                                                    </a>
+                                                );
+                                            })}
                                         </div>
                                     )}
 

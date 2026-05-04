@@ -24,6 +24,9 @@ import {
     toggleReaction,
     searchMessages,
     signUpload,
+    attachFileToMessage,
+    detachFileFromMessage,
+    getMessageAttachments,
 } from "../controllers/messageController.js";
 import {
     getUnread,
@@ -68,5 +71,10 @@ router.delete("/messages/:id", protect, deleteMessage);
 // --- Threading & Reactions ---
 router.get("/messages/:id/thread", protect, getThreadMessages);
 router.post("/messages/:id/reactions", protect, toggleReaction);
+
+// --- Message Attachments ---
+router.get("/messages/:messageId/attachments", protect, getMessageAttachments);
+router.post("/messages/:messageId/attachments", protect, attachFileToMessage);
+router.delete("/messages/:messageId/attachments/:fileId", protect, detachFileFromMessage);
 
 export default router;

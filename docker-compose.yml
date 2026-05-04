@@ -16,6 +16,7 @@ services:
       - MEETING_SERVICE_URL=http://meeting:5003
       - CHAT_SERVICE_URL=http://chat:5004
       - TRANSCRIPTION_SERVICE_URL=http://transcription:5005
+      - FILE_SERVICE_URL=http://file:5006
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - FRONTEND_URL=${FRONTEND_URL}
     networks:
@@ -128,6 +129,26 @@ services:
       - OPENROUTER_API=${OPENROUTER_API}
       - DEEPGRAM_API_SECRET=${DEEPGRAM_API_SECRET}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+    networks:
+      - loopy-network
+
+  file:
+    build:
+      context: .
+      dockerfile: services/file/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/loopy-file:latest
+    container_name: loopy-file
+    restart: always
+    environment:
+      - PORT=5006
+      - NODE_ENV=production
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
     networks:
       - loopy-network
 

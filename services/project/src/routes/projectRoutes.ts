@@ -17,12 +17,22 @@ import {
   createArtifact,
   getArtifacts,
   getArtifactById,
+  getRecentArtifacts,
 } from "../controllers/artifactController.js";
+import {
+  getFolders,
+  getSystemFolders,
+  createFolder,
+  deleteFolder,
+} from "../controllers/folderController.js";
 import {
   getProjectTasks,
   createTask,
   updateTask,
   deleteTask,
+  attachFileToTask,
+  detachFileFromTask,
+  getTaskAttachments,
   getProjectMilestones,
   createMilestone,
   updateMilestone,
@@ -50,6 +60,9 @@ router.get("/:projectId/tasks", protect, getProjectTasks);
 router.post("/:projectId/tasks", protect, createTask);
 router.patch("/tasks/:id", protect, updateTask);
 router.delete("/tasks/:id", protect, deleteTask);
+router.post("/tasks/:id/attachments", protect, attachFileToTask);
+router.delete("/tasks/:id/attachments", protect, detachFileFromTask);
+router.get("/tasks/:id/attachments", protect, getTaskAttachments);
 
 router.get("/:projectId/milestones", protect, getProjectMilestones);
 router.post("/:projectId/milestones", protect, createMilestone);
@@ -58,9 +71,16 @@ router.delete("/milestones/:id", protect, deleteMilestone);
 
 // Global Artifacts
 router.get("/artifacts", protect, getArtifacts);
+router.get("/artifacts/recent", protect, getRecentArtifacts);
 router.get("/artifacts/:id", protect, getArtifactById);
 router.post("/artifacts/sign", protect, signUpload);
 router.post("/artifacts", protect, createArtifact);
+
+// Folders
+router.get("/folders", protect, getFolders);
+router.get("/folders/system", protect, getSystemFolders);
+router.post("/folders", protect, createFolder);
+router.delete("/folders/:id", protect, deleteFolder);
 
 // Teams
 router.post("/teams", protect, authorize("ADMIN", "PROJECT_MANAGER"), createTeam);

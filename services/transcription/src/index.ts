@@ -9,7 +9,11 @@ import transcriptionRoutes from "./routes/transcriptionRoutes.js";
 
 const app = express();
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim()) 

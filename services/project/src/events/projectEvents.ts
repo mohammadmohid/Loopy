@@ -1,6 +1,5 @@
 import axios from "axios";
 
-const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL;
 
 const retryAxios = async (fn: () => Promise<any>, retries = 3, delay = 2000) => {
   for (let i = 0; i < retries; i++) {
@@ -13,6 +12,25 @@ const retryAxios = async (fn: () => Promise<any>, retries = 3, delay = 2000) => 
   }
 };
 
+export const notifyFileServiceCreateFolder = async (data: {
+  folderName: string;
+  workspaceId: string;
+  parentFolderId?: string;
+}): Promise<void> => {
+  const FILE_SERVICE_URL = process.env.FILE_SERVICE_URL || "http://file:5006";
+  try {
+    await axios.post(`${FILE_SERVICE_URL}/api/files/folders`, data, {
+      headers: {
+        "X-Internal-Call": "true",
+      },
+    });
+    console.log(`[Event] Created folder ${data.folderName} in file service`);
+  } catch (error) {
+    console.error(`[Event] Failed to create folder ${data.folderName}:`, error);
+    // Don't throw - folder creation is not critical
+  }
+};
+
 export const notifyProjectCreated = async (data: {
   projectId: string;
   projectName: string;
@@ -20,6 +38,7 @@ export const notifyProjectCreated = async (data: {
   createdBy: string;
   workspaceId: string;
 }): Promise<void> => {
+  const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL;
   try {
     await retryAxios(() =>
       axios.post(`${CHAT_SERVICE_URL}/api/chat/channels/project-webhook`, data)
@@ -28,9 +47,16 @@ export const notifyProjectCreated = async (data: {
   } catch (error) {
     console.error(`[Event] Failed to create chat channel for project ${data.projectId}:`, error);
   }
+
+  // Fire-and-forget folder creation in file service
+  notifyFileServiceCreateFolder({
+    folderName: `Project - ${data.projectName}`,
+    workspaceId: data.workspaceId,
+  }).catch(() => {});
 };
 
 export const notifyProjectDeleted = async (projectId: string): Promise<void> => {
+  const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL;
   try {
     await retryAxios(() =>
       axios.delete(`${CHAT_SERVICE_URL}/api/chat/channels/project-webhook/${projectId}`)
@@ -48,6 +74,7 @@ export const notifyTeamCreated = async (data: {
   leaderId: string;
   workspaceId: string;
 }): Promise<void> => {
+  const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL;
   try {
     await retryAxios(() =>
       axios.post(`${CHAT_SERVICE_URL}/api/chat/channels/team-webhook`, data)
@@ -65,6 +92,7 @@ export const notifyTeamUpdated = async (data: {
   leaderId: string;
   workspaceId: string;
 }): Promise<void> => {
+  const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL;
   try {
     await retryAxios(() =>
       axios.post(`${CHAT_SERVICE_URL}/api/chat/channels/team-webhook`, data)
@@ -76,6 +104,7 @@ export const notifyTeamUpdated = async (data: {
 };
 
 export const notifyTeamDeleted = async (teamId: string): Promise<void> => {
+  const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL;
   try {
     await retryAxios(() =>
       axios.delete(`${CHAT_SERVICE_URL}/api/chat/channels/team-webhook/${teamId}`)

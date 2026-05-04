@@ -1,7 +1,13 @@
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
-import { User, Workspace, getR2Client } from "@loopy/shared";
+import {
+    Folder,
+    SystemFolderContext,
+    User,
+    Workspace,
+    warmSystemFolderCache,
+} from "@loopy/shared";
 import OTPToken from "../models/OTPToken.js";
 import { sendOTPEmail, sendInviteEmail } from "../config/mailer.js";
 import axios from "axios";
@@ -169,6 +175,54 @@ export const createWorkspace = async (
             owner: userId,
             members: [{ user: userId, role: "ADMIN", joinedAt: new Date() }],
         });
+
+        try {
+            const [meetingsFolder, projectsFolder, chatFolder, usersFolder] =
+                await Folder.insertMany([
+                    {
+                        workspaceId: workspace._id,
+                        name: "Meetings",
+                        parentId: null,
+                        isSystem: true,
+                        systemContext: SystemFolderContext.MEETINGS,
+                    },
+                    {
+                        workspaceId: workspace._id,
+                        name: "Projects",
+                        parentId: null,
+                        isSystem: true,
+                        systemContext: SystemFolderContext.PROJECTS,
+                    },
+                    {
+                        workspaceId: workspace._id,
+                        name: "Chat",
+                        parentId: null,
+                        isSystem: true,
+                        systemContext: SystemFolderContext.CHAT,
+                    },
+                    {
+                        workspaceId: workspace._id,
+                        name: "Users",
+                        parentId: null,
+                        isSystem: true,
+                        systemContext: SystemFolderContext.USERS,
+                    },
+                ]);
+
+            try {
+                await warmSystemFolderCache(workspace._id.toString(), {
+                    [SystemFolderContext.MEETINGS]: meetingsFolder._id.toString(),
+                    [SystemFolderContext.PROJECTS]: projectsFolder._id.toString(),
+                    [SystemFolderContext.CHAT]: chatFolder._id.toString(),
+                    [SystemFolderContext.USERS]: usersFolder._id.toString(),
+                });
+            } catch (cacheError: any) {
+                console.warn("createWorkspace cache warm skipped:", cacheError.message);
+            }
+        } catch (bootstrapError) {
+            await Workspace.findByIdAndDelete(workspace._id);
+            throw bootstrapError;
+        }
 
         // Link workspace to user
         await User.findByIdAndUpdate(userId, {

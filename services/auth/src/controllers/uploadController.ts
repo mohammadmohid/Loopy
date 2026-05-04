@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getR2Client } from "@loopy/shared";
+import { createPresignedUploadUrl, getR2Client } from "@loopy/shared";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from "uuid";
 
@@ -9,7 +8,6 @@ import { v4 as uuidv4 } from "uuid";
 // @route   POST /api/auth/upload/avatar/sign
 export const signAvatarUpload = async (req: Request, res: Response) => {
   try {
-    const r2Client = getR2Client();
     const { fileType } = req.body;
 
     // Simple validation
@@ -18,17 +16,14 @@ export const signAvatarUpload = async (req: Request, res: Response) => {
     }
 
     const fileKey = `avatars/${Date.now()}_${uuidv4()}`;
-
-    const command = new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
-      Key: fileKey,
-      ContentType: fileType,
+    const { uploadUrl } = await createPresignedUploadUrl({
+      key: fileKey,
+      contentType: fileType,
+      category: "avatar",
+      expiresInSeconds: 300,
     });
 
-    const signedUrl = await getSignedUrl(r2Client, command, { expiresIn: 300 });
-    console.log(process.env.R2_BUCKET_NAME);
-
-    res.json({ signedUrl, key: fileKey });
+    res.json({ signedUrl: uploadUrl, key: fileKey });
   } catch (error: any) {
     res
       .status(500)
@@ -40,7 +35,7 @@ export const signAvatarUpload = async (req: Request, res: Response) => {
 // @route   GET /api/auth/avatars/*
 export const getAvatar = async (req: Request, res: Response) => {
   try {
-    const key = req.params.key as string; // Gets the named wildcard match
+    const key = (req.params as any)["0"]; // Gets the regex capture group
     if (!key) {
       return res.status(400).json({ message: "Key is required" });
     }
@@ -55,7 +50,7 @@ export const getAvatar = async (req: Request, res: Response) => {
     const signedUrl = await getSignedUrl(r2Client, command, { expiresIn: 86400 });
 
     res.setHeader("Cache-Control", "public, max-age=86400, s-maxage=86400");
-    res.redirect(301, signedUrl);
+    res.redirect(307, signedUrl);
   } catch (error: any) {
     res.status(500).json({ message: "Failed to load avatar", error: error.message });
   }

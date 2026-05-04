@@ -1,16 +1,19 @@
 import { Response } from "express";
 import mongoose from "mongoose";
-import { AuthRequest, Channel } from "@loopy/shared";
+import {
+    AuthRequest,
+    Channel,
+    createPresignedUploadUrl,
+    initializeUploadTracker,
+} from "@loopy/shared";
 import Message from "../models/Message.js";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getR2Client } from "../config/r2.js";
 import { v4 as uuidv4 } from "uuid";
 import "@loopy/shared";
 import { createAvatarResolver } from "../utils/avatar.js";
 import { pusher } from "../config/pusher.js";
 import { incrementUnreadBatch } from "../services/unreadService.js";
 import { cacheMessage, getCachedMessages, invalidateCache } from "../services/messageCacheService.js";
+import { registerMessageFileAttachment } from "../utils/fileCoordination.js";
 
 // @desc    Get paginated messages for a channel
 // @route   GET /api/chat/channels/:channelId/messages
@@ -207,6 +210,24 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
         const msgType =
             attachments && attachments.length > 0 && !content ? "file" : "text";
 
+        // Convert fileIds to attachment objects
+        const attachmentObjects = attachments ? attachments.map((att: any) => {
+            if (typeof att === 'string') {
+                return { fileId: new mongoose.Types.ObjectId(att) };
+            }
+            
+            // If it's an object, it might be a legacy attachment (name, key, size, mimeType)
+            // or a new one with { fileId }.
+            return {
+                fileId: att.fileId ? new mongoose.Types.ObjectId(att.fileId) : undefined,
+                name: att.name,
+                key: att.key,
+                size: att.size,
+                mimeType: att.mimeType,
+                isInline: att.isInline || (att.mimeType?.startsWith("image/")),
+            };
+        }) : [];
+
         const message = await Message.create({
             channelId,
             sender: new mongoose.Types.ObjectId(req.user!.id),
@@ -218,7 +239,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
             mentions: parsedMentions.map(
                 (id: string) => new mongoose.Types.ObjectId(id)
             ),
-            attachments: attachments || [],
+            attachments: attachmentObjects,
         });
 
         // If this is a thread reply, increment the parent's replyCount
@@ -244,6 +265,21 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
         await message.populate("mentions", "profile.firstName profile.lastName");
 
         const messageObj = message.toObject();
+
+        // Register file attachments with the file service
+        if (attachmentObjects && attachmentObjects.length > 0) {
+            for (const att of attachmentObjects) {
+                if (att.fileId) {
+                    registerMessageFileAttachment(
+                        att.fileId.toString(),
+                        message._id.toString(),
+                        channelId,
+                        req.user!.workspaceId,
+                        req
+                    ).catch((err) => console.error("File registration error:", err));
+                }
+            }
+        }
 
         // Emit via Pusher
         if (threadParentId) {
@@ -426,7 +462,7 @@ export const toggleReaction = async (req: AuthRequest, res: Response) => {
         await message.save();
 
         pusher.trigger(`channel-${message.channelId}`, "reaction-updated", {
-            messageId: message._id,
+            _id: message._id,
             reactions: message.reactions,
         });
 
@@ -529,19 +565,110 @@ export const signUpload = async (req: AuthRequest, res: Response) => {
         }
 
         const key = `chat-attachments/${uuidv4()}-${fileName}`;
-
-        const r2 = getR2Client();
-        const command = new PutObjectCommand({
-            Bucket: process.env.R2_BUCKET_NAME,
-            Key: key,
-            ContentType: fileType,
+        const uploadId = uuidv4();
+        const { uploadUrl } = await createPresignedUploadUrl({
+            key,
+            contentType: fileType,
+            category: "chat-attachment",
         });
+        await initializeUploadTracker(uploadId, 1, "UPLOADING");
 
-        const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 600 });
-
-        res.json({ uploadUrl, key });
+        res.json({ url: uploadUrl, uploadUrl, key, uploadId });
     } catch (error: any) {
         console.error("signUpload Error:", error);
         res.status(500).json({ message: error.message });
     }
 };
+
+// @desc    Attach file to message
+// @route   POST /api/chat/messages/:messageId/attachments
+export const attachFileToMessage = async (req: AuthRequest, res: Response) => {
+    try {
+        const { messageId } = req.params;
+        const { fileId } = req.body;
+
+        if (!fileId) {
+            return res.status(400).json({ message: "fileId is required" });
+        }
+
+        const message = await Message.findById(messageId);
+        if (!message) {
+            return res.status(404).json({ message: "Message not found" });
+        }
+
+        // Add file to message attachments (avoid duplicates)
+        const fileObjectId = new mongoose.Types.ObjectId(fileId);
+        const existingAttachment = message.attachments.find(
+            (att: any) => att.fileId?.toString() === fileObjectId.toString()
+        );
+
+        if (!existingAttachment) {
+            message.attachments.push({ fileId: fileObjectId });
+            await message.save();
+        }
+
+        // Register file with file service
+        const channel = await Channel.findById(message.channelId);
+        if (channel) {
+            registerMessageFileAttachment(
+                fileId,
+                messageId,
+                message.channelId.toString(),
+                req.user!.workspaceId,
+                req
+            ).catch((err) => console.error("File registration error:", err));
+        }
+
+        res.json({ message: "File attached to message" });
+    } catch (error: any) {
+        console.error("attachFileToMessage Error:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Detach file from message
+// @route   DELETE /api/chat/messages/:messageId/attachments/:fileId
+export const detachFileFromMessage = async (req: AuthRequest, res: Response) => {
+    try {
+        const { messageId, fileId } = req.params;
+
+        const message = await Message.findById(messageId);
+        if (!message) {
+            return res.status(404).json({ message: "Message not found" });
+        }
+
+        // Remove file from message attachments
+        const fileObjectId = new mongoose.Types.ObjectId(fileId);
+        message.attachments = message.attachments.filter(
+            (att: any) => att.fileId?.toString() !== fileObjectId.toString()
+        );
+        await message.save();
+
+        res.json({ message: "File detached from message" });
+    } catch (error: any) {
+        console.error("detachFileFromMessage Error:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Get message attachments
+// @route   GET /api/chat/messages/:messageId/attachments
+export const getMessageAttachments = async (req: AuthRequest, res: Response) => {
+    try {
+        const { messageId } = req.params;
+
+        const message = await Message.findById(messageId).populate(
+            "attachments",
+            "_id name mimeType size r2Key uploadedBy createdAt"
+        );
+        if (!message) {
+            return res.status(404).json({ message: "Message not found" });
+        }
+
+        res.json({ attachments: message.attachments || [] });
+    } catch (error: any) {
+        console.error("getMessageAttachments Error:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
+

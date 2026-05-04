@@ -1,7 +1,5 @@
 import axios from "axios";
 
-const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL;
-
 const retryAxios = async (fn: () => Promise<any>, retries = 3, delay = 2000) => {
   for (let i = 0; i < retries; i++) {
     try {
@@ -17,6 +15,7 @@ export const notifyWorkspaceMemberSync = async (data: {
   workspaceId: string;
   userId: string;
 }): Promise<void> => {
+  const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL;
   try {
     await retryAxios(() =>
       axios.post(`${CHAT_SERVICE_URL}/api/chat/channels/member-webhook`, data)

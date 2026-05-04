@@ -22,7 +22,7 @@ import type { Task, Milestone, Project, Activity, User } from "@/lib/types";
 const tabs = [
   { id: "overview", label: "Overview" },
   { id: "timeline", label: "Timeline" },
-  { id: "tasks", label: "Tasks & Milestones" },
+  { id: "tasks", label: "Backlog" },
   { id: "board", label: "Board" },
 ];
 
@@ -113,9 +113,16 @@ export default function ProjectDetailPage() {
 
       const mappedTasks: Task[] = tasksData.map((t) => {
         const { _id, assignees, assignedTeams: taskTeams, ...rest } = t;
+        
+        // Find which milestone this task belongs to by checking milestonesData tasks arrays
+        const parentMilestone = milestonesData.find((m: any) => 
+          (m.tasks || []).some((mt: any) => (mt._id || mt) === _id)
+        );
+
         return {
           ...rest,
           id: _id,
+          milestoneId: parentMilestone?._id, // Add this for frontend filtering
           assignees: assignees ? assignees.map(mapUser) : [],
           assignedTeams: (taskTeams || []).map((tm: any) => ({
             id: tm._id || tm.id,
@@ -129,35 +136,19 @@ export default function ProjectDetailPage() {
       });
 
       const mappedMilestones: Milestone[] = milestonesData.map((m) => {
-        const { _id, assignees, assignedTeams, ...rest } = m;
-        const milestoneTasks = mappedTasks.filter((t) => t.milestoneId === _id);
-
-        // If no explicit assignees on milestone, aggregate from tasks
-        let finalAssignees: User[] = [];
-        if (assignees && assignees.length > 0) {
-          finalAssignees = assignees.map(mapUser);
-        } else {
-          // Milestones by default tasks all the tasks assigned members
-          const uniqueUsers = new Map();
-          milestoneTasks.forEach((t) => {
-            t.assignees.forEach((u) => uniqueUsers.set(u.id, u));
-          });
-          finalAssignees = Array.from(uniqueUsers.values());
-        }
-
-        // Map assigned teams
-        const mappedTeams = (assignedTeams || []).map((t: any) => ({
-          id: t._id || t.id,
-          _id: t._id || t.id,
-          name: t.name || "Team",
-        }));
+        const { _id, assignees, assignedTeams, tasks: msTasks, ...rest } = m;
+        
+        const milestoneTasks: Task[] = (msTasks || []).map((t: any) => {
+          const tId = t._id || t;
+          return mappedTasks.find(mt => mt.id === tId)!;
+        }).filter(Boolean);
 
         return {
           ...rest,
           id: _id,
           status: rest.status || "open",
-          assignees: finalAssignees,
-          assignedTeams: mappedTeams,
+          assignees: assignees || [], 
+          assignedTeams: assignedTeams || [],
           tasks: milestoneTasks,
         };
       });
@@ -225,15 +216,8 @@ export default function ProjectDetailPage() {
       };
       setTasks((prev) => [...prev, task]);
 
-      // Refresh milestones to update task counts if assigned
       if (newTask.milestoneId) {
-        setMilestones((prev) =>
-          prev.map((m) =>
-            m.id === newTask.milestoneId
-              ? { ...m, tasks: [...m.tasks, task] }
-              : m
-          )
-        );
+        fetchData(); // Simplest way to ensure order and aggregations are right
       }
     } catch (e) {
       console.error(e);
@@ -257,7 +241,8 @@ export default function ProjectDetailPage() {
     try {
       const apiPayload = {
         ...updatedTask,
-        assignees: updatedTask.assignees.map((user) => user.id),
+        assignees: updatedTask.assignees.map((user) => user.id || user._id),
+        assignedTeams: (updatedTask.assignedTeams || []).map((team) => team.id || team._id),
       };
 
       await apiRequest(`/projects/tasks/${updatedTask.id}`, {
@@ -287,7 +272,7 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const handleMilestoneCreate = async (newMilestone: Partial<Milestone> & { taskIds?: string[] }) => {
+  const handleMilestoneCreate = async (newMilestone: Partial<Milestone> & { tasks?: string[] }) => {
     try {
       const created = await apiRequest<any>(`/projects/${id}/milestones`, {
         method: "POST",
@@ -297,7 +282,7 @@ export default function ProjectDetailPage() {
         ...prev,
         { ...created, id: created._id, tasks: [] },
       ]);
-      if (newMilestone.taskIds && newMilestone.taskIds.length > 0) {
+      if (newMilestone.tasks && newMilestone.tasks.length > 0) {
         fetchData();
       }
     } catch (e) {
@@ -310,9 +295,14 @@ export default function ProjectDetailPage() {
       prev.map((m) => (m.id === updated.id ? updated : m))
     );
     try {
+      const payload = {
+        ...updated,
+        tasks: updated.tasks.map(t => t.id || (t as any)._id),
+      };
+
       await apiRequest(`/projects/milestones/${updated.id}`, {
         method: "PATCH",
-        data: updated,
+        data: payload,
       });
     } catch (e) {
       console.error(e);
@@ -570,6 +560,7 @@ export default function ProjectDetailPage() {
           {activeTab === "board" && (
             <BoardTab
               tasks={tasks}
+              milestones={milestones}
               columns={project.boardColumns}
               onTaskClick={(t) => {
                 setSelectedTask(t);
@@ -577,6 +568,13 @@ export default function ProjectDetailPage() {
               }}
               onTaskUpdate={handleTaskUpdate}
               onColumnsUpdate={handleColumnsUpdate}
+              onMilestoneCreate={() => {
+                setActiveTab("tasks");
+                setTimeout(() => {
+                  const el = document.querySelector('[data-create-milestone-btn]') as HTMLButtonElement;
+                  if (el) el.click();
+                }, 100);
+              }}
               canEdit={canEdit}
             />
           )}

@@ -89,7 +89,7 @@ export const findUserById = async (
   res: Response
 ) => {
   try {
-    const user = await User.findById(req.id);
+    const user = await User.findById(req.params.id);
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -311,17 +311,81 @@ export const getUsers = async (
       users.map(async (user: any) => {
         const avatarUrl = await getAvatarUrl(user.profile?.avatarKey);
         return {
-          id: user._id,
+          _id: user._id,
           email: user.email,
-          firstName: user.profile?.firstName,
-          lastName: user.profile?.lastName,
-          avatarUrl,
+          profile: {
+            firstName: user.profile?.firstName,
+            lastName: user.profile?.lastName,
+            avatarKey: user.profile?.avatarKey,
+            avatarUrl,
+          },
         };
       })
     );
 
     res.json(usersWithAvatar);
   } catch (error) {
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+// @desc    Search users in the current workspace
+// @route   GET /api/auth/users/search
+export const searchUsers = async (
+  req: Request & { user?: any },
+  res: Response
+) => {
+  try {
+    const { q } = req.query;
+    const workspaceId = req.user?.workspaceId;
+
+    if (!workspaceId) {
+      return res.status(400).json({ message: "No active workspace" });
+    }
+
+    if (!q) {
+      return res.json([]);
+    }
+
+    const workspace = await Workspace.findById(workspaceId);
+    if (!workspace) {
+      return res.status(404).json({ message: "Workspace not found" });
+    }
+
+    const memberIds = workspace.members.map((m: any) => m.user);
+
+    const searchRegex = new RegExp(q as string, "i");
+    const users = await User.find({
+      _id: { $in: memberIds },
+      $or: [
+        { "profile.firstName": searchRegex },
+        { "profile.lastName": searchRegex },
+        { email: searchRegex },
+      ],
+    })
+      .select("email profile.firstName profile.lastName profile.avatarKey")
+      .limit(10)
+      .lean();
+
+    const usersWithAvatar = await Promise.all(
+      users.map(async (user: any) => {
+        const avatarUrl = await getAvatarUrl(user.profile?.avatarKey);
+        return {
+          _id: user._id,
+          email: user.email,
+          profile: {
+            firstName: user.profile?.firstName,
+            lastName: user.profile?.lastName,
+            avatarKey: user.profile?.avatarKey,
+            avatarUrl,
+          },
+        };
+      })
+    );
+
+    res.json(usersWithAvatar);
+  } catch (error) {
+    console.error("searchUsers error:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };

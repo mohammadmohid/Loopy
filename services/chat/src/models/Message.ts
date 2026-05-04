@@ -6,11 +6,13 @@ export interface IReaction {
 }
 
 export interface IAttachment {
-    name: string;
-    key: string;
-    size: number;
-    mimeType: string;
+    fileId?: mongoose.Types.ObjectId; // Reference to file service
+    name?: string;
+    key?: string;
+    size?: number;
+    mimeType?: string;
     url?: string; // Populated at query time with presigned URL
+    isInline?: boolean; // For image attachments displayed inline
 }
 
 export interface IMessage extends Document {
@@ -61,10 +63,12 @@ const MessageSchema: Schema = new Schema(
         ],
         attachments: [
             {
-                name: { type: String, required: true, maxlength: 255 },
-                key: { type: String, required: true, select: false },
-                size: { type: Number, required: true },
-                mimeType: { type: String, required: true, maxlength: 127 },
+                fileId: { type: Schema.Types.ObjectId, ref: "File", sparse: true },
+                name: { type: String, maxlength: 255 },
+                key: { type: String, select: false },
+                size: { type: Number },
+                mimeType: { type: String, maxlength: 127 },
+                isInline: { type: Boolean, default: false },
             },
         ],
         isEdited: { type: Boolean, default: false },

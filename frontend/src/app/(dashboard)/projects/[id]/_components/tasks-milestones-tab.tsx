@@ -46,7 +46,7 @@ interface TasksMilestonesTabProps {
   onTaskCreate: (task: Partial<Task>) => void;
   onTaskUpdate: (task: Task) => void;
   onTaskDelete: (taskId: string) => void;
-  onMilestoneCreate: (milestone: Partial<Milestone> & { taskIds?: string[] }) => void;
+  onMilestoneCreate: (milestone: any) => void;
   onMilestoneUpdate: (milestone: Milestone) => void;
   onMilestoneDelete: (milestoneId: string) => void;
   onMilestoneComplete?: (milestoneId: string) => void;
@@ -194,7 +194,7 @@ export function TasksMilestonesTab({
       description: `Auto-created sprint from ${unassignedTasks.length} backlog tasks.`,
       startDate: today.toISOString(),
       dueDate: milestoneEnd.toISOString(),
-      taskIds: unassignedTasks.map((t) => t.id),
+      tasks: unassignedTasks.map((t) => t.id) as any,
     });
   };
 
@@ -252,7 +252,7 @@ export function TasksMilestonesTab({
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
               <input
                 type="text"
-                placeholder="Search tasks & milestones..."
+                placeholder="Search backlog tasks & milestones..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-neutral-200 rounded-lg text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all shadow-sm"
@@ -421,51 +421,69 @@ export function TasksMilestonesTab({
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-neutral-400 mt-0.5">
+                      <div className="text-xs text-neutral-400 mt-0.5 flex items-center gap-3">
+                        <span>
+                          {new Date(milestone.startDate).toLocaleDateString()} -{" "}
+                          {new Date(milestone.dueDate).toLocaleDateString()}
+                        </span>
+                        {milestone.duration && (
+                          <span className="bg-neutral-200 px-1.5 py-0.5 rounded text-[10px] font-medium text-neutral-600">
+                            {milestone.duration}
+                          </span>
+                        )}
+                        {milestone.goal && (
+                          <span className="italic truncate max-w-[200px]" title={milestone.goal}>
+                            Goal: {milestone.goal}
+                          </span>
+                        )}
+                      </div>
+                      {/* Show assigned teams/members as small badges derived from tasks */}
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                         {(() => {
-                          const validStarts = (milestone.tasks || []).map((t: any) => new Date(t.createdAt || t.dueDate || 0).getTime()).filter((t: any) => t > 0);
-                          const dynamicStart = validStarts.length ? new Date(Math.min(...validStarts)).toISOString() : milestone.startDate;
+                          const uniqueTeams = new Map();
+                          const uniqueUsers = new Map();
+                          
+                          milestone.tasks.forEach(t => {
+                            (t.assignedTeams || []).forEach(team => uniqueTeams.set(team.id || (team as any)._id, team));
+                            (t.assignees || []).forEach(user => uniqueUsers.set(user.id || (user as any)._id, user));
+                          });
 
-                          const validEnds = (milestone.tasks || []).map((t: any) => new Date(t.dueDate || 0).getTime()).filter((t: any) => t > 0);
-                          const dynamicEnd = validEnds.length ? new Date(Math.max(...validEnds)).toISOString() : milestone.dueDate;
+                          const teams = Array.from(uniqueTeams.values());
+                          const users = Array.from(uniqueUsers.values());
+
                           return (
                             <>
-                              {new Date(dynamicStart).toLocaleDateString()} -{" "}
-                              {new Date(dynamicEnd).toLocaleDateString()}
+                              {teams.map((t: any) => (
+                                <span key={t.id || t._id} className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md border border-blue-100">
+                                  <Users className="w-2.5 h-2.5" />
+                                  {t.name}
+                                </span>
+                              ))}
+                              {users.length > 0 && (
+                                <div className="flex items-center -space-x-1">
+                                  {users.slice(0, 3).map((a) => (
+                                    <div
+                                      key={a.id || (a as any)._id}
+                                      className="w-5 h-5 rounded-full bg-neutral-200 border border-white flex items-center justify-center text-[8px] font-medium overflow-hidden"
+                                      title={a.name}
+                                    >
+                                      {a.avatar && looksLikeUrl(a.avatar) ? (
+                                        <img src={a.avatar} alt={a.name} className="object-cover w-full h-full" />
+                                      ) : (
+                                        a.avatar || a.name?.[0]?.toUpperCase() || "U"
+                                      )}
+                                    </div>
+                                  ))}
+                                  {users.length > 3 && (
+                                    <div className="w-5 h-5 rounded-full bg-neutral-800 text-white flex items-center justify-center text-[7px] font-bold border border-white">
+                                      +{users.length - 3}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </>
                           );
                         })()}
-                      </div>
-                      {/* Show assigned teams/members as small badges */}
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        {milestone.assignedTeams && milestone.assignedTeams.map((t: any) => (
-                          <span key={t._id || t.id} className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md border border-blue-100">
-                            <Users className="w-2.5 h-2.5" />
-                            {t.name}
-                          </span>
-                        ))}
-                        {milestone.assignees && milestone.assignees.length > 0 && (
-                          <div className="flex items-center -space-x-1">
-                            {milestone.assignees.slice(0, 3).map((a) => (
-                              <div
-                                key={a.id}
-                                className="w-5 h-5 rounded-full bg-neutral-200 border border-white flex items-center justify-center text-[8px] font-medium overflow-hidden"
-                                title={a.name}
-                              >
-                                {a.avatar && looksLikeUrl(a.avatar) ? (
-                                  <img src={a.avatar} alt={a.name} className="object-cover w-full h-full" />
-                                ) : (
-                                  a.avatar || a.name?.[0]?.toUpperCase() || "U"
-                                )}
-                              </div>
-                            ))}
-                            {milestone.assignees.length > 3 && (
-                              <span className="text-[9px] text-neutral-500 ml-1">
-                                +{milestone.assignees.length - 3}
-                              </span>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -570,6 +588,7 @@ export function TasksMilestonesTab({
               {canEdit && unassignedTasks.length > 0 && (
                 <div className="border-t border-dashed border-neutral-200 bg-neutral-50/50">
                   <button
+                    data-create-milestone-btn
                     onClick={handleCreateMilestoneFromBacklog}
                     className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg border-2 border-dashed border-neutral-300 text-sm font-medium text-neutral-500 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all"
                   >
@@ -822,8 +841,7 @@ function TaskRow({
         e.dataTransfer.setData("text/plain", task.id);
         e.dataTransfer.effectAllowed = "move";
       }}
-      className="flex items-center p-3 pl-4 hover:bg-neutral-50 group cursor-pointer transition-colors border-l-[3px] border-transparent hover:border-neutral-300"
-      onClick={onClick}
+      className="flex items-center p-3 pl-4 hover:bg-neutral-50 group transition-colors border-l-[3px] border-transparent hover:border-neutral-300"
     >
       <div className="flex items-center gap-3 w-10">
         <input
@@ -849,9 +867,13 @@ function TaskRow({
       <div className="flex-1 flex items-center gap-2">
         <span
           className={cn(
-            "text-sm text-neutral-900 font-medium",
+            "text-sm text-neutral-900 font-medium cursor-pointer hover:text-primary",
             isDone && "line-through text-neutral-400"
           )}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
         >
           {task.title}
         </span>

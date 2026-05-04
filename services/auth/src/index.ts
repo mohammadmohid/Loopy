@@ -12,7 +12,11 @@ connectDB();
 const app = express();
 app.set("trust proxy", 1);
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 app.use(cookieParser());
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS 

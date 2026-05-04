@@ -10,10 +10,21 @@ const nextConfig = {
     ];
   },
   images: {
+    unoptimized: process.env.NEXT_PUBLIC_IS_LOCAL === "true" || process.env.NEXT_PUBLIC_IS_LOCAL === "1",
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "**.cloudflarestorage.com", // Allow R2 domains
+        hostname: "**.cloudflarestorage.com",
+      },
+      {
+        protocol: "http",
+        hostname: "localhost",
+        port: "8000",
+      },
+      {
+        protocol: "http",
+        hostname: "127.0.0.1",
+        port: "8000",
       },
     ],
   },

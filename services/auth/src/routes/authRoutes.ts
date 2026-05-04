@@ -8,6 +8,7 @@ import {
   findUserById,
   updateProfile,
   getUsers,
+  searchUsers,
 } from "../controllers/authController.js";
 import {
   verifyOTP,
@@ -46,7 +47,8 @@ router.get("/me", protect, getMe);
 router.put("/me", protect, updateProfile);
 router.post("/upload/avatar/sign", signAvatarUpload);
 router.get("/users", protect, getUsers);
-router.get("/avatars/:key", getAvatar);
+router.get("/users/search", protect, searchUsers);
+router.get(/^\/avatars\/(.*)/, getAvatar);
 router.get("/:id", protect, findUserById);
 
 // Workspaces

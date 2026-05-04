@@ -5,13 +5,14 @@ import type { ChannelMember } from "@/lib/types";
 import { apiRequest } from "@/lib/api";
 import { Send, Paperclip, AtSign, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFilesAPI } from "@/hooks/useFilesAPI";
 
 interface MessageInputProps {
     channelId: string;
     members: ChannelMember[];
     onSend: (
         content: string,
-        attachments?: { name: string; key: string; size: number; mimeType: string }[]
+        attachments?: { fileId?: string; name: string; key: string; size: number; mimeType: string }[]
     ) => Promise<void>;
     onTyping: () => void;
     onStopTyping: () => void;
@@ -108,39 +109,30 @@ export function MessageInput({
         }
     };
 
+    const { uploadFile } = useFilesAPI();
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
         try {
             setUploading(true);
-            // Get presigned URL
-            const { url, key } = await apiRequest<{ url: string; key: string }>(
-                "/chat/upload/sign",
-                {
-                    method: "POST",
-                    data: {
-                        fileName: file.name,
-                        fileType: file.type,
-                        fileSize: file.size,
-                    },
-                }
-            );
-
-            // Upload to R2
-            await fetch(url, {
-                method: "PUT",
-                body: file,
-                headers: { "Content-Type": file.type },
+            
+            // Use unified upload flow
+            const fileData = await uploadFile(file, {
+                filename: file.name,
+                mimeType: file.type,
+                sizeBytes: file.size,
+                sourceContext: { type: "CHAT_MESSAGE" }
             });
 
             setPendingAttachments((prev) => [
                 ...prev,
                 {
-                    name: file.name,
-                    key,
-                    size: file.size,
-                    mimeType: file.type,
+                    fileId: fileData._id || (fileData as any).id,
+                    name: fileData.name,
+                    key: fileData.r2Key,
+                    size: fileData.sizeBytes || (fileData as any).size || 0,
+                    mimeType: fileData.mimeType,
                 },
             ]);
         } catch (err) {

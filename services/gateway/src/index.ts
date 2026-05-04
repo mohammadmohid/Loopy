@@ -10,22 +10,26 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 app.set("trust proxy", 1);
 
-// 100 requests per 15 minutes per IP
+// 600 requests per minute per IP
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: "Too many requests from this IP, please try again after 15 minutes",
+  windowMs: 60 * 1000,
+  max: 600,
+  message: "Too many requests from this IP, please try again after 1 minute",
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use(limiter as any);
 
 // Get allowed origins from env
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim()) 
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
   : [];
 
 app.use(
@@ -64,6 +68,7 @@ const SERVICE_ROUTES: ServiceRoute[] = [
   { prefix: "/api/meetings", targetEnvVar: "MEETING_SERVICE_URL" },
   { prefix: "/api/artifacts", targetEnvVar: "TRANSCRIPTION_SERVICE_URL" },
   { prefix: "/api/chat", targetEnvVar: "CHAT_SERVICE_URL" },
+  { prefix: "/api/files", targetEnvVar: "FILE_SERVICE_URL" },
 ];
 
 for (const route of SERVICE_ROUTES) {

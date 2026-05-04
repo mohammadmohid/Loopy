@@ -228,14 +228,9 @@ export function TimelineTab({
           return true;
         });
 
-        // Check if Milestone itself matches filter (if it has assignees)
-        const milestoneMatches =
-          selectedAssignees.length === 0 ||
-          m.assignees.some((u) => selectedAssignees.includes(u.id));
-
-        // Show if milestone matches OR if it has matching tasks
-        if (!milestoneMatches && matchingTasks.length === 0) return null;
-
+        // Show if milestone has matching tasks OR if no filter is active
+        if (selectedAssignees.length > 0 && matchingTasks.length === 0) return null;
+        
         return { ...m, tasks: matchingTasks };
       })
       .filter(Boolean) as Milestone[];

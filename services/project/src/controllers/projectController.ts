@@ -375,6 +375,7 @@ export const getProjectActivity = async (req: AuthRequest, res: Response) => {
     const milestones = await Milestone.find({ projectId })
       .sort({ updatedAt: -1 })
       .limit(10)
+      .populate("createdBy", "profile.firstName profile.lastName")
       .lean();
 
     // Normalize and merge activities
@@ -403,7 +404,9 @@ export const getProjectActivity = async (req: AuthRequest, res: Response) => {
             : "updated",
         targetName: m.name,
         timestamp: m.updatedAt,
-        user: "Project Manager",
+        user: m.createdBy
+          ? `${m.createdBy.profile.firstName} ${m.createdBy.profile.lastName}`
+          : "Project Manager",
       })),
     ]
       .sort(

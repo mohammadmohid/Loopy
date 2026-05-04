@@ -62,7 +62,7 @@ export function ProjectCalendar({ tasks, milestones, meetings = [] }: ProjectCal
     }));
 
     const meetingEvents: CalendarEvent[] = meetings
-      .map((m) => {
+      .map((m): CalendarEvent | null => {
         const isEnded = m.status === "ended";
         const dateRaw = isEnded
           ? m.scheduledAt || m.createdAt

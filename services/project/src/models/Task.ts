@@ -7,10 +7,10 @@ export interface ITask extends Document {
   type: "task" | "bug" | "feature" | "story";
   priority: "low" | "medium" | "high";
   projectId: mongoose.Types.ObjectId;
-  milestoneId?: mongoose.Types.ObjectId;
   assignees?: mongoose.Types.ObjectId[];
   assignedTeams?: mongoose.Types.ObjectId[];
   dueDate?: Date;
+  attachments?: mongoose.Types.ObjectId[]; // File IDs
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,10 +34,10 @@ const TaskSchema: Schema = new Schema(
       default: "medium",
     },
     projectId: { type: Schema.Types.ObjectId, ref: "Project", required: true },
-    milestoneId: { type: Schema.Types.ObjectId, ref: "Milestone" },
     assignees: [{ type: Schema.Types.ObjectId, ref: "User" }],
     assignedTeams: [{ type: Schema.Types.ObjectId, ref: "Team" }],
     dueDate: { type: Date },
+    attachments: [{ type: Schema.Types.ObjectId, ref: "File" }],
   },
   { timestamps: true }
 );
@@ -46,8 +46,5 @@ const TaskSchema: Schema = new Schema(
 
 // Board column queries: tasks by project filtered by status
 TaskSchema.index({ projectId: 1, status: 1 });
-
-// Milestone detail: tasks belonging to a milestone
-TaskSchema.index({ milestoneId: 1 }, { sparse: true });
 
 export default mongoose.model<ITask>("Task", TaskSchema);

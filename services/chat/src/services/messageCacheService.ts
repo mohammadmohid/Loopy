@@ -1,4 +1,4 @@
-import { getRedisClient } from "../config/redis";
+import { getRedisClient } from "../config/redis.js";
 
 const MSG_PREFIX = "msgs:";
 const MAX_CACHED = 50;
@@ -46,7 +46,7 @@ export async function getCachedMessages(channelId: string, limit: number = 50): 
 
         if (!raw || raw.length === 0) return null;
 
-        return raw.map((item) => {
+        return raw.map((item: any) => {
             // @upstash/redis may auto-deserialize JSON strings
             if (typeof item === "object") return item;
             return JSON.parse(item);

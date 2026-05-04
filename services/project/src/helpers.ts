@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { AuthRequest } from "@loopy/shared";
-import Team from "./models/Team";
+import Team from "./models/Team.js";
+import axios from "axios";
 
 /**
  * Resolves an avatar key to a full URL via the gateway proxy.
@@ -61,4 +62,77 @@ export const buildScopedProjectQuery = async (user: AuthRequest["user"]): Promis
       { "assignedTeams.team": { $in: userTeamIds } },
     ],
   };
+};
+
+/**
+ * Registers a task attachment with the file service
+ * Links the file to the task via sourceContext
+ */
+export const registerTaskFileAttachment = async (
+  fileId: string,
+  taskId: string,
+  workspaceId: string,
+  authToken: string
+): Promise<void> => {
+  try {
+    const fileServiceUrl = process.env.FILE_SERVICE_URL || "http://file:5006";
+    
+    // Update the file's sourceContext to link it to the task
+    await axios.patch(
+      `${fileServiceUrl}/api/files/${fileId}`,
+      {
+        sourceContext: {
+          type: "TASK",
+          id: taskId,
+        },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          "X-Workspace-Id": workspaceId,
+        },
+      }
+    );
+  } catch (error: any) {
+    console.error("Failed to register task file attachment:", error.message);
+    // Don't throw - attachment registration failure shouldn't block task operations
+  }
+};
+
+/**
+ * Attaches a file to a task by adding it to the attachments array
+ */
+export const attachFileToTask = async (
+  taskId: string,
+  fileId: string
+): Promise<void> => {
+  try {
+    const Task = (await import("./models/Task.js")).default;
+    await Task.findByIdAndUpdate(
+      taskId,
+      { $addToSet: { attachments: fileId } },
+      { new: true }
+    );
+  } catch (error: any) {
+    console.error("Failed to attach file to task:", error.message);
+  }
+};
+
+/**
+ * Detaches a file from a task
+ */
+export const detachFileFromTask = async (
+  taskId: string,
+  fileId: string
+): Promise<void> => {
+  try {
+    const Task = (await import("./models/Task.js")).default;
+    await Task.findByIdAndUpdate(
+      taskId,
+      { $pull: { attachments: fileId } },
+      { new: true }
+    );
+  } catch (error: any) {
+    console.error("Failed to detach file from task:", error.message);
+  }
 };

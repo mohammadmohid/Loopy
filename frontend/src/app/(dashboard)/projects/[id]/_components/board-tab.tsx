@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { Plus, X, Check, Trash2, Edit2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Task } from "@/lib/types";
+import type { Task, Milestone, TaskType, Priority } from "@/lib/types";
 
 interface BoardColumn {
   id: string;
@@ -14,25 +14,45 @@ interface BoardColumn {
 
 interface BoardTabProps {
   tasks: Task[];
+  milestones: Milestone[];
   columns: BoardColumn[];
   onTaskClick: (task: Task) => void;
   onTaskUpdate: (task: Task) => void;
   onColumnsUpdate: (columns: BoardColumn[]) => void;
+  onMilestoneCreate: () => void;
   canEdit: boolean;
 }
 
 export function BoardTab({
   tasks,
+  milestones,
   columns,
   onTaskClick,
   onTaskUpdate,
   onColumnsUpdate,
+  onMilestoneCreate,
   canEdit,
 }: BoardTabProps) {
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
   const [newColumnName, setNewColumnName] = useState("");
   const [isAddingColumn, setIsAddingColumn] = useState(false);
+  
+  // Filter State
+  const [filterMilestone, setFilterMilestone] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterPriority, setFilterPriority] = useState<string>("all");
+
+  const filteredTasks = tasks.filter((t) => {
+    if (filterMilestone === "backlog") {
+      if (t.milestoneId) return false;
+    } else if (filterMilestone !== "all") {
+      if (t.milestoneId !== filterMilestone) return false;
+    }
+    if (filterType !== "all" && t.type !== filterType) return false;
+    if (filterPriority !== "all" && t.priority !== filterPriority) return false;
+    return true;
+  });
 
   const colorOptions = [
     "bg-neutral-200",
@@ -108,44 +128,99 @@ export function BoardTab({
 
   return (
     <div className="space-y-4 h-full flex flex-col">
-      {/* Header Actions */}
-      <div className="flex items-center justify-end gap-2 h-10 shrink-0">
-        {canEdit && (
-          <>
-            {isAddingColumn ? (
-              <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-5">
-                <input
-                  autoFocus
-                  className="h-8 px-2 border rounded-lg text-sm"
-                  placeholder="Column Name"
-                  value={newColumnName}
-                  onChange={(e) => setNewColumnName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddColumn()}
-                />
-                <button
-                  onClick={handleAddColumn}
-                  className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200"
-                >
-                  <Check className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={cancelEditing}
-                  className="p-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
+      {/* Header Actions & Filters */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white p-3 rounded-xl border border-neutral-200">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-bold text-neutral-400 uppercase ml-1">Milestone</span>
+            <select
+              value={filterMilestone}
+              onChange={(e) => setFilterMilestone(e.target.value)}
+              className="h-8 pl-2 pr-8 text-xs border rounded-lg bg-neutral-50 outline-none focus:ring-2 focus:ring-primary/10"
+            >
+              <option value="all">All Milestones</option>
+              <option value="backlog">Backlog Only</option>
+              {milestones.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-bold text-neutral-400 uppercase ml-1">Type</span>
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="h-8 pl-2 pr-8 text-xs border rounded-lg bg-neutral-50 outline-none focus:ring-2 focus:ring-primary/10"
+            >
+              <option value="all">All Types</option>
+              <option value="task">Tasks</option>
+              <option value="bug">Bugs</option>
+              <option value="feature">Features</option>
+              <option value="story">Stories</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-bold text-neutral-400 uppercase ml-1">Priority</span>
+            <select
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value)}
+              className="h-8 pl-2 pr-8 text-xs border rounded-lg bg-neutral-50 outline-none focus:ring-2 focus:ring-primary/10"
+            >
+              <option value="all">All Priorities</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 self-end">
+          {canEdit && (
+            <>
               <button
-                onClick={() => setIsAddingColumn(true)}
-                className="px-3 py-1.5 border border-neutral-200 rounded-lg text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition-colors flex items-center gap-1"
+                onClick={onMilestoneCreate}
+                className="px-3 py-1.5 border border-neutral-200 rounded-lg text-xs font-medium text-neutral-700 hover:bg-neutral-50 transition-colors flex items-center gap-1.5"
               >
-                <Plus className="w-4 h-4" />
-                Add Column
+                <Plus className="w-3.5 h-3.5" />
+                Create Milestone
               </button>
-            )}
-          </>
-        )}
+              {isAddingColumn ? (
+                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-5">
+                  <input
+                    autoFocus
+                    className="h-8 px-2 border rounded-lg text-xs"
+                    placeholder="Column Name"
+                    value={newColumnName}
+                    onChange={(e) => setNewColumnName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddColumn()}
+                  />
+                  <button
+                    onClick={handleAddColumn}
+                    className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200"
+                  >
+                    <Check className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={cancelEditing}
+                    className="p-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsAddingColumn(true)}
+                  className="px-3 py-1.5 bg-neutral-900 text-white rounded-lg text-xs font-medium hover:bg-neutral-800 transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Column
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Main Board Layout (Single Loop) */}
@@ -203,7 +278,7 @@ export function BoardTab({
                     {column.label}
                   </span>
                   <span className="text-sm text-neutral-500">
-                    ({tasks.filter((t) => t.status === column.id).length})
+                    ({filteredTasks.filter((t) => t.status === column.id).length})
                   </span>
                 </div>
               )}
@@ -232,9 +307,8 @@ export function BoardTab({
               )}
             </div>
 
-            {/* Tasks Area */}
             <div className="space-y-3 overflow-y-auto flex-1 pr-1 min-h-0">
-              {tasks
+              {filteredTasks
                 .filter((t) => t.status === column.id)
                 .map((task) => (
                   <div

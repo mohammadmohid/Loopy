@@ -6,9 +6,11 @@ export interface IMilestone extends Document {
   status: "open" | "completed";
   startDate: Date;
   dueDate: Date;
-  assignees: mongoose.Types.ObjectId[];
-  assignedTeams?: mongoose.Types.ObjectId[];
+  duration?: string;
+  goal?: string;
+  tasks: mongoose.Types.ObjectId[];
   projectId: mongoose.Types.ObjectId;
+  createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,9 +22,11 @@ const MilestoneSchema: Schema = new Schema(
     status: { type: String, enum: ["open", "completed"], default: "open" },
     startDate: { type: Date, required: true },
     dueDate: { type: Date, required: true },
-    assignees: [{ type: Schema.Types.ObjectId, ref: "User" }],
-    assignedTeams: [{ type: Schema.Types.ObjectId, ref: "Team" }],
+    duration: { type: String, maxlength: 50 },
+    goal: { type: String, maxlength: 1000 },
+    tasks: [{ type: Schema.Types.ObjectId, ref: "Task" }],
     projectId: { type: Schema.Types.ObjectId, ref: "Project", required: true },
+    createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }
 );

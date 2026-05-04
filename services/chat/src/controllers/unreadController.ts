@@ -1,6 +1,6 @@
 import { Response } from "express";
 import { AuthRequest } from "@loopy/shared";
-import { getUnreadCounts, clearUnread } from "../services/unreadService";
+import { getUnreadCounts, clearUnread } from "../services/unreadService.js";
 
 /**
  * @desc    Get all unread counts for the authenticated user

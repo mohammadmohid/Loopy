@@ -16,7 +16,11 @@ import transcriptionRoutes from "./routes/transcriptionRoutes.js";
 
 const app = express();
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 
 const allowedOrigins =
   process.env.ALLOWED_ORIGINS?.split(",")
@@ -26,13 +30,16 @@ const allowedOrigins =
 app.use(
   cors({
     origin: (origin, callback) => {
-      // No Origin: same-origin / server-to-server (gateway → service)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      // Local dev: empty allowlist would reject the Next app (e.g. http://localhost:3000)
+      if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+        return callback(null, true);
+      }
       if (allowedOrigins.length === 0 && process.env.NODE_ENV !== "production") {
         return callback(null, true);
       }
+      console.error(
+        `[CORS] Origin ${origin} not allowed. Allowed: ${allowedOrigins.join(", ")}`
+      );
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,

@@ -12,6 +12,10 @@ jobs:
       contents: read
       packages: write
 
+    strategy:
+      matrix:
+        service: [gateway, auth, project, chat, meeting, transcription]
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,65 +30,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Gateway
+      - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: services/gateway/Dockerfile
+          file: services/${{ matrix.service }}/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/loopy-gateway:latest
+          tags: ghcr.io/${{ github.repository_owner }}/loopy-${{ matrix.service }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push Auth
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: services/auth/Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/loopy-auth:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push Project
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: services/project/Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/loopy-project:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push Chat
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: services/chat/Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/loopy-chat:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push Meeting
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: services/meeting/Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/loopy-meeting:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push Transcription
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: services/transcription/Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/loopy-transcription:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
   deploy:
     needs: build-and-push
@@ -115,7 +70,7 @@ jobs:
             # Set repository owner for docker-compose
             export GITHUB_REPOSITORY_OWNER=${{ github.repository_owner }}
             # Pull latest images and restart
-            docker-compose pull
-            docker-compose up -d
+            docker compose pull
+            docker compose up -d
             # Clean up old images
             docker image prune -f

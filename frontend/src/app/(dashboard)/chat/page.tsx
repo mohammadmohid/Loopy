@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import useSWR, { mutate as globalMutate } from "swr";
+import useSWR, { mutate as globalMutate, useSWRConfig } from "swr";
+import useSWRInfinite from "swr/infinite";
 import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/lib/auth-provider";
 import { apiRequest } from "@/lib/api";
@@ -33,15 +34,45 @@ export default function ChatPage() {
     }, [selectedChannel]);
 
     // --- SWR Hooks ---
-  const { data: rawChannels, isLoading: loadingChannels } = useSWR<Channel[]>("/chat/channels", fetcher as any);
-  const channels = rawChannels || [];
+    const { data: rawChannels, isLoading: loadingChannels } = useSWR<Channel[]>("/chat/channels", fetcher as any);
+    const channels = rawChannels || [];
 
-  const { data: membersObj } = useSWR<{ members: any[] }>("/auth/workspaces/members", fetcher as any);
-  const workspaceMembers = membersObj?.members || [];
+    const { data: membersObj } = useSWR<{ members: any[] }>("/auth/workspaces/members", fetcher as any);
+    const workspaceMembers = membersObj?.members || [];
 
-  const messageKey = selectedChannel ? `/chat/channels/${selectedChannel._id}/messages?limit=50` : null;
-  const { data: messagesData, isLoading: loadingMessages } = useSWR<{ messages: ChatMessage[]; hasMore: boolean; nextCursor: string | null }>(messageKey, fetcher as any);
-    const messages = messagesData?.messages || [];
+    // Infinite Loading for Messages
+    const getKey = (pageIndex: number, previousPageData: any) => {
+        if (!selectedChannel) return null;
+        // If we reached the end, don't fetch anymore
+        if (pageIndex > 0 && !previousPageData?.nextCursor) return null;
+
+        const baseUrl = `/chat/channels/${selectedChannel._id}/messages?limit=50`;
+        if (pageIndex === 0) return baseUrl;
+        return `${baseUrl}&cursor=${previousPageData.nextCursor}`;
+    };
+
+    const { 
+        data: infiniteData, 
+        size, 
+        setSize, 
+        mutate: mutateMessages,
+        isValidating: validatingMessages, 
+        isLoading: loadingMessages 
+    } = useSWRInfinite(getKey, fetcher as any, {
+        revalidateFirstPage: false,
+        persistSize: true
+    });
+
+    const messages = useMemo(() => {
+        if (!infiniteData) return [];
+        // Flatten pages. Since we fetch newest first (sort -1 in backend), 
+        // the first page has the newest messages.
+        // To display [oldest -> newest], we reverse the page order then flatten.
+        return [...infiniteData].reverse().flatMap(page => page.messages);
+    }, [infiniteData]);
+
+    const hasMore = infiniteData ? infiniteData[infiniteData.length - 1]?.hasMore : false;
+    const isFetchingMore = validatingMessages && size > 1;
 
     // Derived DMs list combining existing direct channels + workspace members not yet individually messaged
     const directChannels = useMemo(() => {
@@ -96,11 +127,18 @@ export default function ChatPage() {
         const channel = pusher.subscribe(`channel-${channelId}`);
 
         const onNewMessage = (message: ChatMessage) => {
-            const currentMessageKey = `/chat/channels/${channelId}/messages?limit=50`;
-            globalMutate(currentMessageKey, (prev: any) => {
+            mutateMessages((prev: any) => {
                 if (!prev) return prev;
-                if (prev.messages.some((m: any) => m._id === message._id)) return prev;
-                return { ...prev, messages: [...prev.messages, message] };
+                // Add to the first page (which contains the most recent messages)
+                const newPages = [...prev];
+                const firstPage = newPages[0];
+                if (firstPage && !firstPage.messages.some((m: any) => m._id === message._id)) {
+                    newPages[0] = { 
+                        ...firstPage, 
+                        messages: [...firstPage.messages, message] 
+                    };
+                }
+                return newPages;
             }, false);
             
             globalMutate("/chat/channels", (prev: Channel[] | undefined) => {
@@ -119,15 +157,14 @@ export default function ChatPage() {
         };
 
         const onMessageDeleted = ({ messageId, channelId: msgChannelId }: { messageId: string, channelId: string }) => {
-            const currentMessageKey = `/chat/channels/${channelId}/messages?limit=50`;
-            globalMutate(currentMessageKey, (prev: any) => {
+            mutateMessages((prev: any) => {
                 if (!prev) return prev;
-                return {
-                    ...prev,
-                    messages: prev.messages.map((m: any) =>
+                return prev.map((page: any) => ({
+                    ...page,
+                    messages: page.messages.map((m: any) =>
                         m._id === messageId ? { ...m, isDeleted: true, content: "This message was deleted." } : m
                     )
-                };
+                }));
             }, false);
             
             globalMutate("/chat/channels", (prev: Channel[] | undefined) => {
@@ -141,24 +178,22 @@ export default function ChatPage() {
         };
 
         const onMessageEdited = (updated: ChatMessage) => {
-            const currentMessageKey = `/chat/channels/${channelId}/messages?limit=50`;
-            globalMutate(currentMessageKey, (prev: any) => {
+            mutateMessages((prev: any) => {
                 if (!prev) return prev;
-                return {
-                    ...prev,
-                    messages: prev.messages.map((m: any) => (m._id === updated._id ? updated : m))
-                };
+                return prev.map((page: any) => ({
+                    ...page,
+                    messages: page.messages.map((m: any) => (m._id === updated._id ? updated : m))
+                }));
             }, false);
         };
 
-        const onReactionUpdated = (updated: ChatMessage) => {
-            const currentMessageKey = `/chat/channels/${channelId}/messages?limit=50`;
-            globalMutate(currentMessageKey, (prev: any) => {
+        const onReactionUpdated = (updated: { _id: string; reactions: any[] }) => {
+            mutateMessages((prev: any) => {
                 if (!prev) return prev;
-                return {
-                    ...prev,
-                    messages: prev.messages.map((m: any) => (m._id === updated._id ? updated : m))
-                };
+                return prev.map((page: any) => ({
+                    ...page,
+                    messages: page.messages.map((m: any) => (m._id === updated._id ? { ...m, reactions: updated.reactions } : m))
+                }));
             }, false);
         };
 
@@ -318,9 +353,11 @@ export default function ChatPage() {
             updatedAt: new Date().toISOString(),
         };
 
-        globalMutate(messageKey, (prev: any) => {
+        mutateMessages((prev: any) => {
             if (!prev) return prev;
-            return { ...prev, messages: [...prev.messages, optimisticMessage] };
+            const newPages = [...prev];
+            newPages[0] = { ...newPages[0], messages: [...newPages[0].messages, optimisticMessage] };
+            return newPages;
         }, false);
 
         try {
@@ -333,20 +370,28 @@ export default function ChatPage() {
             });
 
             // Replace or remove optimistic message
-            globalMutate(messageKey, (prev: any) => {
+            mutateMessages((prev: any) => {
                 if (!prev) return prev;
-                const exists = prev.messages.some((m: ChatMessage) => m._id === savedMessage._id && m._id !== tempId);
-                if (exists) {
-                    return { ...prev, messages: prev.messages.filter((m: ChatMessage) => m._id !== tempId) };
-                }
-                return { ...prev, messages: prev.messages.map((m: ChatMessage) => (m._id === tempId ? savedMessage : m)) };
+                return prev.map((page: any, i: number) => {
+                    if (i === 0) {
+                        const exists = page.messages.some((m: ChatMessage) => m._id === savedMessage._id && m._id !== tempId);
+                        if (exists) {
+                            return { ...page, messages: page.messages.filter((m: ChatMessage) => m._id !== tempId) };
+                        }
+                        return { ...page, messages: page.messages.map((m: ChatMessage) => (m._id === tempId ? savedMessage : m)) };
+                    }
+                    return page;
+                });
             }, false);
         } catch (err) {
             console.error("Failed to send message:", err);
             // Revert message on failure
-            globalMutate(messageKey, (prev: any) => {
+            mutateMessages((prev: any) => {
                 if (!prev) return prev;
-                return { ...prev, messages: prev.messages.filter((m: ChatMessage) => m._id !== tempId) };
+                return prev.map((page: any) => ({
+                    ...page,
+                    messages: page.messages.filter((m: ChatMessage) => m._id !== tempId)
+                }));
             }, false);
         }
     };
@@ -478,7 +523,10 @@ export default function ChatPage() {
                         {/* Message Feed */}
                         <MessageList
                             messages={messages}
-                            loading={loadingMessages}
+                            loading={loadingMessages && size === 1}
+                            hasMore={hasMore}
+                            isLoadingMore={isFetchingMore}
+                            onLoadMore={() => setSize(size + 1)}
                             currentUserId={user?.id || ""}
                             onReply={(msg) => setThreadParent(msg)}
                             onDelete={handleDeleteMessage}

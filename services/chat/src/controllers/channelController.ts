@@ -1,11 +1,12 @@
 import { Response } from "express";
 import mongoose from "mongoose";
 import { AuthRequest, Channel } from "@loopy/shared";
-import Message from "../models/Message";
+import Message from "../models/Message.js";
 import "@loopy/shared"; // Load User model
-import { createAvatarResolver, populateChannelAvatars } from "../utils/avatar";
-import { pusher } from "../config/pusher";
-import { clearUnread } from "../services/unreadService";
+import { createAvatarResolver, populateChannelAvatars } from "../utils/avatar.js";
+import { pusher } from "../config/pusher.js";
+import { clearUnread } from "../services/unreadService.js";
+import { onChannelCreated } from "../events/chatEvents.js";
 
 // @desc    Get all channels the authenticated user belongs to (scoped to workspace)
 // @route   GET /api/chat/channels
@@ -173,6 +174,15 @@ export const createChannel = async (req: AuthRequest, res: Response) => {
             restrictedChat: req.body.restrictedChat || false,
         });
 
+        // Fire-and-forget folder creation in file service for non-direct channels
+        if (type !== "direct") {
+            onChannelCreated({
+                channelId: channel._id.toString(),
+                channelName: channel.name,
+                workspaceId: req.user!.workspaceId!,
+            }).catch(() => {});
+        }
+
         // Populate members for the response
         await channel.populate(
             "members.user",
@@ -237,6 +247,13 @@ export const createProjectChannel = async (
             members: channelMembers,
             createdBy: new mongoose.Types.ObjectId(createdBy),
         });
+
+        // Fire-and-forget folder creation in file service
+        onChannelCreated({
+            channelId: channel._id.toString(),
+            channelName: channel.name,
+            workspaceId,
+        }).catch(() => {});
 
         // Create a system message
         await Message.create({

@@ -1,10 +1,10 @@
 import { Response } from "express";
 import mongoose from "mongoose";
 import { AuthRequest } from "@loopy/shared";
-import Project from "../models/Project";
-import Task from "../models/Task";
-import Milestone from "../models/Milestone";
-import Team from "../models/Team";
+import Project from "../models/Project.js";
+import Task from "../models/Task.js";
+import Milestone from "../models/Milestone.js";
+import Team from "../models/Team.js";
 import { buildScopedProjectQuery } from "../helpers.js";
 
 /**
@@ -142,7 +142,7 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
       .sort({ updatedAt: -1 })
       .limit(10)
       .populate(
-        "assignees",
+        "createdBy",
         "profile.firstName profile.lastName"
       )
       .lean();
@@ -174,8 +174,8 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
         targetName: m.name,
         projectId: m.projectId,
         timestamp: m.updatedAt,
-        user: m.assignees?.[0]
-          ? `${m.assignees[0].profile?.firstName || ""} ${m.assignees[0].profile?.lastName || ""}`.trim()
+        user: m.createdBy
+          ? `${m.createdBy.profile?.firstName || ""} ${m.createdBy.profile?.lastName || ""}`.trim()
           : "Project Manager",
       })),
     ]

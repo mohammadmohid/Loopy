@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   gateway:
     build:
@@ -18,6 +16,7 @@ services:
       - MEETING_SERVICE_URL=http://meeting:5003
       - CHAT_SERVICE_URL=http://chat:5004
       - TRANSCRIPTION_SERVICE_URL=http://transcription:5005
+      - FILE_SERVICE_URL=http://file:5006
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - FRONTEND_URL=${FRONTEND_URL}
     networks:
@@ -39,10 +38,15 @@ services:
       - GATEWAY_URL=http://gateway:8000
       - CHAT_SERVICE_URL=http://chat:5004
       - PROJECT_SERVICE_URL=http://project:5002
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - R2_BUCKET_NAME=${R2_BUCKET_NAME}
       - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
       - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
       - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
     networks:
       - loopy-network
 
@@ -87,6 +91,7 @@ services:
       - PUSHER_KEY=${PUSHER_KEY}
       - PUSHER_SECRET=${PUSHER_SECRET}
       - PUSHER_CLUSTER=${PUSHER_CLUSTER}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
     networks:
       - loopy-network
 
@@ -103,6 +108,7 @@ services:
       - MONGO_URI=${MONGO_URI}
       - JWT_SECRET=${JWT_SECRET}
       - GATEWAY_URL=http://gateway:8000
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - PROJECT_SERVICE_URL=http://project:5002
       - INTERNAL_NOTIFICATION_SECRET=${INTERNAL_NOTIFICATION_SECRET:-dev-notification-secret}
       - R2_BUCKET_NAME=${R2_BUCKET_NAME}
@@ -125,6 +131,27 @@ services:
       - MONGO_URI=${MONGO_URI}
       - OPENROUTER_API=${OPENROUTER_API}
       - DEEPGRAM_API_SECRET=${DEEPGRAM_API_SECRET}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+    networks:
+      - loopy-network
+
+  file:
+    build:
+      context: .
+      dockerfile: services/file/Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/loopy-file:latest
+    container_name: loopy-file
+    restart: always
+    environment:
+      - PORT=5006
+      - NODE_ENV=production
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
     networks:
       - loopy-network
 

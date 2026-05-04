@@ -15,6 +15,11 @@ import TokenBlocklist from "../models/TokenBlocklist.js";
 
 // Stateless token validation that inherently checks the blocklist.
 export const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    // If request is already authenticated by an internal service middleware, skip
+    if (req.user) {
+        return next();
+    }
+
     let token;
 
     // 1. Check Cookies

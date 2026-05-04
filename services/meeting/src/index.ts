@@ -9,7 +9,11 @@ import meetingRoutes from "./routes/meetingRoutes.js";
 const app = express();
 const PORT = process.env.PORT || 5003;
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 
 const allowedOrigins =
   process.env.ALLOWED_ORIGINS?.split(",")
@@ -19,13 +23,15 @@ const allowedOrigins =
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
         return callback(null, true);
       }
       if (allowedOrigins.length === 0 && process.env.NODE_ENV !== "production") {
         return callback(null, true);
       }
+      console.error(
+        `[CORS] Origin ${origin} not allowed. Allowed: ${allowedOrigins.join(", ")}`
+      );
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,

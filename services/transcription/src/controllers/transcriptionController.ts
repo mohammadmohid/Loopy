@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { Artifact, TranscriptionStatus, AuthRequest } from "@loopy/shared";
+import { RecordingArtifact, TranscriptionStatus, AuthRequest } from "@loopy/shared";
 import {
   findByMeetingId,
   findByMeetingIdWithRecordingUrl,
@@ -89,11 +89,13 @@ export const startTranscription = async (req: AuthRequest, res: Response): Promi
       artifact.recordingUrl = resolvedRecordingUrl;
       await artifact.save();
     } else {
-      artifact = await Artifact.create({
+      artifact = await RecordingArtifact.create({
         meetingId,
         projectId,
         recordingUrl: resolvedRecordingUrl,
+        originalFilename: filename,
         filename,
+        hasTranscript: false,
         transcriptionStatus: TranscriptionStatus.PROCESSING,
       });
     }
@@ -129,6 +131,7 @@ export const startTranscription = async (req: AuthRequest, res: Response): Promi
         });
 
         artifact!.transcriptionStatus = TranscriptionStatus.COMPLETED;
+        artifact!.hasTranscript = true;
         artifact!.summary = summaryText;
         syncArtifactActionProposalsFromSummary(artifact!);
         await artifact!.save();

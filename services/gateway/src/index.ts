@@ -10,7 +10,11 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 app.set("trust proxy", 1);
 
 const isProduction = process.env.NODE_ENV === "production";
@@ -31,21 +35,18 @@ const limiter = rateLimit({
 app.use(limiter as any);
 
 // Get allowed origins from env
-const allowedOrigins =
-  (process.env.ALLOWED_ORIGINS as string) && (process.env.ALLOWED_ORIGINS as string).split(",");
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
+  : [];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        // Origin is allowed
-        return callback(null, true);
+      if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+        callback(null, true);
       } else {
-        // Origin is blocked
-        return callback(new Error("Not allowed by CORS"));
+        console.error(`[CORS] Origin ${origin} not allowed. Allowed: ${allowedOrigins.join(", ")}`);
+        callback(new Error("Not allowed by CORS"));
       }
     },
     credentials: true,
@@ -75,6 +76,7 @@ const SERVICE_ROUTES: ServiceRoute[] = [
   { prefix: "/api/meetings", targetEnvVar: "MEETING_SERVICE_URL" },
   { prefix: "/api/artifacts", targetEnvVar: "TRANSCRIPTION_SERVICE_URL" },
   { prefix: "/api/chat", targetEnvVar: "CHAT_SERVICE_URL" },
+  { prefix: "/api/files", targetEnvVar: "FILE_SERVICE_URL" },
 ];
 
 for (const route of SERVICE_ROUTES) {

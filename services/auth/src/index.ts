@@ -9,7 +9,11 @@ import authRoutes from "./routes/authRoutes.js";
 const app = express();
 app.set("trust proxy", 1);
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 app.use(cookieParser());
 
 const allowedOrigins =
@@ -20,17 +24,13 @@ const allowedOrigins =
 app.use(
   cors({
     origin(origin, callback) {
-      // curl / same-origin / server-to-server — no Origin header
       if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-
-      // Local dev: empty ALLOWED_ORIGINS would reject every browser request; allow any origin.
+      if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+        return callback(null, true);
+      }
       if (allowedOrigins.length === 0 && process.env.NODE_ENV !== "production") {
         return callback(null, true);
       }
-
-      // Deny without throwing — avoids noisy stack traces on every signup/preflight.
       return callback(null, false);
     },
     credentials: true,

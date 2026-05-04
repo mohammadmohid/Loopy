@@ -1,10 +1,10 @@
 import { Response } from "express";
 import mongoose from "mongoose";
 import { AuthRequest, getR2Client, Workspace } from "@loopy/shared";
-import Project from "../models/Project";
-import Task from "../models/Task";
-import Milestone from "../models/Milestone";
-import Team from "../models/Team";
+import Project from "../models/Project.js";
+import Task from "../models/Task.js";
+import Milestone from "../models/Milestone.js";
+import Team from "../models/Team.js";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { notifyProjectCreated, notifyProjectDeleted } from "../events/projectEvents.js";
@@ -185,7 +185,10 @@ export const getProjectById = async (req: AuthRequest, res: Response) => {
       const isDirectMember = project.members?.some(
         (m: any) => m.user?._id?.toString() === userId || m.user?.toString() === userId
       );
-      const isOwner = project.owner?._id?.toString() === userId || project.owner?.toString() === userId;
+      const owner = project.owner as { _id?: unknown } | undefined;
+      const isOwner =
+        (owner && typeof owner === "object" && "_id" in owner && String(owner._id) === userId) ||
+        project.owner?.toString() === userId;
 
       let isTeamMember = false;
       if (!isDirectMember && !isOwner && project.assignedTeams?.length > 0) {
@@ -473,6 +476,7 @@ export const getProjectActivity = async (req: AuthRequest, res: Response) => {
     const milestones = await Milestone.find({ projectId })
       .sort({ updatedAt: -1 })
       .limit(10)
+      .populate("createdBy", "profile.firstName profile.lastName")
       .lean();
 
     // Normalize and merge activities
@@ -501,7 +505,9 @@ export const getProjectActivity = async (req: AuthRequest, res: Response) => {
             : "updated",
         targetName: m.name,
         timestamp: m.updatedAt,
-        user: "Project Manager",
+        user: m.createdBy
+          ? `${m.createdBy.profile.firstName} ${m.createdBy.profile.lastName}`
+          : "Project Manager",
       })),
     ]
       .sort(

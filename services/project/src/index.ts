@@ -4,20 +4,23 @@ import cors from "cors";
 import mongoose from "mongoose";
 import { connectMongoWithRetry } from "@loopy/shared";
 import cookieParser from "cookie-parser";
-import projectRoutes from "./routes/projectRoutes";
-import notificationRoutes from "./routes/notificationRoutes";
-import { startNotificationReminderJobs } from "./jobs/notificationReminders";
+import projectRoutes from "./routes/projectRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
+import { startNotificationReminderJobs } from "./jobs/notificationReminders.js";
 
 const app = express();
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") ?? [];
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : [];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
         callback(null, true);
       } else {
+        console.error(`[CORS] Origin ${origin} not allowed. Allowed: ${allowedOrigins.join(", ")}`);
         callback(new Error("Not allowed by CORS"));
       }
     },
@@ -42,8 +45,6 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/projects", projectRoutes);
 
 const PORT = process.env.PORT || 5002;
-if (process.env.NODE_ENV !== "production") {
-  app.listen(PORT, () => console.log(`Project Service running on port ${PORT}`));
-}
+app.listen(PORT, () => console.log(`Project Service running on port ${PORT}`));
 
 export default app;

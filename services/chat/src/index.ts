@@ -19,11 +19,16 @@ app.use(
     cors({
         origin(origin, callback) {
             if (!origin) return callback(null, true);
-            if (allowedOrigins.includes(origin)) return callback(null, true);
+            if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+                return callback(null, true);
+            }
             if (allowedOrigins.length === 0 && process.env.NODE_ENV !== "production") {
                 return callback(null, true);
             }
-            return callback(null, false);
+            console.error(
+                `[CORS] Origin ${origin} not allowed. Allowed: ${allowedOrigins.join(", ")}`
+            );
+            return callback(new Error("Not allowed by CORS"));
         },
         credentials: true,
     })

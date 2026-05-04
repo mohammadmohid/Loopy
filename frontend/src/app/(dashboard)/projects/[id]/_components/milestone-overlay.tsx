@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   X,
   Pencil,
@@ -70,6 +70,8 @@ export function MilestoneOverlay({
   const [editedDescription, setEditedDescription] = useState(milestone?.description || "");
   const [editedStartDate, setEditedStartDate] = useState("");
   const [editedDueDate, setEditedDueDate] = useState("");
+  const [editedDuration, setEditedDuration] = useState(milestone?.duration || "");
+  const [editedGoal, setEditedGoal] = useState(milestone?.goal || "");
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState("");
 
@@ -79,8 +81,21 @@ export function MilestoneOverlay({
       setEditedDescription(milestone.description || "");
       setEditedStartDate(milestone.startDate ? new Date(milestone.startDate).toISOString().split("T")[0] : "");
       setEditedDueDate(milestone.dueDate ? new Date(milestone.dueDate).toISOString().split("T")[0] : "");
+      setEditedDuration(milestone.duration || "");
+      setEditedGoal(milestone.goal || "");
     }
   }, [milestone]);
+
+  const contributors = useMemo(() => {
+    if (!milestone?.tasks) return [];
+    const uniqueUsers = new Map<string, User>();
+    milestone.tasks.forEach((task) => {
+      task.assignees?.forEach((user) => {
+        uniqueUsers.set(user.id || (user as any)._id, user);
+      });
+    });
+    return Array.from(uniqueUsers.values());
+  }, [milestone?.tasks]);
 
   if (!isOpen || !milestone) return null;
 
@@ -98,32 +113,18 @@ export function MilestoneOverlay({
     setIsEditingDesc(false);
   };
 
-  const handleDateChange = (field: "startDate" | "dueDate", value: string) => {
+  const handleDateChange = (field: "startDate" | "dueDate" | "duration" | "goal", value: string) => {
     if (field === "startDate") setEditedStartDate(value);
-    else setEditedDueDate(value);
+    else if (field === "dueDate") setEditedDueDate(value);
+    else if (field === "duration") setEditedDuration(value);
+    else if (field === "goal") setEditedGoal(value);
+
     onUpdate({
       ...milestone,
-      [field]: value ? new Date(value).toISOString() : milestone[field],
+      [field]: field.includes("Date") ? (value ? new Date(value).toISOString() : milestone[field]) : value,
     });
   };
 
-  const handleToggleAssignee = (user: User) => {
-    const exists = milestone.assignees.some((a) => a.id === user.id);
-    const newAssignees = exists
-      ? milestone.assignees.filter((a) => a.id !== user.id)
-      : [...milestone.assignees, user];
-    onUpdate({ ...milestone, assignees: newAssignees });
-  };
-
-  const handleToggleTeam = (team: any) => {
-    const teamId = team._id || team.id;
-    const current = milestone.assignedTeams || [];
-    const exists = current.some((t: any) => (t._id || t.id) === teamId);
-    const newTeams = exists
-      ? current.filter((t: any) => (t._id || t.id) !== teamId)
-      : [...current, { id: teamId, _id: teamId, name: team.name }];
-    onUpdate({ ...milestone, assignedTeams: newTeams });
-  };
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("en-US", {
@@ -280,16 +281,53 @@ export function MilestoneOverlay({
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-neutral-500 mb-1 block">
+                Duration (e.g. 2 weeks)
+              </label>
+              {canEdit ? (
+                <input
+                  type="text"
+                  value={editedDuration}
+                  onChange={(e) => setEditedDuration(e.target.value)}
+                  onBlur={() => handleDateChange("duration", editedDuration)}
+                  className="w-full text-sm text-neutral-700 border border-neutral-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  placeholder="2 weeks"
+                />
+              ) : (
+                <p className="text-sm text-neutral-900">{milestone.duration || "None"}</p>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium text-neutral-500 mb-1 block">
+                Specific Goal
+              </label>
+              {canEdit ? (
+                <input
+                  type="text"
+                  value={editedGoal}
+                  onChange={(e) => setEditedGoal(e.target.value)}
+                  onBlur={() => handleDateChange("goal", editedGoal)}
+                  className="w-full text-sm text-neutral-700 border border-neutral-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  placeholder="Focus on UI/UX..."
+                />
+              ) : (
+                <p className="text-sm text-neutral-900">{milestone.goal || "None"}</p>
+              )}
+            </div>
+          </div>
+
           {/* Assignees & Teams */}
           <div>
             <label className="text-sm font-medium text-neutral-500 mb-2 block">
-              Assignees & Teams
+              Contributors ({contributors.length})
             </label>
             <div className="flex flex-wrap gap-2 mb-3">
-              {milestone.assignees && milestone.assignees.length > 0 &&
-                milestone.assignees.map((u) => (
+              {contributors.length > 0 ? (
+                contributors.map((u) => (
                   <div
-                    key={u.id}
+                    key={u.id || (u as any)._id}
                     className="flex items-center gap-2 bg-neutral-50 px-2.5 py-1.5 rounded-lg border border-neutral-100 group"
                   >
                     <div className="w-6 h-6 bg-neutral-200 rounded-full flex items-center justify-center text-xs font-medium overflow-hidden shrink-0">
@@ -299,144 +337,16 @@ export function MilestoneOverlay({
                         u.avatar || u.name?.[0]?.toUpperCase() || "U"
                       )}
                     </div>
-                    <span className="text-sm text-neutral-900">{u.name}</span>
-                    {canEdit && (
-                      <button
-                        onClick={() => handleToggleAssignee(u)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-neutral-200 rounded"
-                      >
-                        <X className="w-3 h-3 text-neutral-500" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              {milestone.assignedTeams && milestone.assignedTeams.length > 0 &&
-                milestone.assignedTeams.map((t: any) => (
-                  <div
-                    key={t._id || t.id}
-                    className="flex items-center gap-2 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100 group"
-                  >
-                    <Users className="w-4 h-4 text-blue-500" />
-                    <span className="text-sm text-blue-800 font-medium">{t.name}</span>
-                    {canEdit && (
-                      <button
-                        onClick={() => handleToggleTeam(t)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-blue-100 rounded"
-                      >
-                        <X className="w-3 h-3 text-blue-500" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              {(!milestone.assignees || milestone.assignees.length === 0) &&
-                (!milestone.assignedTeams || milestone.assignedTeams.length === 0) && (
-                  <span className="text-sm text-neutral-400">No assignees</span>
-                )}
-            </div>
-
-            {canEdit && (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-700 border border-dashed border-neutral-300 rounded-lg px-3 py-2 hover:bg-neutral-50 transition-colors w-full justify-center">
-                    <UserIcon className="w-4 h-4" />
-                    Add members or teams
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-72 p-0" align="start">
-                  <div className="p-2 border-b border-neutral-100">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-                      <input
-                        type="text"
-                        placeholder="Search members or teams..."
-                        value={assigneeSearch}
-                        onChange={(e) => setAssigneeSearch(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 text-sm bg-neutral-50 border border-transparent rounded-lg focus:outline-none focus:bg-white focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
-                      />
+                    <div className="flex flex-col">
+                      <span className="text-sm text-neutral-900 leading-none">{u.name}</span>
+                      {u.role && <span className="text-[10px] text-neutral-400 uppercase font-bold">{u.role}</span>}
                     </div>
                   </div>
-                  <div className="max-h-60 overflow-y-auto p-2">
-                    {filteredTeams.length > 0 && (
-                      <div className="mb-2">
-                        <div className="px-2 py-1 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
-                          <Users className="w-3 h-3" /> Teams
-                        </div>
-                        {filteredTeams.map((team: any) => {
-                          const tId = team._id || team.id;
-                          const isSelected = (milestone.assignedTeams || []).some(
-                            (t: any) => (t._id || t.id) === tId
-                          );
-                          return (
-                            <div
-                              key={tId}
-                              onClick={() => handleToggleTeam(team)}
-                              className="flex items-center gap-2 px-2 py-1.5 hover:bg-neutral-50 rounded-md cursor-pointer"
-                            >
-                              <div
-                                className={cn(
-                                  "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
-                                  isSelected
-                                    ? "bg-primary border-primary text-white"
-                                    : "border-neutral-300"
-                                )}
-                              >
-                                {isSelected && <Check className="w-3 h-3" />}
-                              </div>
-                              <Users className="w-4 h-4 text-blue-500" />
-                              <span className="text-sm text-neutral-700">{team.name}</span>
-                              <span className="text-[10px] text-neutral-400 ml-auto">
-                                {team.members?.length || 0} members
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {filteredMembers.length > 0 && (
-                      <div>
-                        <div className="px-2 py-1 text-[10px] font-semibold text-neutral-400 uppercase tracking-wider flex items-center gap-1">
-                          <UserIcon className="w-3 h-3" /> Members
-                        </div>
-                        {filteredMembers.map((m) => {
-                          const isSelected = milestone.assignees.some((a) => a.id === m.id);
-                          return (
-                            <div
-                              key={m.id}
-                              onClick={() => handleToggleAssignee(m)}
-                              className="flex items-center gap-2 px-2 py-1.5 hover:bg-neutral-50 rounded-md cursor-pointer"
-                            >
-                              <div
-                                className={cn(
-                                  "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
-                                  isSelected
-                                    ? "bg-primary border-primary text-white"
-                                    : "border-neutral-300"
-                                )}
-                              >
-                                {isSelected && <Check className="w-3 h-3" />}
-                              </div>
-                              <div className="w-5 h-5 bg-neutral-200 rounded-full flex items-center justify-center text-[9px] font-medium text-neutral-600 overflow-hidden shrink-0">
-                                {m.avatar && looksLikeUrl(m.avatar) ? (
-                                  <img src={m.avatar} alt={m.name} className="object-cover w-full h-full" />
-                                ) : (
-                                  m.avatar || m.name?.[0]?.toUpperCase() || "U"
-                                )}
-                              </div>
-                              <span className="text-sm text-neutral-700 truncate">{m.name}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {filteredMembers.length === 0 && filteredTeams.length === 0 && (
-                      <div className="text-xs text-neutral-400 text-center py-4">No results</div>
-                    )}
-                  </div>
-                </PopoverContent>
-              </Popover>
-            )}
+                ))
+              ) : (
+                <span className="text-sm text-neutral-400">No contributors yet</span>
+              )}
+            </div>
           </div>
 
           {/* Tasks */}

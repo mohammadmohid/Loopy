@@ -105,7 +105,7 @@ export function Header({
         </button>
 
         {/* Logo */}
-        <Link href="/dashboard/home" className="shrink-0">
+        <Link href="/home" className="shrink-0">
           <Image
             src="/images/logo.png"
             alt="Loopy"

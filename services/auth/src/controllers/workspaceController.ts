@@ -6,6 +6,7 @@ import {
     SystemFolderContext,
     User,
     Workspace,
+    IWorkspace,
     warmSystemFolderCache,
 } from "@loopy/shared";
 import OTPToken from "../models/OTPToken.js";
@@ -799,14 +800,14 @@ export const getMyWorkspaces = async (
 
         res.json({
             success: true,
-            workspaces: workspaces.map(ws => ({
+            workspaces: workspaces.map((ws: IWorkspace) => ({
                 id: ws._id,
                 name: ws.name,
                 role: ws.members.find((m: any) => m.user.toString() === userId)?.role,
                 membersCount: ws.members.length,
                 ownerId: ws.owner
             })),
-            pendingInvites: pendingInvites.map(ws => {
+            pendingInvites: pendingInvites.map((ws: IWorkspace) => {
                 const invite = ws.inviteTokens.find(
                     (t: any) => t.email === user.email && !t.used && t.expiresAt > new Date()
                 );

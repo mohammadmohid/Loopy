@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback, use, useRef } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
 import {
   ChevronLeft,
   Save,
   History,
   Users,
+  X,
   Share2,
   Loader2,
   AlertCircle,
@@ -264,8 +266,8 @@ export default function DocxEditorPage({ params }: PageProps) {
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {versions.map((v: any, i: number) => (
-                  <div 
-                    key={v._id} 
+                  <div
+                    key={v._id}
                     className={cn(
                       "p-4 rounded-xl border transition-all cursor-pointer group hover:border-primary/30 hover:shadow-md",
                       i === 0 ? "bg-primary/5 border-primary/20" : "bg-neutral-50 border-neutral-100"
@@ -290,11 +292,11 @@ export default function DocxEditorPage({ params }: PageProps) {
                         </div>
                         <span className="text-[11px] text-neutral-500 font-medium">{v.author?.name || "System"}</span>
                       </div>
-                      
+
                       {i > 0 && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="h-6 px-2 text-[10px] font-black uppercase text-primary hover:bg-primary/10"
                           onClick={(e) => {
                             e.stopPropagation();

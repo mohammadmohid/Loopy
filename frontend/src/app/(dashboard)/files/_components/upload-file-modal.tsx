@@ -62,15 +62,14 @@ export function UploadFileModal({ isOpen, onClose, onUploaded, folderId }: Uploa
 
       setUploadProgress(80);
 
-      // 3. Finalize upload in backend
-      await apiRequest("/projects/artifacts", {
+      // 3. Register file in file service
+      await apiRequest("/api/files/files/upload", {
         method: "POST",
         data: {
-          storageKey: key,
           filename: file.name,
           mimeType: file.type,
           sizeBytes: file.size,
-          uploadId,
+          r2Key: key,
           folderId,
         }
       });

@@ -4,8 +4,12 @@ export enum SystemFolderContext {
   MEETINGS = "MEETINGS",
   PROJECTS = "PROJECTS",
   CHAT = "CHAT",
-  USERS = "USERS",
-  OTHER = "OTHER",
+}
+
+export enum FolderEntityType {
+  PROJECT = "PROJECT",
+  CHANNEL = "CHANNEL",
+  MEETING_CHANNEL = "MEETING_CHANNEL",
 }
 
 export interface IFolder extends Document {
@@ -14,6 +18,8 @@ export interface IFolder extends Document {
   parentId?: mongoose.Types.ObjectId | null;
   isSystem: boolean;
   systemContext?: SystemFolderContext;
+  sourceEntityId?: mongoose.Types.ObjectId;
+  sourceEntityType?: FolderEntityType;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,8 +50,17 @@ const FolderSchema = new Schema<IFolder>(
       type: String,
       enum: Object.values(SystemFolderContext),
       required(this: IFolder) {
-        return this.isSystem;
+        return this.isSystem && !this.parentId;
       },
+    },
+    sourceEntityId: {
+      type: Schema.Types.ObjectId,
+      sparse: true,
+    },
+    sourceEntityType: {
+      type: String,
+      enum: Object.values(FolderEntityType),
+      sparse: true,
     },
   },
   { timestamps: true }
@@ -54,7 +69,11 @@ const FolderSchema = new Schema<IFolder>(
 FolderSchema.index({ workspaceId: 1, parentId: 1, name: 1 }, { unique: true });
 FolderSchema.index(
   { workspaceId: 1, systemContext: 1 },
-  { unique: true, partialFilterExpression: { isSystem: true } }
+  { unique: true, partialFilterExpression: { isSystem: true, parentId: null } }
+);
+FolderSchema.index(
+  { workspaceId: 1, sourceEntityId: 1, sourceEntityType: 1 },
+  { sparse: true }
 );
 
 export const assertFolderIsDeletable = (folder: Pick<IFolder, "isSystem">) => {

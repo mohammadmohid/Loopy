@@ -57,6 +57,10 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
         "assignees",
         "profile.firstName profile.lastName profile.avatarKey email"
       )
+      .populate(
+        "createdBy",
+        "profile.firstName profile.lastName profile.avatarKey email"
+      )
       .sort({ updatedAt: -1 })
       .lean();
 
@@ -134,6 +138,36 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
       kpis.totalMembers = memberSet.size;
     }
 
+    // Avatar URL resolver helper
+    const getAvatarUrl = (key?: string) => {
+      if (!key) return null;
+      const baseUrl = process.env.GATEWAY_URL || "http://localhost:8000";
+      return `${baseUrl}/api/auth/avatars/${key}`;
+    };
+
+    // Process projects to include avatarUrl
+    const projectsWithAvatars = projects.map((p: any) => ({
+      ...p,
+      avatarUrl: getAvatarUrl(p.avatarKey),
+      owner: p.owner ? {
+        ...p.owner,
+        profile: p.owner.profile ? {
+          ...p.owner.profile,
+          avatarUrl: getAvatarUrl(p.owner.profile.avatarKey)
+        } : undefined
+      } : undefined,
+      members: p.members?.map((m: any) => ({
+        ...m,
+        user: m.user ? {
+          ...m.user,
+          profile: m.user.profile ? {
+            ...m.user.profile,
+            avatarUrl: getAvatarUrl(m.user.profile.avatarKey)
+          } : undefined
+        } : undefined
+      }))
+    }));
+
     // Recent Activity (last 10)
     const recentTasks = allTasks.slice(0, 15);
     const milestones = await Milestone.find({
@@ -143,27 +177,30 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
       .limit(10)
       .populate(
         "createdBy",
-        "profile.firstName profile.lastName"
+        "profile.firstName profile.lastName profile.avatarKey email"
       )
       .lean();
 
     const recentActivity = [
-      ...recentTasks.map((t: any) => ({
-        id: t._id,
-        type: "task",
-        action:
-          t.status === "done"
-            ? "completed"
-            : t.createdAt?.getTime?.() === t.updatedAt?.getTime?.()
-              ? "created"
-              : "updated",
-        targetName: t.title,
-        projectId: t.projectId,
-        timestamp: t.updatedAt,
-        user: t.assignees?.[0]
-          ? `${t.assignees[0].profile?.firstName || ""} ${t.assignees[0].profile?.lastName || ""}`.trim()
-          : "Team Member",
-      })),
+      ...recentTasks.map((t: any) => {
+        const actor = t.assignees?.[0] || t.createdBy;
+        return {
+          id: t._id,
+          type: "task",
+          action:
+            t.status === "done"
+              ? "completed"
+              : t.createdAt?.getTime?.() === t.updatedAt?.getTime?.()
+                ? "created"
+                : "updated",
+          targetName: t.title,
+          projectId: t.projectId,
+          timestamp: t.updatedAt,
+          user: actor
+            ? `${actor.profile?.firstName || ""} ${actor.profile?.lastName || ""}`.trim() || actor.email || "Team Member"
+            : "Team Member",
+        };
+      }),
       ...milestones.map((m: any) => ({
         id: m._id,
         type: "milestone",
@@ -175,7 +212,7 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
         projectId: m.projectId,
         timestamp: m.updatedAt,
         user: m.createdBy
-          ? `${m.createdBy.profile?.firstName || ""} ${m.createdBy.profile?.lastName || ""}`.trim()
+          ? `${m.createdBy.profile?.firstName || ""} ${m.createdBy.profile?.lastName || ""}`.trim() || m.createdBy.email || "Project Manager"
           : "Project Manager",
       })),
     ]
@@ -195,7 +232,7 @@ export const getDashboard = async (req: AuthRequest, res: Response) => {
     // Response
     res.status(200).json({
       kpis,
-      projects: projects.slice(0, 6),
+      projects: projectsWithAvatars.slice(0, 6),
       myTasks: myTasks.slice(0, 10),
       recentActivity,
       projectMap,

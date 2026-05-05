@@ -2,8 +2,6 @@ import { Response } from "express";
 import {
   AuthRequest,
   Folder,
-  SystemFolderContext,
-  warmSystemFolderCache,
 } from "@loopy/shared";
 
 // @desc    Get all folders for the current workspace
@@ -35,7 +33,7 @@ export const getFolders = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// @desc    Get system folders for the workspace (ensuring 'Other' exists)
+// @desc    Get system folders for the workspace
 // @route   GET /api/projects/folders/system
 export const getSystemFolders = async (req: AuthRequest, res: Response) => {
   try {
@@ -45,32 +43,11 @@ export const getSystemFolders = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "No active workspace" });
     }
 
-    let systemFolders = await Folder.find({
+    const systemFolders = await Folder.find({
       workspaceId,
       isSystem: true,
       parentId: null,
     });
-
-    // Check if 'Other' folder exists, if not create it
-    const hasOther = systemFolders.some(
-      (f) => f.systemContext === SystemFolderContext.OTHER
-    );
-
-    if (!hasOther) {
-      const otherFolder = await Folder.create({
-        workspaceId,
-        name: "Other",
-        parentId: null,
-        isSystem: true,
-        systemContext: SystemFolderContext.OTHER,
-      });
-      systemFolders.push(otherFolder);
-      
-      // Update cache
-      await warmSystemFolderCache(workspaceId, {
-        [SystemFolderContext.OTHER]: otherFolder._id.toString(),
-      });
-    }
 
     res.json(systemFolders);
   } catch (error: any) {

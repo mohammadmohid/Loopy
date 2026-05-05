@@ -9,6 +9,8 @@ import {
   formatWhen,
   formatTaskTypeLabel,
 } from "../services/notificationDispatch.js";
+import Team from "../models/Team.js";
+import { buildScopedProjectQuery } from "../helpers.js";
 
 // Allowed fields for task creation/updates to prevent mass assignment
 const ALLOWED_TASK_FIELDS = [
@@ -53,10 +55,28 @@ export const getProjectTasks = async (req: AuthRequest, res: Response) => {
 export const createTask = async (req: AuthRequest, res: Response) => {
   try {
     const safeFields = pickFields(req.body, ALLOWED_TASK_FIELDS);
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+
+    // Rule 1: Members can create tasks but only assign to themselves or people in their teams.
+    if (userRole === "MEMBER") {
+      const userTeams = await Team.find({ members: userId }).select("members").lean();
+      const allowedAssigneeIds = new Set([userId]);
+      userTeams.forEach((team: any) => {
+        team.members.forEach((m: any) => allowedAssigneeIds.add(m.toString()));
+      });
+
+      const requestedAssignees = safeFields.assignees || [];
+      const invalidAssignees = requestedAssignees.filter((id: string) => !allowedAssigneeIds.has(id));
+
+      if (invalidAssignees.length > 0) {
+        return res.status(403).json({ message: "You can only assign tasks to yourself or members of your teams." });
+      }
+    }
 
     // Enforce at least one assignee (default to creator)
     if (!safeFields.assignees || !Array.isArray(safeFields.assignees) || safeFields.assignees.length === 0) {
-      safeFields.assignees = [req.user!.id];
+      safeFields.assignees = [userId];
     }
 
     if (!safeFields.title || !safeFields.title.trim()) {
@@ -66,7 +86,9 @@ export const createTask = async (req: AuthRequest, res: Response) => {
     const task = await Task.create({
       ...safeFields,
       projectId: req.params.projectId,
+      createdBy: userId,
     });
+    // ... rest of notifications logic
 
     // If milestoneId is provided, add task to that milestone's tasks array
     if (req.body.milestoneId) {
@@ -131,13 +153,28 @@ export const createTask = async (req: AuthRequest, res: Response) => {
 export const updateTask = async (req: AuthRequest, res: Response) => {
   try {
     const safeUpdates = pickFields(req.body, ALLOWED_TASK_FIELDS);
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+
+    const taskToUpdate = await Task.findById(req.params.id);
+    if (!taskToUpdate) return res.status(404).json({ message: "Task not found" });
+
+    // Rule 2: Only assignee, creator, or admin/pm can edit. But if task is completely unassigned, anyone can edit.
+    const isAssignee = (taskToUpdate.assignees || []).some((a: any) => a.toString() === userId);
+    const isCreator = taskToUpdate.createdBy?.toString() === userId;
+    const isAdminOrPM = userRole === "ADMIN" || userRole === "PROJECT_MANAGER";
+    const isUnassigned = (taskToUpdate.assignees || []).length === 0 && (!taskToUpdate.assignedTeams || taskToUpdate.assignedTeams.length === 0);
+
+    if (!isAssignee && !isCreator && !isAdminOrPM && !isUnassigned) {
+      return res.status(403).json({ message: "You are not authorized to edit this task." });
+    }
 
     if (Object.keys(safeUpdates).length === 0) {
       return res.status(400).json({ message: "No valid fields provided for update" });
     }
 
-    const prev = await Task.findById(req.params.id).lean();
-
+    const prev = taskToUpdate.toObject();
+    
     const task = await Task.findByIdAndUpdate(req.params.id, safeUpdates, {
       new: true,
     }).populate([
@@ -242,8 +279,22 @@ export const updateTask = async (req: AuthRequest, res: Response) => {
 
 export const deleteTask = async (req: AuthRequest, res: Response) => {
   try {
-    const task = await Task.findByIdAndDelete(req.params.id);
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+
+    const task = await Task.findById(req.params.id);
     if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const isAssignee = (task.assignees || []).some((a: any) => a.toString() === userId);
+    const isCreator = task.createdBy?.toString() === userId;
+    const isAdminOrPM = userRole === "ADMIN" || userRole === "PROJECT_MANAGER";
+    const isUnassigned = (task.assignees || []).length === 0 && (!task.assignedTeams || task.assignedTeams.length === 0);
+
+    if (!isAssignee && !isCreator && !isAdminOrPM && !isUnassigned) {
+      return res.status(403).json({ message: "You are not authorized to delete this task." });
+    }
+
+    await task.deleteOne();
     res.json({ message: "Task deleted" });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -502,6 +553,34 @@ export const getTaskAttachments = async (req: AuthRequest, res: Response) => {
     }
 
     res.json({ attachments: task.attachments });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const searchTasks = async (req: AuthRequest, res: Response) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.json([]);
+
+    const projectQuery = await buildScopedProjectQuery(req.user);
+    if (!projectQuery) return res.json([]);
+
+    const projects = await Project.find(projectQuery).select("_id").lean();
+    const projectIds = projects.map((p: any) => p._id);
+
+    const tasks = await Task.find({
+      projectId: { $in: projectIds },
+      $or: [
+        { title: { $regex: q as string, $options: "i" } },
+        { description: { $regex: q as string, $options: "i" } }
+      ]
+    })
+      .limit(20)
+      .populate("projectId", "name")
+      .lean();
+
+    res.json(tasks);
   } catch (error: any) {
     res.status(500).json({ message: error.message });
   }

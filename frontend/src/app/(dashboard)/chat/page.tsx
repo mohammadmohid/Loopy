@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import useSWR, { mutate as globalMutate, useSWRConfig } from "swr";
 import useSWRInfinite from "swr/infinite";
+import { useSearchParams } from "next/navigation";
 import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/lib/auth-provider";
 import { apiRequest } from "@/lib/api";
@@ -28,6 +29,9 @@ export default function ChatPage() {
     const [typingUsers, setTypingUsers] = useState<Record<string, Set<string>>>({});
     const typingTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
     const selectedChannelIdRef = useRef<string | null>(null);
+    const searchParams = useSearchParams();
+    const urlChannelId = searchParams.get("channelId");
+    const urlMessageId = searchParams.get("messageId");
 
     useEffect(() => {
         selectedChannelIdRef.current = selectedChannel?._id || null;
@@ -115,9 +119,18 @@ export default function ChatPage() {
 
     useEffect(() => {
         if (channels.length > 0 && !selectedChannelIdRef.current) {
-            setSelectedChannel(channels[0]);
+            if (urlChannelId) {
+                const target = channels.find(c => c._id === urlChannelId);
+                if (target) setSelectedChannel(target);
+                else setSelectedChannel(channels[0]);
+            } else {
+                setSelectedChannel(channels[0]);
+            }
+        } else if (urlChannelId && channels.length > 0 && selectedChannel?._id !== urlChannelId) {
+            const target = channels.find(c => c._id === urlChannelId);
+            if (target) setSelectedChannel(target);
         }
-    }, [channels]);
+    }, [channels, urlChannelId, selectedChannel?._id]);
 
     // --- Pusher ---
     useEffect(() => {
@@ -224,13 +237,12 @@ export default function ChatPage() {
         };
 
         const onThreadReply = ({ parentId, message }: { parentId: string, message: ChatMessage }) => {
-            const currentMessageKey = `/chat/channels/${channelId}/messages?limit=50`;
-            globalMutate(currentMessageKey, (prev: any) => {
+            mutateMessages((prev: any) => {
                 if (!prev) return prev;
-                return {
-                    ...prev,
-                    messages: prev.messages.map((m: any) => m._id === parentId ? { ...m, replyCount: (m.replyCount || 0) + 1 } : m)
-                };
+                return prev.map((page: any) => ({
+                    ...page,
+                    messages: page.messages.map((m: any) => m._id === parentId ? { ...m, replyCount: (m.replyCount || 0) + 1 } : m)
+                }));
             }, false);
         };
 
@@ -532,6 +544,7 @@ export default function ChatPage() {
                             onDelete={handleDeleteMessage}
                             onEdit={handleEditMessage}
                             onReaction={handleToggleReaction}
+                            highlightMessageId={urlMessageId}
                         />
 
                         {/* Typing Indicator */}

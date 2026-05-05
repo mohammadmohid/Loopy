@@ -31,7 +31,7 @@ export function CreateFolderModal({ isOpen, onClose, onCreated, parentId }: Crea
 
     setIsSubmitting(true);
     try {
-      await apiRequest("/projects/folders", {
+      await apiRequest("/api/files/folders", {
         method: "POST",
         data: { name, parentId }
       });

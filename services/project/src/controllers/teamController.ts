@@ -64,7 +64,30 @@ export const getTeams = async (req: AuthRequest, res: Response) => {
       "profile.firstName profile.lastName profile.avatarKey email"
     );
 
-    res.status(200).json(teams);
+    const baseUrl = process.env.GATEWAY_URL || "";
+    const flattenedTeams = teams.map((team: any) => ({
+      ...team.toObject(),
+      leader: {
+        id: (team.leader as any)?._id,
+        email: (team.leader as any)?.email,
+        firstName: (team.leader as any)?.profile?.firstName,
+        lastName: (team.leader as any)?.profile?.lastName,
+        avatarUrl: (team.leader as any)?.profile?.avatarKey 
+          ? `${baseUrl}/api/auth/avatars/${(team.leader as any).profile.avatarKey}` 
+          : null,
+      },
+      members: team.members.map((m: any) => ({
+        id: m?._id,
+        email: m?.email,
+        firstName: m?.profile?.firstName,
+        lastName: m?.profile?.lastName,
+        avatarUrl: m?.profile?.avatarKey 
+          ? `${baseUrl}/api/auth/avatars/${m.profile.avatarKey}` 
+          : null,
+      })),
+    }));
+
+    res.status(200).json(flattenedTeams);
   } catch (error: any) {
     console.error("Get Teams Error:", error);
     res.status(500).json({ message: error.message });
@@ -115,16 +138,34 @@ export const updateTeam = async (req: AuthRequest, res: Response) => {
       "profile.firstName profile.lastName profile.avatarKey email"
     );
 
-    // Notify chat service of team update (awaited for Vercel)
-    await notifyTeamUpdated({
-      teamId: team._id.toString(),
-      teamName: team.name,
-      members: (team.members || []).map((m: any) => m.toString()),
-      leaderId: (team.leader || "").toString(),
-      workspaceId: (team.workspaceId || "").toString(),
-    });
+    if (!updatedTeam) {
+      return res.status(404).json({ message: "Team not found after update" });
+    }
 
-    res.status(200).json(updatedTeam);
+    const baseUrl = process.env.GATEWAY_URL || "";
+    const flattenedTeam = {
+      ...updatedTeam.toObject(),
+      leader: {
+        id: (updatedTeam.leader as any)?._id,
+        email: (updatedTeam.leader as any)?.email,
+        firstName: (updatedTeam.leader as any)?.profile?.firstName,
+        lastName: (updatedTeam.leader as any)?.profile?.lastName,
+        avatarUrl: (updatedTeam.leader as any)?.profile?.avatarKey 
+          ? `${baseUrl}/api/auth/avatars/${(updatedTeam.leader as any).profile.avatarKey}` 
+          : null,
+      },
+      members: updatedTeam.members.map((m: any) => ({
+        id: m?._id,
+        email: m?.email,
+        firstName: m?.profile?.firstName,
+        lastName: m?.profile?.lastName,
+        avatarUrl: m?.profile?.avatarKey 
+          ? `${baseUrl}/api/auth/avatars/${m.profile.avatarKey}` 
+          : null,
+      })),
+    };
+
+    res.status(200).json(flattenedTeam);
   } catch (error: any) {
     console.error("Update Team Error:", error);
     res.status(500).json({ message: error.message });

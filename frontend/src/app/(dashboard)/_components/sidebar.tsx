@@ -29,9 +29,7 @@ const navItems = [
   { label: "Meetings", href: "/meetings", icon: Video },
   { label: "Chat", href: "/chat", icon: MessageCircle },
   { label: "Files", href: "/files", icon: Folder },
-  { label: "Meeting Status", href: "/meeting-status", icon: Activity },
   { label: "Team", href: "/team", icon: Users },
-  { label: "Analytics", href: "/analytics", icon: BarChart3 },
 ];
 
 interface SidebarProps {

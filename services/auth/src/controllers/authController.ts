@@ -189,16 +189,28 @@ export const register = async (req: Request, res: Response) => {
     const { email, password, firstName, lastName, avatarKey } = req.body;
 
     const userExists = await User.findOne({ email });
+    let user;
     if (userExists) {
-      return res.status(400).json({ message: "User already exists" });
+      if (userExists.isDeleted) {
+        userExists.isDeleted = false;
+        userExists.password = password;
+        userExists.profile.firstName = firstName;
+        userExists.profile.lastName = lastName;
+        if (avatarKey) userExists.profile.avatarKey = avatarKey;
+        userExists.isEmailConfirmed = false;
+        await userExists.save();
+        user = userExists;
+      } else {
+        return res.status(400).json({ message: "User already exists" });
+      }
+    } else {
+      user = await User.create({
+        email,
+        password,
+        profile: { firstName, lastName, avatarKey },
+        isEmailConfirmed: false,
+      });
     }
-
-    const user = await User.create({
-      email,
-      password,
-      profile: { firstName, lastName, avatarKey },
-      isEmailConfirmed: false,
-    });
 
     // Generate OTP and send email
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -227,7 +239,7 @@ export const login = async (req: Request, res: Response) => {
     const { email, password } = req.body;
     const user = await User.findOne({ email }).select("+password");
 
-    if (!user || !(await user.matchPassword(password))) {
+    if (!user || user.isDeleted || !(await user.matchPassword(password))) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
@@ -426,6 +438,53 @@ export const updateProfile = async (
         profile: { ...user.profile, avatarUrl },
       },
     });
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error });
+  }
+};
+
+export const changePassword = async (req: Request & { user?: any }, res: Response) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.user.id).select("+password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (!(await user.matchPassword(currentPassword))) {
+      return res.status(400).json({ message: "Invalid current password" });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.status(200).json({ success: true, message: "Password updated successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Server Error", error });
+  }
+};
+
+export const deleteAccount = async (req: Request & { user?: any }, res: Response) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.isDeleted = true;
+    user.activeWorkspace = undefined;
+    await user.save();
+
+    const jti = req.user?.jti;
+    if (jti) {
+      await TokenBlocklist.create({ jti });
+    }
+
+    const isProduction = process.env.NODE_ENV === "production";
+    res.cookie("token", "none", {
+      expires: new Date(Date.now() + 10 * 1000),
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
+    });
+
+    res.status(200).json({ success: true, message: "Account deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Server Error", error });
   }

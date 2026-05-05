@@ -35,6 +35,14 @@ export const getUserChannels = async (req: AuthRequest, res: Response) => {
                 members: [],
                 isArchived: false,
             });
+
+            // Fire-and-forget folder creation in file service
+            onChannelCreated({
+                channelId: globalChannel._id.toString(),
+                channelName: globalChannel.name,
+                channelType: globalChannel.type,
+                workspaceId: workspaceId,
+            }).catch(() => {});
         }
 
         const channels = await Channel.find({
@@ -174,14 +182,13 @@ export const createChannel = async (req: AuthRequest, res: Response) => {
             restrictedChat: req.body.restrictedChat || false,
         });
 
-        // Fire-and-forget folder creation in file service for non-direct channels
-        if (type !== "direct") {
-            onChannelCreated({
-                channelId: channel._id.toString(),
-                channelName: channel.name,
-                workspaceId: req.user!.workspaceId!,
-            }).catch(() => {});
-        }
+        // Fire-and-forget folder creation in file service
+        onChannelCreated({
+            channelId: channel._id.toString(),
+            channelName: channel.name,
+            channelType: channel.type,
+            workspaceId: req.user!.workspaceId!,
+        }).catch(() => {});
 
         // Populate members for the response
         await channel.populate(
@@ -252,6 +259,7 @@ export const createProjectChannel = async (
         onChannelCreated({
             channelId: channel._id.toString(),
             channelName: channel.name,
+            channelType: channel.type,
             workspaceId,
         }).catch(() => {});
 
@@ -639,6 +647,14 @@ export const syncTeamChannel = async (req: AuthRequest, res: Response) => {
                 members: channelMembers,
             });
         }
+
+        // Fire-and-forget folder creation/sync in file service
+        onChannelCreated({
+            channelId: channel._id.toString(),
+            channelName: channel.name,
+            channelType: channel.type,
+            workspaceId,
+        }).catch(() => {});
 
         // Notify connected users via Pusher
         channelMembers.forEach((m: any) => {

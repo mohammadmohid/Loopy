@@ -6,7 +6,7 @@ import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/lib/auth-provider";
 import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus, LogOut, Check, X, Shield, Users, Mail, UserPlus, MoreVertical } from "lucide-react";
+import { Loader2, Plus, Shield, Users, UserPlus, MoreVertical } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Member {
   id: string;
@@ -53,8 +55,12 @@ interface Team {
 }
 
 export default function TeamPage() {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
   const [activeTab, setActiveTab] = useState<"members" | "teams">("members");
+
+  const getInitials = (firstName: string, lastName: string) => {
+    return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase() || "?";
+  };
 
   // Dialogs
   const [inviteDialog, setInviteDialog] = useState(false);
@@ -64,6 +70,10 @@ export default function TeamPage() {
   const [createTeamDialog, setCreateTeamDialog] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
   const [selectedTeamMembers, setSelectedTeamMembers] = useState<string[]>([]);
+  const [viewTeamMembers, setViewTeamMembers] = useState<Team | null>(null);
+
+  const [isInviting, setIsInviting] = useState(false);
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
 
   const { data: membersData, isLoading: isMembersLoading, mutate: mutateMembers } = useSWR<{ members: Member[]; pendingInvites: PendingInvite[] }>("/auth/workspaces/members", fetcher as any);
   const { data: teamsData, isLoading: isTeamsLoading, mutate: mutateTeams } = useSWR<Team[]>("/projects/teams", fetcher as any);
@@ -79,6 +89,8 @@ export default function TeamPage() {
   };
 
   const handleInvite = async () => {
+    if (!inviteEmail || isInviting) return;
+    setIsInviting(true);
     try {
       await apiRequest("/auth/workspaces/invite", {
         method: "POST",
@@ -89,7 +101,9 @@ export default function TeamPage() {
       setInviteEmail("");
       refetchAll();
     } catch (e: any) {
-      toast.error(e.response?.data?.message || "Failed to send invite");
+      toast.error(e.message || "Failed to send invite");
+    } finally {
+      setIsInviting(false);
     }
   };
 
@@ -102,7 +116,7 @@ export default function TeamPage() {
       toast.success("Invitation resent");
       refetchAll();
     } catch (e: any) {
-      toast.error(e.response?.data?.message || "Failed to resend invite");
+      toast.error(e.message || "Failed to resend invite");
     }
   };
 
@@ -113,9 +127,12 @@ export default function TeamPage() {
         data: { role: newRole },
       });
       toast.success("Role updated");
+      if (memberId === user?.id) {
+        await refresh();
+      }
       refetchAll();
     } catch (e: any) {
-      toast.error(e.response?.data?.message || "Failed to update role");
+      toast.error(e.message || "Failed to update role");
     }
   };
 
@@ -127,12 +144,13 @@ export default function TeamPage() {
       toast.success("Member removed");
       refetchAll();
     } catch (e: any) {
-      toast.error(e.response?.data?.message || "Failed to remove member");
+      toast.error(e.message || "Failed to remove member");
     }
   };
 
   const handleCreateTeam = async () => {
-    if (!newTeamName) return;
+    if (!newTeamName || isCreatingTeam) return;
+    setIsCreatingTeam(true);
     try {
       await apiRequest("/projects/teams", {
         method: "POST",
@@ -144,7 +162,9 @@ export default function TeamPage() {
       setSelectedTeamMembers([]);
       refetchAll();
     } catch (e: any) {
-      toast.error(e.response?.data?.message || "Failed to create team");
+      toast.error(e.message || "Failed to create team");
+    } finally {
+      setIsCreatingTeam(false);
     }
   };
 
@@ -156,7 +176,7 @@ export default function TeamPage() {
       toast.success("Team deleted");
       refetchAll();
     } catch (e: any) {
-      toast.error(e.response?.data?.message || "Failed to delete team");
+      toast.error(e.message || "Failed to delete team");
     }
   };
 
@@ -220,7 +240,6 @@ export default function TeamPage() {
           {pendingInvites.length > 0 && isAdmin && (
             <div className="space-y-4">
               <h2 className="text-lg font-medium text-neutral-900 border-b border-neutral-200 pb-2 flex items-center gap-2">
-                <Mail className="w-5 h-5 text-neutral-400" />
                 Pending Invites
               </h2>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -279,7 +298,7 @@ export default function TeamPage() {
                                 <MoreVertical className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
+                            <DropdownMenuContent align="end" className="w-full">
                               {member.role === "MEMBER" && (
                                 <DropdownMenuItem onClick={() => handleUpdateRole(member.id, "PROJECT_MANAGER")}>
                                   Promote to Project Manager
@@ -351,17 +370,34 @@ export default function TeamPage() {
                     )}
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    {team.members.map((m) => {
-                      const memberId = m.id || m._id;
-                      const leaderId = team.leader.id || team.leader._id;
-                      return (
-                        <div key={memberId} className="flex items-center gap-2 px-2.5 py-1.5 bg-neutral-100 rounded-lg text-xs font-medium text-neutral-700">
-                          {m.firstName} {m.lastName}
-                          {memberId === leaderId && <Shield className="w-3 h-3 text-brand ml-1" />}
-                        </div>
-                      );
-                    })}
+                  <div className="flex -space-x-2 overflow-hidden mt-2">
+                    <TooltipProvider>
+                      {team.members.slice(0, 4).map((m) => (
+                        <Tooltip key={m.id || m._id}>
+                          <TooltipTrigger asChild>
+                            <Avatar
+                              className="inline-block h-8 w-8 rounded-full ring-2 ring-white cursor-pointer"
+                            >
+                              <AvatarImage src={m.avatarUrl} alt={m.firstName} />
+                              <AvatarFallback className="text-[10px] bg-neutral-200 text-neutral-600">
+                                {getInitials(m.firstName, m.lastName)}
+                              </AvatarFallback>
+                            </Avatar>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{m.firstName} {m.lastName}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ))}
+                    </TooltipProvider>
+                    {team.members.length > 4 && (
+                      <button
+                        onClick={() => setViewTeamMembers(team)}
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-100 text-[10px] font-bold text-neutral-600 ring-2 ring-white hover:bg-neutral-200 transition-colors"
+                      >
+                        +{team.members.length - 4}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -400,8 +436,10 @@ export default function TeamPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setInviteDialog(false)}>Cancel</Button>
-            <Button onClick={handleInvite} disabled={!inviteEmail}>Send Invite</Button>
+            <Button variant="outline" onClick={() => setInviteDialog(false)} disabled={isInviting}>Cancel</Button>
+            <Button onClick={handleInvite} disabled={!inviteEmail || isInviting}>
+              {isInviting ? "Sending..." : "Send Invite"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -449,8 +487,45 @@ export default function TeamPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateTeamDialog(false)}>Cancel</Button>
-            <Button onClick={handleCreateTeam} disabled={!newTeamName || selectedTeamMembers.length === 0}>Create Team</Button>
+            <Button variant="outline" onClick={() => setCreateTeamDialog(false)} disabled={isCreatingTeam}>Cancel</Button>
+            <Button onClick={handleCreateTeam} disabled={!newTeamName || selectedTeamMembers.length === 0 || isCreatingTeam}>
+              {isCreatingTeam ? "Creating..." : "Create Team"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* View Team Members Dialog */}
+      <Dialog open={!!viewTeamMembers} onOpenChange={(open) => !open && setViewTeamMembers(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{viewTeamMembers?.name} Members</DialogTitle>
+            <DialogDescription>
+              All {viewTeamMembers?.members.length} members in this team.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto space-y-3 py-2">
+            {viewTeamMembers?.members.map((m) => (
+              <div key={m.id || m._id} className="flex items-center gap-3">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={m.avatarUrl} alt={m.firstName} />
+                  <AvatarFallback className="text-xs bg-neutral-100 text-neutral-600">
+                    {getInitials(m.firstName, m.lastName)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-neutral-900 truncate">
+                    {m.firstName} {m.lastName}
+                  </p>
+                  <p className="text-xs text-neutral-500 truncate">{m.email}</p>
+                </div>
+                {(m.id === viewTeamMembers.leader.id || m._id === viewTeamMembers.leader._id) && (
+                  <Shield className="w-4 h-4 text-brand" />
+                )}
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewTeamMembers(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

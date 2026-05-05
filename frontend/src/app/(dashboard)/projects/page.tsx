@@ -83,19 +83,42 @@ export default function ProjectsPage() {
           })
         : "No Date",
       isPinned: pinnedProjectIds.includes(p._id),
-      members: Array.isArray(p.members)
-        ? p.members
+      members: (() => {
+        const memberMap = new Map<string, ProjectMember>();
+        // Add direct members
+        if (Array.isArray(p.members)) {
+          p.members
             .filter((m: any) => m.user && m.user.profile)
-            .map((m: any) => {
+            .forEach((m: any) => {
               const prof = m.user.profile;
-              return {
+              memberMap.set(m.user._id, {
                 id: m.user._id,
                 name: `${prof.firstName || ""} ${prof.lastName || ""}`.trim(),
                 avatarUrl: prof.avatarUrl,
                 initials: prof.firstName ? (prof.firstName[0] + (prof.lastName ? prof.lastName[0] : "")).toUpperCase() : "NA",
-              };
-            })
-        : [],
+              });
+            });
+        }
+        // Add team members from assignedTeams
+        if (Array.isArray(p.assignedTeams)) {
+          p.assignedTeams.forEach((at: any) => {
+            if (at.team?.members && Array.isArray(at.team.members)) {
+              at.team.members.forEach((m: any) => {
+                if (m.profile && !memberMap.has(m._id)) {
+                  const prof = m.profile;
+                  memberMap.set(m._id, {
+                    id: m._id,
+                    name: `${prof.firstName || ""} ${prof.lastName || ""}`.trim(),
+                    avatarUrl: prof.avatarUrl,
+                    initials: prof.firstName ? (prof.firstName[0] + (prof.lastName ? prof.lastName[0] : "")).toUpperCase() : "NA",
+                  });
+                }
+              });
+            }
+          });
+        }
+        return Array.from(memberMap.values());
+      })(),
     };
   });
 
@@ -293,6 +316,7 @@ export default function ProjectsPage() {
               onTogglePin={handleTogglePin}
               onEdit={(pId) => setEditingProjectId(pId)}
               onDelete={handleDeleteProject}
+              canManage={role !== "MEMBER"}
             />
           ))}
         </div>

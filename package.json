@@ -3,10 +3,15 @@
   "private": true,
   "packageManager": "pnpm@10.15.1",
   "scripts": {
-    "postinstall": "pnpm --filter @loopy/shared build"
+    "build:shared": "pnpm --filter @loopy/shared build",
+    "watch:shared": "pnpm --filter @loopy/shared watch",
+    "dev": "pnpm build:shared && concurrently -n \"shared,auth,chat,file,gate,meet,proj,trans,front\" -c \"gray,blue,green,magenta,yellow,cyan,red,white,black\" \"pnpm watch:shared\" \"pnpm --filter loopy-auth dev\" \"pnpm --filter loopy-chat dev\" \"pnpm --filter loopy-file dev\" \"pnpm --filter loopy-gateway dev\" \"pnpm --filter loopy-meeting dev\" \"pnpm --filter loopy-project dev\" \"pnpm --filter loopy-transcription dev\" \"pnpm --filter loopy-frontend dev\""
   },
   "workspaces": [
     "services/*",
     "frontend"
-  ]
+  ],
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
 }

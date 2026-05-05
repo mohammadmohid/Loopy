@@ -38,6 +38,7 @@ export const registerMessageFileAttachment = async (
           type: "CHAT_MESSAGE",
           id: messageId,
         },
+        channelId,
       },
       {
         headers: {

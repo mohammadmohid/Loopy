@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import {
     AuthRequest,
     Channel,
+    Workspace,
     createPresignedUploadUrl,
     initializeUploadTracker,
 } from "@loopy/shared";
@@ -41,7 +42,10 @@ export const getMessages = async (req: AuthRequest, res: Response) => {
         // Build query: only top-level messages (not thread replies)
         const query: any = {
             channelId,
-            threadParentId: { $exists: false },
+            $or: [
+                { threadParentId: { $exists: false } },
+                { threadParentId: null }
+            ],
         };
 
         // ── Try Redis cache first (only for latest messages, no cursor) ──
@@ -291,8 +295,20 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
             pusher.trigger(`channel-${channelId}`, "new-message", messageObj);
         }
 
-        if (!threadParentId && channel.members) {
-            const userChannels = channel.members.map((m: any) => `user-${m.user.toString()}`);
+        let memberIdsToNotify: string[] = [];
+        if (channel.type === "global") {
+            const workspace = await Workspace.findById(channel.workspaceId);
+            if (workspace) {
+                memberIdsToNotify = workspace.members.map((m: any) => m.user.toString());
+            }
+        } else if (channel.members) {
+            memberIdsToNotify = channel.members.map((m: any) => m.user.toString());
+        }
+
+        const filteredMemberIds = memberIdsToNotify.filter((id: string) => id !== req.user!.id);
+
+        if (!threadParentId && filteredMemberIds.length > 0) {
+            const userChannels = filteredMemberIds.map((id) => `user-${id}`);
             for (let i = 0; i < userChannels.length; i += 100) {
                 pusher.trigger(userChannels.slice(i, i + 100), "message-notification", {
                     channelId,
@@ -302,13 +318,12 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
         }
 
         // ── Redis: cache message + increment unread for members ──
-        cacheMessage(channelId, messageObj).catch(() => {});
+        if (!threadParentId) {
+            cacheMessage(channelId, messageObj).catch(() => {});
+        }
 
-        if (!threadParentId && channel.members) {
-            const memberIds = channel.members
-                .map((m: any) => m.user.toString())
-                .filter((id: string) => id !== req.user!.id);
-            incrementUnreadBatch(memberIds, channelId).catch(() => {});
+        if (!threadParentId && filteredMemberIds.length > 0) {
+            incrementUnreadBatch(filteredMemberIds, channelId).catch(() => {});
         }
 
         // Notify mentioned users specifically

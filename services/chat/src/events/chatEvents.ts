@@ -1,24 +1,33 @@
 import axios from "axios";
 
+function getFileServiceBase(): string {
+  const raw = process.env.FILE_SERVICE_URL?.trim();
+  if (raw) return raw.replace(/\/$/, "");
+  return "http://localhost:5006";
+}
+
 /**
- * Notifies the file service to create a folder for a channel
+ * Syncs a channel folder with the file service via the sync webhook.
  */
-export const notifyFileServiceCreateChannelFolder = async (data: {
+export const notifyFileServiceSyncChannel = async (data: {
+  action: "created" | "updated" | "archived" | "deleted";
+  channelId: string;
   channelName: string;
+  channelType?: string;
   workspaceId: string;
-  parentFolderId?: string;
 }): Promise<void> => {
-  const FILE_SERVICE_URL = process.env.FILE_SERVICE_URL || "http://file:5006";
+  const fileBase = getFileServiceBase();
   try {
-    await axios.post(`${FILE_SERVICE_URL}/api/files/folders`, data, {
+    await axios.post(`${fileBase}/api/files/sync/channel`, data, {
       headers: {
         "X-Internal-Call": "true",
+        "X-Workspace-Id": data.workspaceId,
       },
     });
-    console.log(`[Event] Created folder ${data.channelName} in file service`);
+    console.log(`[Event] Synced channel folder: ${data.action} ${data.channelName}`);
   } catch (error) {
-    console.error(`[Event] Failed to create channel folder ${data.channelName}:`, error);
-    // Don't throw - folder creation is not critical
+    console.error(`[Event] Failed to sync channel folder ${data.channelName}:`, error);
+    // Don't throw - folder sync is not critical
   }
 };
 
@@ -28,10 +37,30 @@ export const notifyFileServiceCreateChannelFolder = async (data: {
 export const onChannelCreated = async (data: {
   channelId: string;
   channelName: string;
+  channelType?: string;
   workspaceId: string;
 }): Promise<void> => {
-  notifyFileServiceCreateChannelFolder({
-    channelName: `Channel - ${data.channelName}`,
+  notifyFileServiceSyncChannel({
+    action: "created",
+    channelId: data.channelId,
+    channelName: data.channelName,
+    channelType: data.channelType,
+    workspaceId: data.workspaceId,
+  }).catch(() => {});
+};
+
+/**
+ * Called when a channel is deleted or archived
+ */
+export const onChannelDeleted = async (data: {
+  channelId: string;
+  channelName: string;
+  workspaceId: string;
+}): Promise<void> => {
+  notifyFileServiceSyncChannel({
+    action: "deleted",
+    channelId: data.channelId,
+    channelName: data.channelName,
     workspaceId: data.workspaceId,
   }).catch(() => {});
 };

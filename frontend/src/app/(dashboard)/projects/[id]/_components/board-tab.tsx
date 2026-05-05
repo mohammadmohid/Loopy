@@ -21,6 +21,7 @@ interface BoardTabProps {
   onColumnsUpdate: (columns: BoardColumn[]) => void;
   onMilestoneCreate: () => void;
   canEdit: boolean;
+  canEditTask?: (task: Task) => boolean;
 }
 
 export function BoardTab({
@@ -32,6 +33,7 @@ export function BoardTab({
   onColumnsUpdate,
   onMilestoneCreate,
   canEdit,
+  canEditTask,
 }: BoardTabProps) {
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
@@ -68,7 +70,7 @@ export function BoardTab({
   };
 
   const handleDragStart = (task: Task) => {
-    if (!canEdit) return;
+    if (canEditTask ? !canEditTask(task) : !canEdit) return;
     setDraggedTask(task);
   };
 
@@ -77,7 +79,7 @@ export function BoardTab({
   };
 
   const handleDrop = (statusId: string) => {
-    if (!draggedTask || !canEdit) return;
+    if (!draggedTask || (canEditTask ? !canEditTask(draggedTask) : !canEdit)) return;
     if (draggedTask.status !== statusId) {
       onTaskUpdate({ ...draggedTask, status: statusId });
     }
@@ -310,15 +312,17 @@ export function BoardTab({
             <div className="space-y-3 overflow-y-auto flex-1 pr-1 min-h-0">
               {filteredTasks
                 .filter((t) => t.status === column.id)
-                .map((task) => (
+                .map((task) => {
+                  const isTaskEditable = canEditTask ? canEditTask(task) : canEdit;
+                  return (
                   <div
                     key={task.id}
-                    draggable={canEdit}
+                    draggable={isTaskEditable}
                     onDragStart={() => handleDragStart(task)}
                     onClick={() => onTaskClick(task)}
                     className={cn(
                       "bg-white border border-neutral-200 rounded-xl p-4 cursor-pointer hover:shadow-sm transition-all",
-                      canEdit && "cursor-grab active:cursor-grabbing",
+                      isTaskEditable && "cursor-grab active:cursor-grabbing",
                       draggedTask?.id === task.id && "opacity-50 border-primary"
                     )}
                   >
@@ -376,7 +380,7 @@ export function BoardTab({
                       </div>
                     </div>
                   </div>
-                ))}
+                )})}
             </div>
           </div>
         ))}

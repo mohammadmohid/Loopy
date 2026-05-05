@@ -37,6 +37,7 @@ import {
   createMilestone,
   updateMilestone,
   deleteMilestone,
+  searchTasks,
 } from "../controllers/taskController.js";
 import {
   createTeam,
@@ -56,6 +57,7 @@ router.post("/upload/screen-recording", protect, generateScreenRecordingUploadUr
 router.get("/:projectId/activity", protect, getProjectActivity);
 
 // Tasks & Milestones
+router.get("/tasks/search", protect, searchTasks);
 router.get("/:projectId/tasks", protect, getProjectTasks);
 router.post("/:projectId/tasks", protect, createTask);
 router.patch("/tasks/:id", protect, updateTask);

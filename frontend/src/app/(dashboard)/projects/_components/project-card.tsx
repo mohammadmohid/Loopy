@@ -36,6 +36,7 @@ interface ProjectCardProps {
   onTogglePin: (id: string) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  canManage?: boolean;
 }
 
 export function ProjectCard({
@@ -43,6 +44,7 @@ export function ProjectCard({
   onTogglePin,
   onEdit,
   onDelete,
+  canManage = true,
 }: ProjectCardProps) {
   const looksLikeUrl = (s: string) => /^https?:\/\//.test(s) || s.startsWith("/");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -107,26 +109,30 @@ export function ProjectCard({
                 <Pin className="w-4 h-4" />
                 {project.isPinned ? "Unpin" : "Pin"}
               </button>
-              <button
-                onClick={() => {
-                  onEdit(project.id);
-                  setMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors"
-              >
-                <Edit className="w-4 h-4" />
-                Edit
-              </button>
-              <button
-                onClick={() => {
-                  setIsDeleteDialogOpen(true);
-                  setMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete
-              </button>
+              {canManage && (
+                <>
+                  <button
+                    onClick={() => {
+                      onEdit(project.id);
+                      setMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors"
+                  >
+                    <Edit className="w-4 h-4" />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsDeleteDialogOpen(true);
+                      setMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

@@ -178,7 +178,7 @@ export const createWorkspace = async (
         });
 
         try {
-            const [meetingsFolder, projectsFolder, chatFolder, usersFolder] =
+            const [meetingsFolder, projectsFolder, chatFolder] =
                 await Folder.insertMany([
                     {
                         workspaceId: workspace._id,
@@ -201,13 +201,6 @@ export const createWorkspace = async (
                         isSystem: true,
                         systemContext: SystemFolderContext.CHAT,
                     },
-                    {
-                        workspaceId: workspace._id,
-                        name: "Users",
-                        parentId: null,
-                        isSystem: true,
-                        systemContext: SystemFolderContext.USERS,
-                    },
                 ]);
 
             try {
@@ -215,7 +208,6 @@ export const createWorkspace = async (
                     [SystemFolderContext.MEETINGS]: meetingsFolder._id.toString(),
                     [SystemFolderContext.PROJECTS]: projectsFolder._id.toString(),
                     [SystemFolderContext.CHAT]: chatFolder._id.toString(),
-                    [SystemFolderContext.USERS]: usersFolder._id.toString(),
                 });
             } catch (cacheError: any) {
                 console.warn("createWorkspace cache warm skipped:", cacheError.message);

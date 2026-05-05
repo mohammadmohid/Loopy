@@ -6,6 +6,7 @@ export interface IUser extends Document {
   email: string;
   password?: string;
   isEmailConfirmed: boolean;
+  isDeleted?: boolean;
   workspaces: mongoose.Types.ObjectId[];
   activeWorkspace?: mongoose.Types.ObjectId;
   profile: {
@@ -30,6 +31,7 @@ const userSchema = new Schema<IUser>(
     },
     password: { type: String, minLength: 8, required: true, select: false },
     isEmailConfirmed: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false },
     workspaces: [{ type: Schema.Types.ObjectId, ref: "Workspace" }],
     activeWorkspace: { type: Schema.Types.ObjectId, ref: "Workspace" },
     profile: {

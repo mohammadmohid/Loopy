@@ -11,6 +11,7 @@ export interface IProject extends Document {
   startDate: Date;
   endDate?: Date;
   boardColumns: { id: string; label: string; color: string }[];
+  avatarKey?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,6 +20,7 @@ const ProjectSchema: Schema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 100 },
     description: { type: String, maxlength: 2000 },
+    avatarKey: { type: String },
     workspaceId: { type: Schema.Types.ObjectId, required: true },
     owner: { type: Schema.Types.ObjectId, ref: "User", required: true },
 

@@ -32,6 +32,7 @@ export interface Task {
   projectId: string;
   milestoneId?: string;
   attachments?: string[];
+  createdBy?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -50,6 +51,8 @@ export interface Milestone {
   tasks: Task[];
   attachments?: string[];
   projectId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Project {
@@ -178,7 +181,9 @@ export interface Folder {
   name: string;
   parentId?: string | null;
   isSystem: boolean;
-  systemContext?: "MEETINGS" | "PROJECTS" | "CHAT" | "USERS" | "OTHER";
+  systemContext?: "MEETINGS" | "PROJECTS" | "CHAT";
+  sourceEntityId?: string;
+  sourceEntityType?: "PROJECT" | "CHANNEL" | "MEETING_CHANNEL";
   createdAt: string;
   updatedAt: string;
 }

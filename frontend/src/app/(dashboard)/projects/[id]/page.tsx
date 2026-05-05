@@ -71,11 +71,32 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const tab = new URLSearchParams(window.location.search).get("tab");
+    const searchParams = new URLSearchParams(window.location.search);
+    const tab = searchParams.get("tab");
     if (tab && tabs.some((t) => t.id === tab)) {
       setActiveTab(tab);
     }
-  }, [id]);
+    const taskId = searchParams.get("taskId");
+    if (taskId && tasks.length > 0) {
+      const target = tasks.find(t => t.id === taskId);
+      if (target && selectedTask?.id !== taskId) {
+        setSelectedTask(target);
+        setIsTaskPanelOpen(true);
+      }
+    }
+  }, [id, tasks]);
+
+  const handleTaskClick = (t: Task) => {
+    window.history.pushState({}, '', `?tab=${activeTab}&taskId=${t.id}`);
+    setSelectedTask(t);
+    setIsTaskPanelOpen(true);
+  };
+
+  const handleTaskClose = () => {
+    window.history.pushState({}, '', `?tab=${activeTab}`);
+    setIsTaskPanelOpen(false);
+    setSelectedTask(null);
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -144,6 +165,7 @@ export default function ProjectDetailPage() {
 
         return {
           ...rest,
+          createdBy: t.createdBy,
           id: _id,
           milestoneId: parentMilestone?._id, // Add this for frontend filtering
           assignees: assignees ? assignees.map(mapUser) : [],
@@ -343,10 +365,11 @@ export default function ProjectDetailPage() {
 
   const handleMilestoneComplete = async (milestoneId: string) => {
     const milestoneTasks = tasks.filter((t) => t.milestoneId === milestoneId && t.status !== "done");
-    if (milestoneTasks.length === 0) return;
     
-    // Optimistic update
-    setTasks((prev) => prev.map((t) => t.milestoneId === milestoneId ? { ...t, status: "done" } : t));
+    if (milestoneTasks.length > 0) {
+      // Optimistic update for tasks
+      setTasks((prev) => prev.map((t) => t.milestoneId === milestoneId ? { ...t, status: "done" } : t));
+    }
     
     try {
       await apiRequest(`/projects/milestones/${milestoneId}`, {
@@ -420,6 +443,33 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const canEditProject =
+    user?.workspaceRole === "ADMIN" || project?.owner?.id === user?.id || user?.workspaceRole === "PROJECT_MANAGER";
+
+  const canEditTask = useCallback((task: Task | null) => {
+    if (!task) return false;
+    if (canEditProject) return true;
+    if (task.assignees?.some((a: any) => a.id === user?.id || a._id === user?.id)) return true;
+    if (task.createdBy === user?.id) return true;
+    if (task.assignees?.length === 0 && (!task.assignedTeams || task.assignedTeams.length === 0)) return true;
+    return false;
+  }, [canEditProject, user?.id]);
+
+  const handleActivityClick = (activity: Activity) => {
+    if ((activity as any).type === "task" || tasks.some(t => t.id === activity.id)) {
+      const task = tasks.find((t) => t.id === activity.id);
+      if (task) {
+        setSelectedTask(task);
+        setIsTaskPanelOpen(true);
+      }
+    } else if ((activity as any).type === "milestone" || milestones.some(m => m.id === activity.id)) {
+      const milestone = milestones.find((m) => m.id === activity.id);
+      if (milestone) {
+        // Open milestone details or scroll to it
+      }
+    }
+  };
+
   if (isLoading)
     return (
       <div className="flex h-full items-center justify-center">
@@ -427,19 +477,6 @@ export default function ProjectDetailPage() {
       </div>
     );
   if (!project) return <div>Project not found</div>;
-
-  const canEdit =
-    user?.workspaceRole === "ADMIN" || project.owner.id === user?.id || user?.workspaceRole === "PROJECT_MANAGER";
-
-  const handleActivityClick = (activity: Activity) => {
-    if (activity.type === "task") {
-      const task = tasks.find((t) => t.id === activity.targetId);
-      if (task) {
-        setSelectedTask(task);
-        setIsTaskPanelOpen(true);
-      }
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -495,7 +532,7 @@ export default function ProjectDetailPage() {
               </PopoverContent>
             </Popover>
 
-            {canEdit ? (
+            {canEditProject ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -517,13 +554,19 @@ export default function ProjectDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button
-            onClick={() => setIsUploadOpen(true)}
-            className="gap-2 bg-primary"
+          {canEditProject && (
+            <Button
+              onClick={() => setIsUploadOpen(true)}
+              className="gap-2 bg-primary"
+            >
+              <UploadCloud className="w-4 h-4" /> Upload Recording
+            </Button>
+          )}
+          <Button 
+            variant="outline" 
+            className="gap-2 bg-transparent"
+            onClick={() => router.push(`/files?search=${encodeURIComponent(project.name)}`)}
           >
-            <UploadCloud className="w-4 h-4" /> Upload Recording
-          </Button>
-          <Button variant="outline" className="gap-2 bg-transparent">
             <Folder className="w-4 h-4" /> Files
           </Button>
         </div>
@@ -560,12 +603,9 @@ export default function ProjectDetailPage() {
               activities={activities}
               milestones={milestones}
               meetings={meetings}
-              onTaskClick={(t) => {
-                setSelectedTask(t);
-                setIsTaskPanelOpen(true);
-              }}
+              onTaskClick={handleTaskClick}
               onActivityClick={handleActivityClick}
-              canEdit={canEdit}
+              canEdit={canEditProject}
             />
           )}
           {activeTab === "timeline" && (
@@ -573,14 +613,11 @@ export default function ProjectDetailPage() {
               milestones={milestones}
               tasks={tasks}
               projectMembers={project.members} // Pass members for filter
-              onTaskClick={(t) => {
-                setSelectedTask(t);
-                setIsTaskPanelOpen(true);
-              }}
+              onTaskClick={handleTaskClick}
               onMilestoneUpdate={handleMilestoneUpdate}
               onMilestoneDelete={handleMilestoneDelete}
-              canEdit={canEdit}
-              canDelete={canEdit}
+              canEdit={canEditProject}
+              canDelete={canEditProject}
             />
           )}
           {activeTab === "tasks" && (
@@ -588,10 +625,7 @@ export default function ProjectDetailPage() {
               tasks={tasks}
               milestones={milestones}
               projectMembers={project.members}
-              onTaskClick={(t) => {
-                setSelectedTask(t);
-                setIsTaskPanelOpen(true);
-              }}
+              onTaskClick={handleTaskClick}
               onTaskCreate={handleTaskCreate}
               onTaskUpdate={handleTaskUpdate}
               onTaskDelete={handleTaskDelete}
@@ -600,8 +634,9 @@ export default function ProjectDetailPage() {
               onMilestoneDelete={handleMilestoneDelete}
               onMilestoneComplete={handleMilestoneComplete}
               onGroupUnassigned={handleGroupUnassigned}
-              canEdit={canEdit}
-              canDelete={canEdit}
+              canEdit={canEditProject}
+              canDelete={canEditProject}
+              canEditTask={canEditTask}
               availableTeams={availableTeams}
             />
           )}
@@ -610,10 +645,7 @@ export default function ProjectDetailPage() {
               tasks={tasks}
               milestones={milestones}
               columns={project.boardColumns}
-              onTaskClick={(t) => {
-                setSelectedTask(t);
-                setIsTaskPanelOpen(true);
-              }}
+              onTaskClick={handleTaskClick}
               onTaskUpdate={handleTaskUpdate}
               onColumnsUpdate={handleColumnsUpdate}
               onMilestoneCreate={() => {
@@ -623,7 +655,8 @@ export default function ProjectDetailPage() {
                   if (el) el.click();
                 }, 100);
               }}
-              canEdit={canEdit}
+              canEdit={canEditProject}
+              canEditTask={canEditTask}
             />
           )}
         </div>
@@ -656,8 +689,8 @@ export default function ProjectDetailPage() {
         }}
         onUpdate={handleTaskUpdate}
         onDelete={handleTaskDelete}
-        canEdit={canEdit}
-        canDelete={canEdit}
+        canEdit={canEditProject}
+        canDelete={canEditProject}
         projectMembers={project.members}
         boardColumns={project.boardColumns}
       />

@@ -24,12 +24,29 @@ export const resolveOwnerAvatar = (owner: any): void => {
 /**
  * Attaches avatarUrl to all populated members in a project (lean document).
  */
-export const resolveMemberAvatars = (members: any[]): void => {
-  if (!Array.isArray(members)) return;
-  for (const m of members) {
-    const userObj = m.user as any;
-    if (userObj?.profile?.avatarKey) {
-      userObj.profile.avatarUrl = resolveAvatarUrl(userObj.profile.avatarKey);
+export const resolveMemberAvatars = (project: any): void => {
+  if (!project) return;
+  
+  // Resolve direct members
+  if (Array.isArray(project.members)) {
+    for (const m of project.members) {
+      const userObj = m.user as any;
+      if (userObj?.profile?.avatarKey) {
+        userObj.profile.avatarUrl = resolveAvatarUrl(userObj.profile.avatarKey);
+      }
+    }
+  }
+
+  // Resolve assigned team members
+  if (Array.isArray(project.assignedTeams)) {
+    for (const at of project.assignedTeams) {
+      if (at.team?.members && Array.isArray(at.team.members)) {
+        for (const m of at.team.members) {
+          if (m.profile?.avatarKey) {
+            m.profile.avatarUrl = resolveAvatarUrl(m.profile.avatarKey);
+          }
+        }
+      }
     }
   }
 };

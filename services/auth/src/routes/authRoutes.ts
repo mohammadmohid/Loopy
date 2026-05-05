@@ -9,6 +9,8 @@ import {
   updateProfile,
   getUsers,
   searchUsers,
+  changePassword,
+  deleteAccount,
 } from "../controllers/authController.js";
 import {
   verifyOTP,
@@ -45,6 +47,8 @@ router.post("/resend-otp", resendOTP);
 // User Profile
 router.get("/me", protect, getMe);
 router.put("/me", protect, updateProfile);
+router.put("/password", protect, changePassword);
+router.delete("/me", protect, deleteAccount);
 router.post("/upload/avatar/sign", signAvatarUpload);
 router.get("/users", protect, getUsers);
 router.get("/users/search", protect, searchUsers);

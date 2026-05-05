@@ -93,10 +93,11 @@ export function TaskDetailPanel({
 
   if (!isOpen || !task) return null;
 
-  const isAssignee = task.assignees.some((a: any) => a.id === user?.id);
-  const isCreator = (task as any).creatorId === user?.id;
-  const canUserEdit = canEdit || isAssignee || isCreator;
-  const canUserDelete = canDelete || isCreator;
+  const isAssignee = task.assignees.some((a: any) => a.id === user?.id || a._id === user?.id);
+  const isCreator = task.createdBy === user?.id || (task as any).creatorId === user?.id;
+  const isUnassigned = task.assignees.length === 0 && (!task.assignedTeams || task.assignedTeams.length === 0);
+  const canUserEdit = canEdit || isAssignee || isCreator || isUnassigned;
+  const canUserDelete = canDelete || isCreator || isUnassigned;
 
   const statusOptions = (() => {
     if (!boardColumns || boardColumns.length === 0) return defaultStatusOptions;

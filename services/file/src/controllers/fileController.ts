@@ -8,7 +8,7 @@ import {
 } from "@loopy/shared";
 import { GetObjectCommand, DeleteObjectCommand, CopyObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getOrCreateSystemFolder, getOrCreateSubFolder } from "../services/systemFolderService.js";
+import { getOrCreateSystemFolder, getOrCreateSubFolder, getFolderPath as getFolderPathService } from "../services/systemFolderService.js";
 import { SystemFolderContext } from "@loopy/shared";
 
 // ─── File Operations ─────────────────────────────────────────────────────
@@ -33,8 +33,11 @@ export const uploadFile = async (req: Request, res: Response) => {
         const tasksFolder = await getOrCreateSubFolder(workspaceId, projectsFolder._id, "Task Attachments");
         targetFolderId = tasksFolder._id;
       } else if (sourceContext.type === "CHAT_MESSAGE") {
-        const chatFolder = await getOrCreateSystemFolder(workspaceId, SystemFolderContext.CHAT);
-        targetFolderId = chatFolder._id;
+        const chatRoot = await getOrCreateSystemFolder(workspaceId, SystemFolderContext.CHAT);
+        // We'd ideally need channelType here to route it correctly. 
+        // For now, if no folderId is provided, we default to the chatRoot or attempt to find the channel folder.
+        // But usually, uploads from chat pass the folderId of the channel folder.
+        targetFolderId = chatRoot._id;
       }
     }
 
@@ -134,7 +137,7 @@ export const downloadFile = async (req: Request, res: Response) => {
 export const updateFile = async (req: Request, res: Response) => {
   try {
     const { fileId } = req.params;
-    const { name, permissions, sourceContext, folderId } = req.body;
+    const { name, permissions, sourceContext, folderId, channelId } = req.body;
     const workspaceId = req.user?.workspaceId;
     const userId = req.user?.id;
 
@@ -164,7 +167,18 @@ export const updateFile = async (req: Request, res: Response) => {
     if (name) file.name = name;
     if (permissions) file.permissions = permissions;
     if (sourceContext) file.sourceContext = sourceContext;
-    if (folderId) file.folderId = folderId;
+    if (folderId) {
+      file.folderId = folderId;
+    } else if (channelId && workspaceId) {
+      const channelFolder = await Folder.findOne({
+        workspaceId: new mongoose.Types.ObjectId(workspaceId),
+        sourceEntityId: new mongoose.Types.ObjectId(channelId),
+        sourceEntityType: "CHANNEL",
+      });
+      if (channelFolder) {
+        file.folderId = channelFolder._id.toString();
+      }
+    }
 
     await file.save();
 
@@ -491,18 +505,26 @@ export const createFolder = async (req: Request, res: Response) => {
 export const listFolders = async (req: Request, res: Response) => {
   try {
     const workspaceId = req.user?.workspaceId;
-    const { parentId } = req.query;
+    const { parentId, type } = req.query;
 
     const query: any = { workspaceId };
+
     if (req.query.search) {
       query.name = { $regex: req.query.search, $options: "i" };
+    } else if (type === "SYSTEM") {
+      query.isSystem = true;
+      query.parentId = null;
+    } else if (type === "CUSTOM") {
+      query.isSystem = false;
+      query.parentId = null;
     } else if (parentId) {
       query.parentId = parentId;
     }
 
     const folders = await Folder.find(query).sort({ name: 1 });
 
-    res.json({ folders });
+    // Return flat array for SWR compatibility
+    res.json(folders);
   } catch (error: any) {
     res.status(500).json({ message: "Error listing folders", error: error.message });
   }
@@ -548,7 +570,7 @@ export const getFolderContents = async (req: Request, res: Response) => {
       workspaceId,
       folderId,
     })
-      .populate("uploadedBy", "name email avatar")
+      .populate("uploadedBy", "email profile.firstName profile.lastName profile.avatarKey")
       .sort({ createdAt: -1 });
 
     const subfolders = await Folder.find({
@@ -656,8 +678,17 @@ export const listFiles = async (req: Request, res: Response) => {
       query.name = { $regex: req.query.search, $options: "i" };
     }
 
+    if (req.query.uploadedBy && req.query.uploadedBy !== "all") {
+      query.uploadedBy = req.query.uploadedBy;
+    }
+
+    // "Shared With Me" filter: files NOT uploaded by current user
+    if (req.query.sharedWithMe === "true") {
+      query.uploadedBy = { $ne: req.user?.id };
+    }
+
     const files = await File.find(query)
-      .populate("uploadedBy", "name email avatar")
+      .populate("uploadedBy", "email profile.firstName profile.lastName profile.avatarKey")
       .populate("currentVersionId")
       .sort({ createdAt: -1 })
       .limit(Number(limit))
@@ -668,5 +699,49 @@ export const listFiles = async (req: Request, res: Response) => {
     res.json({ files, total, limit: Number(limit), skip: Number(skip) });
   } catch (error: any) {
     res.status(500).json({ message: "Error listing files", error: error.message });
+  }
+};
+
+// ─── Recent Files ───────────────────────────────────────────────────────
+
+export const getRecentFiles = async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.user?.workspaceId;
+    const limit = Number(req.query.limit) || 10;
+    const query: any = { workspaceId };
+    if (req.query.mimeType) {
+      query.mimeType = { $regex: req.query.mimeType, $options: "i" };
+    }
+    if (req.query.uploadedBy && req.query.uploadedBy !== "all") {
+      query.uploadedBy = req.query.uploadedBy;
+    }
+
+    const files = await File.find(query)
+      .populate("uploadedBy", "email profile.firstName profile.lastName profile.avatarKey")
+      .sort({ updatedAt: -1 })
+      .limit(limit);
+
+    res.json(files);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error fetching recent files", error: error.message });
+  }
+};
+
+// ─── Folder Path ────────────────────────────────────────────────────────
+
+export const getFolderPath = async (req: Request, res: Response) => {
+  try {
+    const { folderId } = req.params;
+    const workspaceId = req.user?.workspaceId;
+
+    if (!workspaceId) {
+      res.status(400).json({ message: "No workspace context" });
+      return;
+    }
+
+    const path = await getFolderPathService(folderId, workspaceId);
+    res.json(path);
+  } catch (error: any) {
+    res.status(500).json({ message: "Error fetching folder path", error: error.message });
   }
 };

@@ -163,7 +163,7 @@ function TaskRow({
 
   return (
     <Link
-      href={`/projects/${task.projectId}`}
+      href={`/projects/${task.projectId}?taskId=${task._id}`}
       className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors rounded-lg group/row"
     >
       <div className={cn("w-2 h-2 rounded-full shrink-0", priority.dot)} />
@@ -191,14 +191,6 @@ function TaskRow({
           })}
         </span>
       )}
-      <span
-        className={cn(
-          "text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0",
-          status.color
-        )}
-      >
-        {status.label}
-      </span>
     </Link>
   );
 }
@@ -214,23 +206,15 @@ function ProjectMiniCard({ project }: { project: DashboardProject }) {
       href={`/projects/${project._id}`}
       className="bg-white border border-neutral-200 rounded-xl p-5 shadow-sm hover-lift group block"
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+    <div className="flex items-start justify-between mb-3">
+      <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors overflow-hidden">
+        {(project as any).avatarUrl ? (
+          <img src={(project as any).avatarUrl} alt={project.name} className="w-full h-full object-cover" />
+        ) : (
           <FolderKanban className="w-4 h-4" />
-        </div>
-        <span
-          className={cn(
-            "text-[11px] font-medium px-2 py-0.5 rounded-full",
-            project.status === "active"
-              ? "bg-emerald-50 text-emerald-700"
-              : project.status === "completed"
-                ? "bg-blue-50 text-blue-700"
-                : "bg-neutral-100 text-neutral-600"
-          )}
-        >
-          {project.status}
-        </span>
+        )}
       </div>
+    </div>
       <h3 className="font-semibold text-neutral-900 truncate group-hover:text-primary transition-colors">
         {project.name}
       </h3>
@@ -261,17 +245,22 @@ function ProjectMiniCard({ project }: { project: DashboardProject }) {
             const initials = user?.profile
               ? `${user.profile.firstName?.[0] || ""}${user.profile.lastName?.[0] || ""}`
               : "?";
+            const avatarUrl = user?.profile?.avatarUrl || user?.profile?.avatarKey;
             return (
               <div
                 key={i}
-                className="w-7 h-7 rounded-full bg-neutral-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-neutral-500"
+                className="w-7 h-7 rounded-full bg-neutral-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-neutral-500 overflow-hidden"
                 title={
                   user?.profile
                     ? `${user.profile.firstName} ${user.profile.lastName}`
                     : "Member"
                 }
               >
-                {initials.toUpperCase()}
+                {avatarUrl ? (
+                   <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+                ) : (
+                   initials.toUpperCase()
+                )}
               </div>
             );
           })}
@@ -313,7 +302,10 @@ function ActivityRow({ item, projectMap }: { item: ActivityItem; projectMap: Rec
   const projectName = projectMap[item.projectId] || "";
 
   return (
-    <div className="flex items-start gap-3 py-2.5">
+    <Link
+      href={`/projects/${item.projectId}?${item.type}Id=${item.id}`}
+      className="flex items-start gap-3 py-2.5 hover:bg-neutral-50 rounded-lg px-2 transition-colors group"
+    >
       <div
         className={cn(
           "w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5",
@@ -326,7 +318,7 @@ function ActivityRow({ item, projectMap }: { item: ActivityItem; projectMap: Rec
         <p className="text-sm text-neutral-700">
           <span className="font-medium text-neutral-900">{item.user}</span>{" "}
           {config.label}{" "}
-          <span className="font-medium text-neutral-900">
+          <span className="font-medium text-neutral-900 group-hover:text-primary transition-colors">
             {item.targetName}
           </span>
         </p>
@@ -341,7 +333,7 @@ function ActivityRow({ item, projectMap }: { item: ActivityItem; projectMap: Rec
           )}
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 

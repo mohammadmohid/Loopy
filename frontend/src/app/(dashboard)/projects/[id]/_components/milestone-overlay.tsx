@@ -70,7 +70,6 @@ export function MilestoneOverlay({
   const [editedDescription, setEditedDescription] = useState(milestone?.description || "");
   const [editedStartDate, setEditedStartDate] = useState("");
   const [editedDueDate, setEditedDueDate] = useState("");
-  const [editedDuration, setEditedDuration] = useState(milestone?.duration || "");
   const [editedGoal, setEditedGoal] = useState(milestone?.goal || "");
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState("");
@@ -81,7 +80,6 @@ export function MilestoneOverlay({
       setEditedDescription(milestone.description || "");
       setEditedStartDate(milestone.startDate ? new Date(milestone.startDate).toISOString().split("T")[0] : "");
       setEditedDueDate(milestone.dueDate ? new Date(milestone.dueDate).toISOString().split("T")[0] : "");
-      setEditedDuration(milestone.duration || "");
       setEditedGoal(milestone.goal || "");
     }
   }, [milestone]);
@@ -113,11 +111,8 @@ export function MilestoneOverlay({
     setIsEditingDesc(false);
   };
 
-  const handleDateChange = (field: "startDate" | "dueDate" | "duration" | "goal", value: string) => {
-    if (field === "startDate") setEditedStartDate(value);
-    else if (field === "dueDate") setEditedDueDate(value);
-    else if (field === "duration") setEditedDuration(value);
-    else if (field === "goal") setEditedGoal(value);
+  const handleDateChange = (field: "goal", value: string) => {
+    if (field === "goal") setEditedGoal(value);
 
     onUpdate({
       ...milestone,
@@ -241,64 +236,23 @@ export function MilestoneOverlay({
             )}
           </div>
 
-          {/* Dates - Editable */}
+          {/* Dates - Read Only (Accommodated from tasks) */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium text-neutral-500 mb-1 block">
                 Start Date
               </label>
-              {canEdit ? (
-                <div className="relative flex border border-neutral-200 rounded-lg bg-white items-center px-3 py-2">
-                  <Calendar className="w-4 h-4 text-neutral-400 mr-2" />
-                  <input
-                    type="date"
-                    value={editedStartDate}
-                    onChange={(e) => handleDateChange("startDate", e.target.value)}
-                    className="text-sm focus:outline-none bg-transparent cursor-pointer text-neutral-700 w-full"
-                  />
-                </div>
-              ) : (
-                <p className="text-sm text-neutral-900">{formatDate(milestone.startDate)}</p>
-              )}
+              <p className="text-sm text-neutral-900">{formatDate(milestone.startDate)}</p>
             </div>
             <div>
               <label className="text-sm font-medium text-neutral-500 mb-1 block">
                 Due date
               </label>
-              {canEdit ? (
-                <div className="relative flex border border-neutral-200 rounded-lg bg-white items-center px-3 py-2">
-                  <Calendar className="w-4 h-4 text-neutral-400 mr-2" />
-                  <input
-                    type="date"
-                    value={editedDueDate}
-                    onChange={(e) => handleDateChange("dueDate", e.target.value)}
-                    className="text-sm focus:outline-none bg-transparent cursor-pointer text-neutral-700 w-full"
-                  />
-                </div>
-              ) : (
-                <p className="text-sm text-neutral-900">{formatDate(milestone.dueDate)}</p>
-              )}
+              <p className="text-sm text-neutral-900">{formatDate(milestone.dueDate)}</p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium text-neutral-500 mb-1 block">
-                Duration (e.g. 2 weeks)
-              </label>
-              {canEdit ? (
-                <input
-                  type="text"
-                  value={editedDuration}
-                  onChange={(e) => setEditedDuration(e.target.value)}
-                  onBlur={() => handleDateChange("duration", editedDuration)}
-                  className="w-full text-sm text-neutral-700 border border-neutral-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  placeholder="2 weeks"
-                />
-              ) : (
-                <p className="text-sm text-neutral-900">{milestone.duration || "None"}</p>
-              )}
-            </div>
             <div>
               <label className="text-sm font-medium text-neutral-500 mb-1 block">
                 Specific Goal

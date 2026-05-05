@@ -11,6 +11,7 @@ export interface ITask extends Document {
   assignedTeams?: mongoose.Types.ObjectId[];
   dueDate?: Date;
   attachments?: mongoose.Types.ObjectId[]; // File IDs
+  createdBy?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,6 +20,7 @@ const TaskSchema: Schema = new Schema(
   {
     title: { type: String, required: true, trim: true, maxlength: 200 },
     description: { type: String, maxlength: 5000 },
+    createdBy: { type: Schema.Types.ObjectId, ref: "User" },
     status: {
       type: String,
       default: "todo",

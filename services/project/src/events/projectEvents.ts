@@ -11,6 +11,12 @@ function getChatServiceBase(): string | null {
   return "http://localhost:5004";
 }
 
+function getFileServiceBase(): string {
+  const raw = process.env.FILE_SERVICE_URL?.trim();
+  if (raw) return raw.replace(/\/$/, "");
+  return "http://localhost:5006";
+}
+
 const retryAxios = async (fn: () => Promise<any>, retries = 3, delay = 2000) => {
   for (let i = 0; i < retries; i++) {
     try {
@@ -49,33 +55,62 @@ export const notifyProjectCreated = async (data: {
   workspaceId: string;
 }): Promise<void> => {
   const base = getChatServiceBase();
-  if (!base) return;
-  try {
-    await retryAxios(() =>
-      axios.post(`${base}/api/chat/channels/project-webhook`, data)
-    );
-    console.log(`[Event] Created chat channel for project ${data.projectId}`);
-  } catch (error) {
-    console.error(`[Event] Failed to create chat channel for project ${data.projectId}:`, error);
+  if (base) {
+    try {
+      await retryAxios(() =>
+        axios.post(`${base}/api/chat/channels/project-webhook`, data)
+      );
+      console.log(`[Event] Created chat channel for project ${data.projectId}`);
+    } catch (error) {
+      console.error(`[Event] Failed to create chat channel for project ${data.projectId}:`, error);
+    }
   }
 
-  // Fire-and-forget folder creation in file service
-  notifyFileServiceCreateFolder({
-    folderName: `Project - ${data.projectName}`,
-    workspaceId: data.workspaceId,
-  }).catch(() => {});
+  // Sync file service folders for this project
+  const fileBase = getFileServiceBase();
+  try {
+    await axios.post(`${fileBase}/api/files/sync/project`, {
+      action: "created",
+      projectId: data.projectId,
+      projectName: data.projectName,
+      workspaceId: data.workspaceId,
+    }, {
+      headers: { "X-Internal-Call": "true", "X-Workspace-Id": data.workspaceId },
+    });
+    console.log(`[Event] Synced file folders for project ${data.projectId}`);
+  } catch (error) {
+    console.error(`[Event] Failed to sync file folders for project ${data.projectId}:`, error);
+  }
 };
 
-export const notifyProjectDeleted = async (projectId: string): Promise<void> => {
+export const notifyProjectDeleted = async (projectId: string, workspaceId?: string): Promise<void> => {
   const base = getChatServiceBase();
-  if (!base) return;
-  try {
-    await retryAxios(() =>
-      axios.delete(`${base}/api/chat/channels/project-webhook/${projectId}`)
-    );
-    console.log(`[Event] Deleted chat channel for project ${projectId}`);
-  } catch (error) {
-    console.error(`[Event] Failed to delete chat channel for project ${projectId}:`, error);
+  if (base) {
+    try {
+      await retryAxios(() =>
+        axios.delete(`${base}/api/chat/channels/project-webhook/${projectId}`)
+      );
+      console.log(`[Event] Deleted chat channel for project ${projectId}`);
+    } catch (error) {
+      console.error(`[Event] Failed to delete chat channel for project ${projectId}:`, error);
+    }
+  }
+
+  // Sync file service: remove project folder hierarchy
+  if (workspaceId) {
+    const fileBase = getFileServiceBase();
+    try {
+      await axios.post(`${fileBase}/api/files/sync/project`, {
+        action: "deleted",
+        projectId,
+        workspaceId,
+      }, {
+        headers: { "X-Internal-Call": "true", "X-Workspace-Id": workspaceId },
+      });
+      console.log(`[Event] Removed file folders for project ${projectId}`);
+    } catch (error) {
+      console.error(`[Event] Failed to remove file folders for project ${projectId}:`, error);
+    }
   }
 };
 

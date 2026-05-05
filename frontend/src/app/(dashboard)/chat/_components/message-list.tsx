@@ -29,6 +29,7 @@ interface MessageListProps {
     onDelete: (messageId: string) => void;
     onEdit: (messageId: string, content: string) => void;
     onReaction: (messageId: string, emoji: string) => void;
+    highlightMessageId?: string | null;
 }
 
 export function MessageList({
@@ -42,6 +43,7 @@ export function MessageList({
     onDelete,
     onEdit,
     onReaction,
+    highlightMessageId,
 }: MessageListProps) {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const topObserverRef = useRef<HTMLDivElement>(null);
@@ -55,14 +57,21 @@ export function MessageList({
 
     // Auto-scroll to bottom on new messages (if we are already at the bottom or it's our own message)
     useEffect(() => {
-        const lastMessage = messages[messages.length - 1];
-        if (lastMessage?.sender._id === currentUserId) {
-            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-        } else if (messages.length > 0 && !isLoadingMore) {
-            // Only scroll to bottom on initial load
-            messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        if (highlightMessageId) {
+            const el = document.getElementById(`message-${highlightMessageId}`);
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+        } else {
+            const lastMessage = messages[messages.length - 1];
+            if (lastMessage?.sender._id === currentUserId) {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            } else if (messages.length > 0 && !isLoadingMore) {
+                // Only scroll to bottom on initial load
+                messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+            }
         }
-    }, [messages, currentUserId, isLoadingMore]);
+    }, [messages, currentUserId, isLoadingMore, highlightMessageId]);
 
     // Intersection Observer for infinite loading (scroll up)
     useEffect(() => {
@@ -190,9 +199,11 @@ export function MessageList({
                         ) : (
                             /* Regular Message */
                             <div
+                                id={`message-${msg._id}`}
                                 className={cn(
-                                    "group relative flex gap-3 rounded-lg px-2 py-1 transition-colors",
-                                    hoveredMessageId === msg._id && "bg-neutral-50"
+                                    "group relative flex gap-3 rounded-lg px-2 py-1 transition-all duration-1000",
+                                    hoveredMessageId === msg._id && "bg-neutral-50",
+                                    highlightMessageId === msg._id && "bg-amber-100 ring-2 ring-amber-400"
                                 )}
                                 onMouseEnter={() => setHoveredMessageId(msg._id)}
                                 onMouseLeave={() => {

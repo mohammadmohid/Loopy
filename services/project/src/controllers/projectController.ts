@@ -141,13 +141,18 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
     const projects = await Project.find(query)
       .populate("owner", "profile.firstName profile.lastName profile.avatarKey")
       .populate("members.user", "profile.firstName profile.lastName profile.avatarKey")
+      .populate({
+        path: "assignedTeams.team",
+        select: "name members",
+        populate: { path: "members", select: "profile.firstName profile.lastName profile.avatarKey" }
+      })
       .sort({ updatedAt: -1 })
       .lean();
 
     // Resolve avatars
     for (const project of projects as any[]) {
       resolveOwnerAvatar(project.owner);
-      resolveMemberAvatars(project.members);
+      resolveMemberAvatars(project);
     }
 
     res.status(200).json(projects);
@@ -174,6 +179,11 @@ export const getProjectById = async (req: AuthRequest, res: Response) => {
     const project = await Project.findOne({ _id: id, workspaceId })
       .populate("owner", "profile.firstName profile.lastName profile.avatarKey")
       .populate("members.user", "profile.firstName profile.lastName email profile.avatarKey")
+      .populate({
+        path: "assignedTeams.team",
+        select: "name members",
+        populate: { path: "members", select: "profile.firstName profile.lastName profile.avatarKey email" }
+      })
       .lean();
 
     if (!project) {
@@ -204,7 +214,7 @@ export const getProjectById = async (req: AuthRequest, res: Response) => {
 
     // Resolve avatars
     resolveOwnerAvatar((project as any).owner);
-    resolveMemberAvatars((project as any).members);
+    resolveMemberAvatars(project);
 
     res.status(200).json(project);
   } catch (error: any) {
@@ -470,6 +480,7 @@ export const getProjectActivity = async (req: AuthRequest, res: Response) => {
       .sort({ updatedAt: -1 })
       .limit(10)
       .populate("assignees", "profile.firstName profile.lastName")
+      .populate("createdBy", "profile.firstName profile.lastName")
       .lean();
 
     // Fetch latest milestones
@@ -494,7 +505,7 @@ export const getProjectActivity = async (req: AuthRequest, res: Response) => {
         timestamp: t.updatedAt,
         user: t.assignees?.[0]
           ? `${t.assignees[0].profile.firstName} ${t.assignees[0].profile.lastName}`
-          : "Team Member",
+          : t.createdBy ? `${t.createdBy.profile?.firstName} ${t.createdBy.profile?.lastName}` : "Team Member",
       })),
       ...milestones.map((m: any) => ({
         id: m._id,

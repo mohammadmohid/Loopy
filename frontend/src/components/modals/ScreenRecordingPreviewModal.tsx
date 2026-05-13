@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Play, Pause, Scissors, MessageSquare, Download, Loader2 } from 'lucide-react';
+import { Play, Scissors, Download, Loader2 } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import { apiRequest } from '@/lib/api';
@@ -8,12 +8,6 @@ import {
     consumeScreenRecordingRecipients,
     sendScreenRecordingToUsers,
 } from '@/lib/screen-recording-chat';
-
-interface Comment {
-    id: string;
-    timestamp: number;
-    text: string;
-}
 
 interface ScreenRecordingPreviewModalProps {
     isOpen: boolean;
@@ -41,10 +35,6 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
     const [isDraggingStart, setIsDraggingStart] = useState(false);
     const [isDraggingEnd, setIsDraggingEnd] = useState(false);
 
-    // Comments State
-    const [comments, setComments] = useState<Comment[]>([]);
-    const [newCommentText, setNewCommentText] = useState("");
-
     // Export State
     const [isExporting, setIsExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
@@ -54,11 +44,11 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
         const loadFFmpeg = async () => {
             const ffmpeg = ffmpegRef.current;
             if (!ffmpeg.loaded) {
-                ffmpeg.on('progress', ({ progress, time }) => {
+                ffmpeg.on('progress', ({ progress }) => {
                     setExportProgress(progress * 100);
                 });
-                ffmpeg.on('log', ({ message }) => {
-                    console.log(message);
+                ffmpeg.on('log', ({ message: logMessage }) => {
+                    console.log(logMessage);
                 });
                 await ffmpeg.load({
                     coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
@@ -177,28 +167,6 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
         };
     }, [isDraggingStart, isDraggingEnd, isDraggingTimeline, duration, trimStart, trimEnd]);
 
-    // Comment System
-    const handleAddComment = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newCommentText.trim()) return;
-
-        // Pause video to type comment
-        if (isPlaying) togglePlay();
-
-        setComments([...comments, {
-            id: Math.random().toString(36).substr(2, 9),
-            timestamp: currentTime,
-            text: newCommentText.trim()
-        }]);
-        setNewCommentText("");
-    };
-
-    const jumpToComment = (time: number) => {
-        if (videoRef.current) {
-            videoRef.current.currentTime = time;
-        }
-    };
-
     // Export Logic with FFmpeg
     const handleExport = async () => {
         if (!videoBlob) return;
@@ -207,18 +175,15 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
             setMessage("Preparing...");
             const ffmpeg = ffmpegRef.current;
 
-            // Write the file to memory
             setMessage("Writing file to memory...");
             await ffmpeg.writeFile('input.webm', await fetchFile(videoBlob));
 
-            // Trim the file
-            // If no trimming happened, we could just download the blob directly, but we will run it through ffmpeg to ensure duration metadata is fixed
             setMessage("Trimming and Processing Video...");
             await ffmpeg.exec([
                 '-i', 'input.webm',
                 '-ss', trimStart.toString(),
                 '-to', trimEnd.toString(),
-                '-c', 'copy', // Fast stream copy! No re-encoding
+                '-c', 'copy',
                 'output.webm'
             ]);
 
@@ -228,7 +193,6 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
             const trimmedBlob = new Blob([data as unknown as BlobPart], { type: 'video/webm' });
             const trimmedUrl = URL.createObjectURL(trimmedBlob);
 
-            // Trigger automatic download
             const a = document.createElement("a");
             a.href = trimmedUrl;
             a.download = `${filename}.webm`;
@@ -257,7 +221,6 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
             setIsExporting(true);
             setMessage("Generating secure upload link...");
 
-            // 1. Get the Presigned URL from the Gateway -> Project Service
             const { presignedUrl, key } = await apiRequest<{ presignedUrl: string; key: string }>(
                 '/api/projects/upload/screen-recording',
                 {
@@ -269,14 +232,12 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
                 }
             );
 
-            // 2. We need to run FFmpeg first just like in export, to ensure properties/trimming are correct!
             setMessage("Preparing video for upload...");
             const ffmpeg = ffmpegRef.current;
             await ffmpeg.writeFile('input.webm', await fetchFile(videoBlob));
 
             setMessage("Processing Video...");
 
-            // Fix: Ensure trimEnd is a valid number, otherwise FFmpeg crashes
             const validTrimEnd = isFinite(trimEnd) && trimEnd > 0 ? trimEnd : (isFinite(duration) ? duration : 0);
 
             const ffmpegArgs = [
@@ -295,10 +256,8 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
             const data = await ffmpeg.readFile('output_upload.webm');
             const trimmedBlob = new Blob([data as unknown as BlobPart], { type: 'video/webm' });
 
-            // 3. Upload DIRECTLY to the temporary R2 URL
             setMessage("Uploading to Cloud Storage...");
 
-            // XHR Upload to track progress
             await new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
 
@@ -387,7 +346,6 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
         }
     };
 
-    // Formatting Helper
     const formatTime = (seconds: number) => {
         const m = Math.floor(seconds / 60).toString().padStart(2, '0');
         const s = Math.floor(seconds % 60).toString().padStart(2, '0');
@@ -399,7 +357,6 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 sm:p-8">
 
-            {/* Export Loading Overlay */}
             {isExporting && (
                 <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/90 backdrop-blur-md rounded-2xl m-4 sm:m-8">
                     <Loader2 className="w-12 h-12 text-[#cc2233] animate-spin mb-4" />
@@ -413,9 +370,8 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
                 </div>
             )}
 
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-full max-h-[800px] flex flex-col overflow-hidden relative">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-full max-h-[800px] flex flex-col overflow-hidden relative">
 
-                {/* Header */}
                 <div className="h-16 flex items-center justify-between px-6 border-b border-neutral-100 shrink-0">
                     <div className="flex items-center gap-2">
                         <Scissors className="w-5 h-5 text-[#cc2233]" />
@@ -436,11 +392,8 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
                     </div>
                 </div>
 
-                {/* Content Split */}
-                <div className="flex-1 flex flex-col lg:flex-row min-h-0 bg-neutral-50">
-
-                    {/* Main Video Area */}
-                    <div className="flex-1 flex flex-col relative border-r border-neutral-200">
+                <div className="flex-1 flex flex-col min-h-0 bg-neutral-50">
+                    <div className="flex-1 flex flex-col relative">
                         <div className="flex-1 bg-black flex items-center justify-center relative min-h-[300px]">
                             {duration === 0 && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
@@ -456,7 +409,6 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
                                 onClick={togglePlay}
                             />
 
-                            {/* Click to Play Overlay */}
                             {!isPlaying && duration > 0 && (
                                 <button onClick={togglePlay} className="absolute w-16 h-16 bg-[#cc2233]/90 hover:bg-[#cc2233] rounded-full flex items-center justify-center text-white transition shadow-lg backdrop-blur-sm">
                                     <Play className="w-6 h-6 ml-1" fill="currentColor" />
@@ -464,7 +416,6 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
                             )}
                         </div>
 
-                        {/* Custom Interactive Timeline */}
                         <div className="h-32 bg-white border-t border-neutral-200 p-6 shrink-0 flex flex-col justify-center">
                             <div className="flex items-center justify-between text-xs font-mono text-neutral-500 mb-2">
                                 <span>{formatTime(currentTime)}</span>
@@ -472,7 +423,6 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
                                 <span>{formatTime(duration)}</span>
                             </div>
 
-                            {/* Scrub Container */}
                             <div
                                 className="relative w-full h-12 bg-neutral-100 rounded-lg select-none group"
                                 ref={timelineRef}
@@ -486,17 +436,14 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
                                     }
                                 }}
                             >
-                                {/* The Trimmed Area Highlight */}
                                 <div
                                     className="absolute top-0 bottom-0 bg-[#cc2233]/10 border-y-2 border-[#cc2233] cursor-pointer"
                                     style={{ left: `${(trimStart / Math.max(duration, 1)) * 100}%`, right: `${100 - (trimEnd / Math.max(duration, 1)) * 100}%` }}
                                 />
 
-                                {/* Unplayabale Overlays (Grayed out) */}
                                 <div className="absolute top-0 bottom-0 left-0 bg-neutral-200/50 backdrop-blur-[1px]" style={{ width: `${(trimStart / Math.max(duration, 1)) * 100}%` }} />
                                 <div className="absolute top-0 bottom-0 right-0 bg-neutral-200/50 backdrop-blur-[1px]" style={{ width: `${100 - (trimEnd / Math.max(duration, 1)) * 100}%` }} />
 
-                                {/* Progress Bar (Current Playhead) */}
                                 <div
                                     className="absolute top-0 bottom-0 w-[2px] bg-[#cc2233] z-10 pointer-events-none"
                                     style={{ left: `${(currentTime / Math.max(duration, 1)) * 100}%` }}
@@ -504,7 +451,6 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
                                     <div className="absolute -top-1 -translate-x-1/2 w-3 h-3 rounded-full bg-[#cc2233]" />
                                 </div>
 
-                                {/* Trim Handles */}
                                 <div
                                     data-handle="start"
                                     className="absolute top-0 bottom-0 w-3 -ml-1.5 bg-[#cc2233] cursor-ew-resize rounded-l z-20 hover:scale-x-150 transition-transform origin-right"
@@ -515,81 +461,9 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
                                     className="absolute top-0 bottom-0 w-3 -mr-1.5 bg-[#cc2233] cursor-ew-resize rounded-r z-20 hover:scale-x-150 transition-transform origin-left"
                                     style={{ right: `${100 - (trimEnd / Math.max(duration, 1)) * 100}%` }}
                                 />
-
-                                {/* Comment Markers */}
-                                {comments.map((comment, i) => (
-                                    <div
-                                        key={i}
-                                        title={comment.text}
-                                        onClick={(e) => { e.stopPropagation(); jumpToComment(comment.timestamp); }}
-                                        className="absolute -top-4 -translate-x-1/2 cursor-pointer z-30 group/marker"
-                                        style={{ left: `${(comment.timestamp / Math.max(duration, 1)) * 100}%` }}
-                                    >
-                                        <div className="w-2.5 h-2.5 bg-blue-500 rounded-full border-2 border-white shadow-sm ring-2 ring-transparent group-hover/marker:ring-blue-200 transition" />
-                                    </div>
-                                ))}
                             </div>
                         </div>
                     </div>
-
-                    {/* Sidebar Area: Comments */}
-                    <div className="w-full lg:w-[350px] bg-white flex flex-col overflow-hidden">
-                        <div className="p-5 border-b border-neutral-100 flex items-center gap-2 shrink-0">
-                            <MessageSquare className="w-5 h-5 text-neutral-400" />
-                            <h3 className="font-semibold text-neutral-900">Timestamp Comments</h3>
-                        </div>
-
-                        {/* Comments List */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                            {comments.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-neutral-400 text-center space-y-2 opacity-50">
-                                    <MessageSquare className="w-8 h-8" />
-                                    <p className="text-sm">No comments yet.<br />Type below to add one at the current timestamp.</p>
-                                </div>
-                            ) : (
-                                comments.sort((a, b) => a.timestamp - b.timestamp).map((comment) => (
-                                    <div
-                                        key={comment.id}
-                                        className="bg-neutral-50 p-3 rounded-lg border border-neutral-100 cursor-pointer hover:border-neutral-300 transition group"
-                                        onClick={() => jumpToComment(comment.timestamp)}
-                                    >
-                                        <div className="flex items-center justify-between mb-1">
-                                            <span className="text-xs font-mono font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
-                                                {formatTime(comment.timestamp)}
-                                            </span>
-                                        </div>
-                                        <p className="text-sm text-neutral-700 leading-relaxed">{comment.text}</p>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-
-                        {/* Add Comment Input */}
-                        <div className="p-4 border-t border-neutral-100 bg-neutral-50 shrink-0">
-                            <form onSubmit={handleAddComment} className="flex gap-2">
-                                <div className="relative flex-1">
-                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded pointer-events-none">
-                                        {formatTime(currentTime)}
-                                    </div>
-                                    <input
-                                        type="text"
-                                        placeholder="Add a comment..."
-                                        value={newCommentText}
-                                        onChange={(e) => setNewCommentText(e.target.value)}
-                                        className="w-full pl-16 pr-4 py-2 text-sm border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm"
-                                    />
-                                </div>
-                                <button
-                                    type="submit"
-                                    disabled={!newCommentText.trim()}
-                                    className="px-4 py-2 bg-neutral-900 text-white text-sm font-medium rounded-lg disabled:opacity-50 hover:bg-neutral-800 transition"
-                                >
-                                    Add
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-
                 </div>
             </div>
         </div>

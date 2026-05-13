@@ -554,14 +554,6 @@ export default function ProjectDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          {canEditProject && (
-            <Button
-              onClick={() => setIsUploadOpen(true)}
-              className="gap-2 bg-primary"
-            >
-              <UploadCloud className="w-4 h-4" /> Upload Recording
-            </Button>
-          )}
           <Button 
             variant="outline" 
             className="gap-2 bg-transparent"

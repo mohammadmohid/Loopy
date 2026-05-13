@@ -55,7 +55,10 @@ export function useFilesAPI() {
   };
 
   const getFile = async (fileId: string) => {
-    return apiRequest(`/api/files/files/${fileId}`);
+    const { file } = await apiRequest<{ file: FileModel }>(
+      `/api/files/files/${fileId}`
+    );
+    return file;
   };
 
   const getFileVersions = async (fileId: string) => {

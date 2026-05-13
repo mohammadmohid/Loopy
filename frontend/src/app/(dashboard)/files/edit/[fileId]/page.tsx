@@ -54,9 +54,11 @@ export default function DocxEditorPage({ params }: PageProps) {
       setLoading(true);
       setError(null);
 
-      // Fetch file metadata
-      const fileData = await apiRequest(`/api/files/files/${fileId}`);
-      setFile(fileData as File);
+      // Fetch file metadata (API returns { file })
+      const { file: fileRecord } = await apiRequest<{ file: File }>(
+        `/api/files/files/${fileId}`
+      );
+      setFile(fileRecord);
 
       // Fetch document buffer
       const response = await fetch(`/api/files/files/${fileId}/download`);

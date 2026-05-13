@@ -588,8 +588,15 @@ export const generateScreenRecordingUploadUrl = async (req: AuthRequest, res: Re
     // Generate link valid for 30 minutes
     const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 1800 });
 
-    // The final URL where the file can be publicly accessed
-    const publicUrl = `${process.env.R2_PUBLIC_DOMAIN}/${key}`;
+    const domainRaw = (process.env.R2_PUBLIC_DOMAIN ?? "").trim();
+    const publicBase = domainRaw
+      ? domainRaw.includes("://")
+        ? domainRaw.replace(/\/+$/, "")
+        : `https://${domainRaw.replace(/^\/+/, "").replace(/\/+$/, "")}`
+      : "";
+    const publicUrl = publicBase
+      ? `${publicBase}/${key.replace(/^\/+/, "")}`
+      : null;
 
     console.log(`Started secure cloud upload for file: ${sanitizedFilename} by user: ${userId}`);
 

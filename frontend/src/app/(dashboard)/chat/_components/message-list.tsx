@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { ReactionPicker } from "./reaction-picker";
 import { MessageImage } from "./message-image";
+import { MessageVideo } from "./message-video";
 
 interface MessageListProps {
     messages: ChatMessage[];
@@ -297,9 +298,14 @@ export function MessageList({
                                         <div className="mt-1.5 space-y-1">
                                             {msg.attachments.map((att, i) => {
                                                 const isImage = att.mimeType?.startsWith("image/");
+                                                const isVideo = att.mimeType?.startsWith("video/");
 
                                                 if (isImage) {
                                                     return <MessageImage key={i} attachment={att} />;
+                                                }
+
+                                                if (isVideo) {
+                                                    return <MessageVideo key={i} attachment={att} />;
                                                 }
 
                                                 return (

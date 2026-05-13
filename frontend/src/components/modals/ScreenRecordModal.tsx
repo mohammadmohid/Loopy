@@ -1,6 +1,18 @@
-import React, { useState } from 'react';
-import { X, Maximize, AppWindow, Mic, MicOff, Volume2, VolumeX, Video, VideoOff } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Maximize, AppWindow, Mic, MicOff, Volume2, VolumeX, Video, VideoOff, Loader2 } from 'lucide-react';
+import Image from 'next/image';
 import { useScreenRecorder } from '@/hooks/useScreenRecorder';
+import { apiRequest } from '@/lib/api';
+import { useAuth } from '@/lib/auth-provider';
+import { storeScreenRecordingRecipients } from '@/lib/screen-recording-chat';
+
+interface WorkspaceUser {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    avatarUrl?: string;
+}
 
 interface ScreenRecordModalProps {
     isOpen: boolean;
@@ -9,52 +21,112 @@ interface ScreenRecordModalProps {
     useRecorder: ReturnType<typeof useScreenRecorder>;
 }
 
+function getInitials(firstName: string, lastName: string) {
+    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || '?';
+}
+
 export function ScreenRecordModal({ isOpen, onClose, onRecordingStart, useRecorder }: ScreenRecordModalProps) {
+    const { user: authUser } = useAuth();
+    const currentUserId = authUser?.id ?? '';
+
     const [recordingName, setRecordingName] = useState("");
     const [micEnabled, setMicEnabled] = useState(false);
-    // System audio is handled natively by the browser prompt, but we add visual toggles to match the design
     const [audioEnabled, setAudioEnabled] = useState(true);
     const [cameraEnabled, setCameraEnabled] = useState(false);
 
-    const [sendToIndividual, setSendToIndividual] = useState(true);
+    const [sendToIndividual, setSendToIndividual] = useState(false);
+    const [users, setUsers] = useState<WorkspaceUser[]>([]);
+    const [loadingUsers, setLoadingUsers] = useState(false);
+    const [userSearch, setUserSearch] = useState("");
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
-    if (!isOpen) return null;
+    useEffect(() => {
+        if (!isOpen) return;
 
-    const handleStartRecording = async () => {
-        // Determine filename
-        const filename = recordingName.trim() || 'Screen-Recording';
+        const fetchUsers = async () => {
+            try {
+                setLoadingUsers(true);
+                const raw = await apiRequest<unknown[]>("/auth/users");
+                const mapped = (Array.isArray(raw) ? raw : [])
+                    .map((entry) => {
+                        const u = entry as {
+                            _id?: string;
+                            id?: string;
+                            email?: string;
+                            profile?: {
+                                firstName?: string;
+                                lastName?: string;
+                                avatarUrl?: string;
+                            };
+                        };
+                        const id = String(u._id ?? u.id ?? "").trim();
+                        return {
+                            id,
+                            email: u.email ?? "",
+                            firstName: u.profile?.firstName ?? "",
+                            lastName: u.profile?.lastName ?? "",
+                            avatarUrl: u.profile?.avatarUrl,
+                        };
+                    })
+                    .filter((u) => u.id && u.id !== currentUserId);
 
-        // We attach the chosen filename to the onStop hook so it knows what to name the file when downloading
-        const originalOnStop = useRecorder.stopRecording;
-
-        // Create a temporary override wrapper to handle the download logic
-        const handleDownload = (blobUrl: string) => {
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = `${filename}.webm`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+                setUsers(mapped);
+            } catch (error) {
+                console.error("Failed to load workspace users", error);
+                setUsers([]);
+            } finally {
+                setLoadingUsers(false);
+            }
         };
 
-        // Begin Native Recording Call 
-        // We pass the Mic toggle boolean. Audio and Camera are purely visual for now 
-        // because the browser takes over the Screen & System Audio selection prompt immediately after this UI closes.
+        fetchUsers();
+        setUserSearch("");
+        setSelectedUserIds([]);
+    }, [isOpen, currentUserId]);
+
+    const filteredUsers = useMemo(() => {
+        const query = userSearch.trim().toLowerCase();
+        if (!query) return users;
+        return users.filter((u) => {
+            const fullName = `${u.firstName} ${u.lastName}`.toLowerCase();
+            return fullName.includes(query) || u.email.toLowerCase().includes(query);
+        });
+    }, [users, userSearch]);
+
+    const toggleUser = (userId: string) => {
+        setSelectedUserIds((prev) =>
+            prev.includes(userId)
+                ? prev.filter((id) => id !== userId)
+                : [...prev, userId]
+        );
+    };
+
+    const handleStartRecording = async () => {
+        const filename = recordingName.trim() || 'Screen-Recording';
+
+        const recipients = sendToIndividual
+            ? users
+                .filter((u) => selectedUserIds.includes(u.id))
+                .map((u) => ({
+                    id: u.id,
+                    name: `${u.firstName} ${u.lastName}`.trim() || u.email,
+                }))
+            : [];
+
+        storeScreenRecordingRecipients(sendToIndividual, recipients);
+        sessionStorage.setItem("next_recording_filename", filename);
+
         onClose();
         onRecordingStart(true);
 
         try {
             await useRecorder.startRecording(micEnabled);
-
-            // We inject the download handler into a custom interval checker or just wait for the hook's native blob
-            // Since useScreenRecorder doesn't accept onStop dynamically after mount, we do the download in the parent component `TopHeader`.
-            // However, we just need the parent to know what the filename is.
-            sessionStorage.setItem("next_recording_filename", filename);
-
-        } catch (e) {
+        } catch {
             onRecordingStart(false);
         }
     };
+
+    if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -81,7 +153,6 @@ export function ScreenRecordModal({ isOpen, onClose, onRecordingStart, useRecord
                             <span className="text-xs font-medium">Window</span>
                         </button>
                         <button className="flex flex-col items-center justify-center py-4 px-2 border border-neutral-200 bg-white rounded-xl text-neutral-500 hover:bg-neutral-50 transition">
-                            {/* Note: React Lucide doesn't have an exact 'Browser' icon, using AppWindow variant visually */}
                             <AppWindow className="w-6 h-6 mb-2" strokeWidth={1.5} />
                             <span className="text-xs font-medium">Browser tab</span>
                         </button>
@@ -101,11 +172,11 @@ export function ScreenRecordModal({ isOpen, onClose, onRecordingStart, useRecord
                         />
                     </div>
 
-                    {/* Send to Individual Stub */}
+                    {/* Send to Individual */}
                     <div className="space-y-3">
                         <label className="flex items-center gap-3 cursor-pointer group">
                             <div className={`w-5 h-5 rounded border flex items-center justify-center transition ${sendToIndividual ? 'bg-[#cc2233] border-[#cc2233]' : 'border-neutral-300 group-hover:border-neutral-400'}`}>
-                                {sendToIndividual && <span className="text-white text-xs font-bold leading-none select-none select-none transform translate-y-[-1px]">&#10003;</span>}
+                                {sendToIndividual && <span className="text-white text-xs font-bold leading-none select-none transform translate-y-[-1px]">&#10003;</span>}
                             </div>
                             <input type="checkbox" className="hidden" checked={sendToIndividual} onChange={() => setSendToIndividual(!sendToIndividual)} />
                             <span className="text-sm text-neutral-800 font-medium">Send to an individual</span>
@@ -113,37 +184,65 @@ export function ScreenRecordModal({ isOpen, onClose, onRecordingStart, useRecord
 
                         <div className={`space-y-1 transition-opacity duration-200 ${sendToIndividual ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
                             <label className="text-sm font-medium text-neutral-800">User</label>
-                            <p className="text-xs text-neutral-400 mb-1">Recording will be sent to the user's chat</p>
+                            <p className="text-xs text-neutral-400 mb-1">Recording will be sent to the user&apos;s chat after cloud upload</p>
 
                             <div className="relative">
                                 <input
                                     type="text"
                                     placeholder="Search"
-                                    disabled
-                                    className="w-full border border-neutral-200 rounded-t-lg px-9 py-2.5 text-sm bg-white"
+                                    value={userSearch}
+                                    onChange={(e) => setUserSearch(e.target.value)}
+                                    disabled={!sendToIndividual}
+                                    className="w-full border border-neutral-200 rounded-t-lg px-9 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#cc2233]/20 disabled:bg-neutral-50"
                                 />
                                 <div className="absolute left-3 top-3 text-neutral-400">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                                 </div>
-                                <div className="absolute right-3 top-3 text-neutral-400">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                                </div>
 
-                                {/* Mock User List */}
-                                <div className="border border-t-0 border-neutral-200 rounded-b-lg overflow-hidden bg-white">
-                                    <div className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-neutral-50 transition bg-neutral-50 border-b border-neutral-100">
-                                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition bg-[#cc2233] border-[#cc2233]`}>
-                                            <span className="text-white text-[10px] font-bold leading-none transform translate-y-[-0.5px]">&#10003;</span>
+                                <div className="border border-t-0 border-neutral-200 rounded-b-lg overflow-hidden bg-white max-h-40 overflow-y-auto">
+                                    {loadingUsers ? (
+                                        <div className="flex items-center justify-center gap-2 px-3 py-6 text-sm text-neutral-500">
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Loading users...
                                         </div>
-                                        <div className="w-6 h-6 rounded-full bg-neutral-200 flex items-center justify-center text-[10px] font-bold text-neutral-600">MM</div>
-                                        <span className="text-sm text-neutral-800">User Name</span>
-                                    </div>
-                                    <div className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-neutral-50 transition border-b border-neutral-100">
-                                        <div className={`w-4 h-4 rounded border border-neutral-300 flex items-center justify-center transition`}>
+                                    ) : filteredUsers.length === 0 ? (
+                                        <div className="px-3 py-4 text-sm text-neutral-400 text-center">
+                                            {users.length === 0 ? "No workspace members found" : "No users match your search"}
                                         </div>
-                                        <div className="w-6 h-6 rounded-full bg-neutral-200 flex items-center justify-center text-[10px] font-bold text-neutral-600">MM</div>
-                                        <span className="text-sm text-neutral-800">User Name</span>
-                                    </div>
+                                    ) : (
+                                        filteredUsers.map((workspaceUser) => {
+                                            const isSelected = selectedUserIds.includes(workspaceUser.id);
+                                            const displayName = `${workspaceUser.firstName} ${workspaceUser.lastName}`.trim() || workspaceUser.email;
+
+                                            return (
+                                                <button
+                                                    key={workspaceUser.id}
+                                                    type="button"
+                                                    onClick={() => toggleUser(workspaceUser.id)}
+                                                    className={`w-full flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-neutral-50 transition border-b border-neutral-100 last:border-b-0 text-left ${isSelected ? 'bg-neutral-50' : ''}`}
+                                                >
+                                                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition shrink-0 ${isSelected ? 'bg-[#cc2233] border-[#cc2233]' : 'border-neutral-300'}`}>
+                                                        {isSelected && <span className="text-white text-[10px] font-bold leading-none transform translate-y-[-0.5px]">&#10003;</span>}
+                                                    </div>
+                                                    {workspaceUser.avatarUrl ? (
+                                                        <div className="relative w-6 h-6 rounded-full overflow-hidden shrink-0">
+                                                            <Image
+                                                                src={workspaceUser.avatarUrl}
+                                                                alt={displayName}
+                                                                fill
+                                                                className="object-cover"
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="w-6 h-6 rounded-full bg-neutral-200 flex items-center justify-center text-[10px] font-bold text-neutral-600 shrink-0">
+                                                            {getInitials(workspaceUser.firstName, workspaceUser.lastName)}
+                                                        </div>
+                                                    )}
+                                                    <span className="text-sm text-neutral-800 truncate">{displayName}</span>
+                                                </button>
+                                            );
+                                        })
+                                    )}
                                 </div>
                             </div>
                         </div>

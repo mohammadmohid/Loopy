@@ -3,6 +3,11 @@ import { X, Play, Pause, Scissors, MessageSquare, Download, Loader2 } from 'luci
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import { apiRequest } from '@/lib/api';
+import { mutate as globalMutate } from 'swr';
+import {
+    consumeScreenRecordingRecipients,
+    sendScreenRecordingToUsers,
+} from '@/lib/screen-recording-chat';
 
 interface Comment {
     id: string;
@@ -253,13 +258,16 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
             setMessage("Generating secure upload link...");
 
             // 1. Get the Presigned URL from the Gateway -> Project Service
-            const { presignedUrl, publicUrl } = await apiRequest<any>('/api/projects/upload/screen-recording', {
-                method: 'POST',
-                data: {
-                    filename: `${filename}.webm`,
-                    contentType: 'video/webm'
+            const { presignedUrl, key } = await apiRequest<{ presignedUrl: string; key: string }>(
+                '/api/projects/upload/screen-recording',
+                {
+                    method: 'POST',
+                    data: {
+                        filename: `${filename}.webm`,
+                        contentType: 'video/webm'
+                    }
                 }
-            });
+            );
 
             // 2. We need to run FFmpeg first just like in export, to ensure properties/trimming are correct!
             setMessage("Preparing video for upload...");
@@ -316,8 +324,56 @@ export function ScreenRecordingPreviewModal({ isOpen, videoUrl, videoBlob, filen
                 xhr.send(trimmedBlob);
             });
 
+            setMessage("Registering file...");
+            const uploadResponse = await apiRequest<{
+                file: {
+                    _id: string;
+                    name: string;
+                    r2Key: string;
+                    sizeBytes: number;
+                    mimeType: string;
+                };
+            }>("/api/files/files/upload", {
+                method: "POST",
+                data: {
+                    filename: `${filename}.webm`,
+                    mimeType: "video/webm",
+                    sizeBytes: trimmedBlob.size,
+                    r2Key: key,
+                    sourceContext: { type: "RECORDING" },
+                },
+            });
+
+            const uploadedFile = uploadResponse.file;
+            const attachment = {
+                fileId: uploadedFile._id,
+                name: uploadedFile.name || `${filename}.webm`,
+                key: uploadedFile.r2Key || key,
+                size: uploadedFile.sizeBytes || trimmedBlob.size,
+                mimeType: uploadedFile.mimeType || "video/webm",
+            };
+
             setMessage("Upload Complete! Available in Cloud.");
-            console.log("Uploaded successfully to:", publicUrl);
+
+            const recipientConfig = consumeScreenRecordingRecipients();
+            if (
+                recipientConfig?.sendToIndividual &&
+                recipientConfig.recipients.length > 0
+            ) {
+                setMessage("Sending recording to selected users...");
+                try {
+                    await sendScreenRecordingToUsers(
+                        recipientConfig.recipients,
+                        attachment,
+                        filename
+                    );
+                    await globalMutate("/chat/channels");
+                    setMessage("Upload complete and sent to selected users.");
+                } catch (sendError) {
+                    console.error("Failed to send recording via chat:", sendError);
+                    setMessage("Upload complete, but failed to send to some users.");
+                }
+            }
 
             setTimeout(() => {
                 setIsExporting(false);

@@ -76,10 +76,18 @@ export function MessageInput({
         setShowMentions(false);
     };
 
+    const getMemberDisplayName = (member: ChannelMember) => {
+        const profile = member.user?.profile;
+        const firstName = profile?.firstName ?? "";
+        const lastName = profile?.lastName ?? "";
+        const fullName = `${firstName} ${lastName}`.trim();
+        return fullName || member.user?.email || "";
+    };
+
     const handleMentionSelect = (member: ChannelMember) => {
         const lastAt = content.lastIndexOf("@");
         const before = content.slice(0, lastAt);
-        const name = `${member.user.profile.firstName} ${member.user.profile.lastName}`;
+        const name = getMemberDisplayName(member);
         setContent(`${before}@${name} `);
         setShowMentions(false);
         textareaRef.current?.focus();
@@ -144,8 +152,8 @@ export function MessageInput({
     };
 
     const filteredMembers = members.filter((m) => {
-        const name =
-            `${m.user.profile.firstName} ${m.user.profile.lastName}`.toLowerCase();
+        if (!m.user?.profile) return false;
+        const name = getMemberDisplayName(m).toLowerCase();
         return name.includes(mentionQuery);
     });
 
@@ -168,11 +176,11 @@ export function MessageInput({
                         >
                             <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                                 <span className="text-[10px] font-semibold text-primary">
-                                    {m.user.profile.firstName?.[0]?.toUpperCase()}
+                                    {m.user.profile?.firstName?.[0]?.toUpperCase() ?? "?"}
                                 </span>
                             </div>
                             <span className="text-foreground">
-                                {m.user.profile.firstName} {m.user.profile.lastName}
+                                {getMemberDisplayName(m)}
                             </span>
                             <span className="text-neutral-400 text-xs ml-auto">
                                 {m.user.email}

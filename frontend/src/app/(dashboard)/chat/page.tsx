@@ -438,6 +438,16 @@ export default function ChatPage() {
         }
     };
 
+    const ensureChannelHydrated = async (channel: Channel): Promise<Channel> => {
+        const hasIncompleteMembers = channel.members.some((m) => !m.user?.profile);
+        if (!hasIncompleteMembers) return channel;
+        try {
+            return await apiRequest<Channel>(`/chat/channels/${channel._id}`);
+        } catch {
+            return channel;
+        }
+    };
+
     const handleSelectChannel = async (channel: Channel) => {
         if (channel._id.startsWith("synthetic_")) {
             const targetMember = channel.members.find(
@@ -455,11 +465,12 @@ export default function ChatPage() {
                             memberIds: [targetMemberId]
                         }
                     });
-                    setSelectedChannel(realChannel);
+                    const hydratedChannel = await ensureChannelHydrated(realChannel);
+                    setSelectedChannel(hydratedChannel);
                     globalMutate("/chat/channels", (prev: Channel[] | undefined) => {
                         if (!prev) return prev;
-                        if (prev.some((c) => c._id === realChannel._id)) return prev;
-                        return [realChannel, ...prev];
+                        const without = prev.filter((c) => c._id !== hydratedChannel._id);
+                        return [hydratedChannel, ...without];
                     }, false);
                 } catch (err) {
                     console.error("Failed to vivify synthetic DM:", err);
@@ -468,7 +479,8 @@ export default function ChatPage() {
             return;
         }
 
-        setSelectedChannel(channel);
+        const hydratedChannel = await ensureChannelHydrated(channel);
+        setSelectedChannel(hydratedChannel);
         clearUnread(channel._id);
     };
 

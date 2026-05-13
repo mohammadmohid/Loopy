@@ -168,7 +168,14 @@ export const createChannel = async (req: AuthRequest, res: Response) => {
             });
 
             if (existingDM) {
-                return res.json(existingDM);
+                await existingDM.populate(
+                    "members.user",
+                    "profile.firstName profile.lastName profile.avatarKey email"
+                );
+                const resolveAvatar = createAvatarResolver();
+                const channelObj = existingDM.toObject();
+                await populateChannelAvatars(channelObj, resolveAvatar);
+                return res.json(channelObj);
             }
         }
 
